@@ -30,6 +30,9 @@ type Options struct {
 	EnableHTTP2        bool
 	EnableTLS          bool
 	EnableKeepAlive    bool
+	EnableHttpTracing  bool
+	RequestTraceId     string
+	ResponseTraceId    string
 	EnableTCPTimestamp *bool
 	ReadTimeout        time.Duration
 	WriteTimeout       time.Duration
@@ -81,6 +84,9 @@ func HTTPServer(t *testing.T, addr string, options Options) func() {
 			time.Sleep(options.SlowResponse)
 		}
 		statusCode := StatusFromPath(req.URL.Path)
+		if options.ResponseTraceId != "" {
+			w.Header().Add("x-request-id", options.ResponseTraceId)
+		}
 		if statusCode == 0 {
 			t.Errorf("wrong request format %s", req.URL.Path)
 		} else {

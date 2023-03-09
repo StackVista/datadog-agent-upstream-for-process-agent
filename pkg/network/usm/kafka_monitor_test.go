@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
+	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
 	"io"
 	"net"
 	nethttp "net/http"
@@ -78,6 +79,7 @@ func skipTestIfKernelNotSupported(t *testing.T) {
 }
 
 func TestKafkaProtocolParsing(t *testing.T) {
+	testutil2.SkipIfStackState(t, "We do not test this yet, it requires compos ein the environment")
 	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt, ebpftest.RuntimeCompiled, ebpftest.CORE}, "", testKafkaProtocolParsing)
 }
 
@@ -501,6 +503,7 @@ func newKafkaMonitor(t *testing.T, cfg *config.Config) *Monitor {
 
 // This test will help us identify if there is any verifier problems while loading the Kafka binary in the CI environment
 func TestLoadKafkaBinary(t *testing.T) {
+	testutil2.SkipIfStackState(t, "Runtime compilation not supported")
 	skipTestIfKernelNotSupported(t)
 
 	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt, ebpftest.RuntimeCompiled, ebpftest.CORE}, "", func(t *testing.T) {

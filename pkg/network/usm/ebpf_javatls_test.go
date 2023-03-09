@@ -8,6 +8,7 @@
 package usm
 
 import (
+	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -33,6 +34,7 @@ func createJavaTempFile(t *testing.T, dir string) string {
 }
 
 func TestJavaInjection(t *testing.T) {
+	testutil2.SkipIfStackState(t, "Java injection not supported yet")
 	cfg := networkconfig.New()
 	cfg.EnableJavaTLSSupport = true
 	if !http.HTTPSSupported(cfg) {

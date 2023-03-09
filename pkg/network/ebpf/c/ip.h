@@ -189,6 +189,65 @@ __maybe_unused static __always_inline __u64 read_conn_tuple_skb(struct __sk_buff
     return 1;
 }
 
+/**
+Version only parsing tcp, this reduces the instruction count for probes that do not work on udp (http).
+*/
+__maybe_unused static __always_inline __u64 read_conn_tuple_skb_tcp(struct __sk_buff *skb, skb_info_t *info, conn_tuple_t *tup) {
+    bpf_memset(info, 0, sizeof(skb_info_t));
+    info->data_off = ETH_HLEN;
+
+    __u16 l3_proto = __load_half(skb, offsetof(struct ethhdr, h_proto));
+    info->data_end = ETH_HLEN;
+    __u8 l4_proto = 0;
+    switch (l3_proto) {
+    case ETH_P_IP:
+    {
+        __u8 ipv4_hdr_len = (__load_byte(skb, info->data_off) & 0x0f) << 2;
+        info->data_end += __load_half(skb, info->data_off + offsetof(struct iphdr, tot_len));
+        if (ipv4_hdr_len < sizeof(struct iphdr)) {
+            return 0;
+        }
+        l4_proto = __load_byte(skb, info->data_off + offsetof(struct iphdr, protocol));
+        tup->metadata |= CONN_V4;
+        read_ipv4_skb(skb, info->data_off + offsetof(struct iphdr, saddr), &tup->saddr_l);
+        read_ipv4_skb(skb, info->data_off + offsetof(struct iphdr, daddr), &tup->daddr_l);
+        info->data_off += ipv4_hdr_len;
+        break;
+    }
+    case ETH_P_IPV6:
+        info->data_end += sizeof(struct ipv6hdr) + __load_half(skb, info->data_off + offsetof(struct ipv6hdr, payload_len));
+        l4_proto = __load_byte(skb, info->data_off + offsetof(struct ipv6hdr, nexthdr));
+        tup->metadata |= CONN_V6;
+        read_ipv6_skb(skb, info->data_off + offsetof(struct ipv6hdr, saddr), &tup->saddr_l, &tup->saddr_h);
+        read_ipv6_skb(skb, info->data_off + offsetof(struct ipv6hdr, daddr), &tup->daddr_l, &tup->daddr_h);
+        info->data_off += sizeof(struct ipv6hdr);
+        break;
+    default:
+        return 0;
+    }
+
+    switch (l4_proto) {
+    case __IPPROTO_TCP:
+        tup->metadata |= CONN_TYPE_TCP;
+        tup->sport = __load_half(skb, info->data_off + offsetof(struct __tcphdr, source));
+        tup->dport = __load_half(skb, info->data_off + offsetof(struct __tcphdr, dest));
+
+        info->tcp_seq = __load_word(skb, info->data_off + offsetof(struct __tcphdr, seq));
+        info->tcp_flags = __load_byte(skb, info->data_off + TCP_FLAGS_OFFSET);
+        // TODO: Improve readability and explain the bit twiddling below
+        info->data_off += ((__load_byte(skb, info->data_off + offsetof(struct __tcphdr, ack_seq) + 4) & 0xF0) >> 4) * 4;
+        break;
+    default:
+        return 0;
+    }
+
+    if ((info->data_end - info->data_off) < 0) {
+        return 0;
+    }
+
+    return 1;
+}
+
 __maybe_unused static __always_inline bool is_equal(conn_tuple_t *t, conn_tuple_t *t2) {
     bool match = !bpf_memcmp(t, t2, sizeof(conn_tuple_t));
     return match;
