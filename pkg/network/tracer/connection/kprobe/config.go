@@ -84,6 +84,7 @@ func enabledProbes(c *config.Config, runtimeTracer, coreTracer bool) (map[probes
 		enableProbe(enabled, probes.TCPDoneFlushReturn)
 		enableProbe(enabled, probes.TCPFinishConnect)
 		enableProbe(enabled, probes.InetCskAcceptReturn)
+		enableProbe(enabled, probes.IpBuildAndSendPkt)
 		enableProbe(enabled, probes.InetCskListenStop)
 		// special case for tcp_retransmit_skb probe: on CO-RE,
 		// we want to load the version that makes use of

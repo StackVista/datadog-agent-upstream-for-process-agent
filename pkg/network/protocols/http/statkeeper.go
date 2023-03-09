@@ -20,6 +20,9 @@ import (
 // StatKeeper is responsible for aggregating HTTP stats.
 type StatKeeper struct {
 	mux                  sync.Mutex
+	observations                []TransactionObservation
+	maxObservationEntries       int
+	enableTracing               bool
 	stats                map[Key]*RequestStats
 	incomplete           IncompleteBuffer
 	maxEntries           int
@@ -51,6 +54,9 @@ func NewStatkeeper(c *config.Config, telemetry *Telemetry, incompleteBuffer Inco
 
 	return &StatKeeper{
 		stats:                make(map[Key]*RequestStats),
+		observations:                make([]TransactionObservation, 0),
+		maxObservationEntries:       c.MaxHTTPObservationsBuffered,
+		enableTracing:               c.EnableHTTPTracing,
 		incomplete:           incompleteBuffer,
 		maxEntries:           c.MaxHTTPStatsBuffered,
 		quantizer:            quantizer,
@@ -76,7 +82,7 @@ func (h *StatKeeper) Process(tx Transaction) {
 }
 
 // GetAndResetAllStats returns all the stats and resets the internal state.
-func (h *StatKeeper) GetAndResetAllStats() (stats map[Key]*RequestStats) {
+func (h *StatKeeper) GetAndResetAllStats() (stats map[Key]*RequestStats, []TransactionObservation) {
 	var previousAggregationState *utils.ConnectionAggregator
 	func() {
 		h.mux.Lock()
@@ -89,6 +95,9 @@ func (h *StatKeeper) GetAndResetAllStats() (stats map[Key]*RequestStats) {
 		// Rotate stats
 		stats = h.stats
 		h.stats = make(map[Key]*RequestStats)
+		
+		observations := h.observations
+		h.observations = make([]TransactionObservation, 0)
 
 		// Rotate ConnectionAggregator
 		if h.connectionAggregator == nil {
@@ -101,7 +110,45 @@ func (h *StatKeeper) GetAndResetAllStats() (stats map[Key]*RequestStats) {
 	}()
 
 	h.clearEphemeralPorts(previousAggregationState, stats)
-	return stats
+	return stats, observations
+}
+
+func parseTraceId(tx Transaction) TransactionTraceId {
+	resp := tx.ResponseTracingID()
+	req := tx.RequestTracingID()
+
+	if resp == "" {
+		if req == "" {
+			return TransactionTraceId{
+				Type: TraceIdNone,
+				Id:   "",
+			}
+		} else {
+			return TransactionTraceId{
+				Type: TraceIdRequest,
+				Id:   req,
+			}
+		}
+	} else {
+		if req == "" {
+			return TransactionTraceId{
+				Type: TraceIdResponse,
+				Id:   resp,
+			}
+		} else {
+			if req == resp {
+				return TransactionTraceId{
+					Type: TraceIdBoth,
+					Id:   req,
+				}
+			} else {
+				return TransactionTraceId{
+					Type: TraceIdAmbiguous,
+					Id:   "",
+				}
+			}
+		}
+	}
 }
 
 // Close closes the stat keeper.
@@ -149,18 +196,56 @@ func (h *StatKeeper) add(tx Transaction) {
 		key.ConnectionKey = h.connectionAggregator.RollupKey(key.ConnectionKey)
 	}
 
-	stats, ok := h.stats[key]
-	if !ok {
-		if len(h.stats) >= h.maxEntries {
-			h.telemetry.dropped.Add(1)
-			return
-		}
-		h.telemetry.aggregations.Add(1)
-		stats = NewRequestStats()
-		h.stats[key] = stats
+	switch tx.RequestParseResult() {
+	case HeaderParseFound:
+		h.telemetry.requestFound.Add(1)
+	case HeaderParseNotFound:
+		h.telemetry.requestNotFound.Add(1)
+	case HeaderParseLimitReached:
+		h.telemetry.requestLimitReached.Add(1)
+	case HeaderParsePacketEndReached:
+		h.telemetry.requestPacketEnd.Add(1)
 	}
 
-	stats.AddRequest(tx.StatusCode(), latency, tx.StaticTags(), tx.DynamicTags())
+	switch tx.ResponseParseResult() {
+	case HeaderParseFound:
+		h.telemetry.responseFound.Add(1)
+	case HeaderParseNotFound:
+		h.telemetry.responseNotFound.Add(1)
+	case HeaderParseLimitReached:
+		h.telemetry.responseLimitReached.Add(1)
+	case HeaderParsePacketEndReached:
+		h.telemetry.responsePacketEnd.Add(1)
+	}
+
+	traceID := parseTraceId(tx)
+	if traceID.Type == TraceIdNone || !h.enableTracing {
+		stats, ok := h.stats[key]
+		if !ok {
+			if len(h.stats) >= h.maxEntries {
+				h.telemetry.dropped.Add(1)
+				return
+			}
+			h.telemetry.aggregations.Add(1)
+			stats = NewRequestStats(h.enableStatusCodeAggregation)
+			h.stats[key] = stats
+		}
+
+		stats.AddRequest(tx.StatusCode(), latency, tx.StaticTags(), tx.DynamicTags())
+	} else {
+		if len(h.observations) >= h.maxObservationEntries {
+			h.telemetry.dropped.Add(1)
+		}
+
+		h.telemetry.observations.Add(1)
+
+		h.observations = append(h.observations, TransactionObservation{
+			LatencyNs: latency,
+			Status:    tx.StatusCode(),
+			Key:       key,
+			TraceId:   traceID,
+		})
+	}
 }
 
 func pathIsMalformed(fullPath []byte) bool {

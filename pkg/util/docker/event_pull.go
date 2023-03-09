@@ -76,7 +76,7 @@ func (d *DockerUtil) processContainerEvent(ctx context.Context, msg events.Messa
 		return nil, nil
 	}
 
-	action := msg.Action
+	action := string(msg.Action)
 	// Some actions are prefixed then followed `: <string>`.
 	// Extract the prefix from the action here
 	// Example: "exec_start: /bin/sh -c true" case
@@ -108,7 +108,7 @@ func (d *DockerUtil) processImageEvent(msg events.Message) *ImageEvent {
 
 	return &ImageEvent{
 		ImageID:   msg.Actor.ID,
-		Action:    msg.Action,
+		Action:    string(msg.Action),
 		Timestamp: timeFromMessage(msg),
 	}
 }

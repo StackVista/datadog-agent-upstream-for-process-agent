@@ -31,6 +31,7 @@ func IsTracerSupportedByOS(exclusionList []string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("could not get kernel version: %s", err)
 	}
+	log.Infof("detected host kernel for tracer: %s", currentKernelCode)
 
 	platform, err := kernel.Platform()
 	if err != nil {

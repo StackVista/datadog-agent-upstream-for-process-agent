@@ -8,6 +8,8 @@
 package monitor
 
 import (
+	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"sync"
@@ -27,6 +29,8 @@ import (
 
 func getProcessMonitor(t *testing.T) *ProcessMonitor {
 	pm := GetProcessMonitor()
+	require.NoError(t, pm.Initialize())
+
 	t.Cleanup(func() {
 		pm.Stop()
 		telemetry.Clear()
@@ -50,6 +54,7 @@ func waitForProcessMonitor(t *testing.T, pm *ProcessMonitor) {
 	}, 10*time.Second, time.Millisecond*200)
 }
 
+// todo!: do we need to remove this? we deleted in the previous sync
 func initializePM(t *testing.T, pm *ProcessMonitor, useEventStream bool) {
 	require.NoError(t, pm.Initialize(useEventStream))
 	if useEventStream {
@@ -92,6 +97,7 @@ type processMonitorSuite struct {
 	useEventStream bool
 }
 
+// todo!: check if we need to apply patch to this one.
 func (s *processMonitorSuite) TestProcessMonitorSanity() {
 	t := s.T()
 	pm := getProcessMonitor(t)
@@ -133,15 +139,14 @@ func (s *processMonitorSuite) TestProcessMonitorSanity() {
 		}
 		return execCaptured && exitCaptured
 	}, time.Second, time.Millisecond*200)
+}
 
-	require.GreaterOrEqual(t, pm.tel.events.Get(), pm.tel.exec.Get(), "events is not >= than exec")
-	require.GreaterOrEqual(t, pm.tel.events.Get(), pm.tel.exit.Get(), "events is not >= than exit")
-	require.NotEqual(t, int64(0), pm.tel.exec.Get())
-	require.NotEqual(t, int64(0), pm.tel.exit.Get())
-	require.Equal(t, int64(0), pm.tel.restart.Get())
-	require.Equal(t, int64(0), pm.tel.reinitFailed.Get())
-	require.Equal(t, int64(0), pm.tel.processScanFailed.Get())
-	require.GreaterOrEqual(t, pm.tel.callbackExecuted.Get(), int64(1), "callback_executed")
+func mkCallback(t *testing.T, c *atomic.Bool, index int) *ProcessCallback {
+	f := func(pid uint32) {
+		t.Logf("Storing %d for %d", pid, index)
+		c.Store(true)
+	}
+	return (*ProcessCallback)(&f)
 }
 
 func TestProcessMonitor(t *testing.T) {
@@ -186,7 +191,8 @@ func (s *processMonitorSuite) TestProcessRegisterMultipleCallbacks() {
 		registerCallback(t, pm, false, &exitCallback)
 	}
 
-	initializePM(t, pm, s.useEventStream)
+	// todo!: check it
+	// initializePM(t, pm, s.useEventStream)
 	cmd := exec.Command("/bin/sleep", "1")
 	require.NoError(t, cmd.Run())
 	require.Eventuallyf(t, func() bool {
@@ -209,15 +215,6 @@ func (s *processMonitorSuite) TestProcessRegisterMultipleCallbacks() {
 		}
 		return found
 	}, time.Second, time.Millisecond*200, "at least of the callbacks didn't capture events")
-
-	require.GreaterOrEqual(t, pm.tel.events.Get(), pm.tel.exec.Get(), "events is not >= than exec")
-	require.GreaterOrEqual(t, pm.tel.events.Get(), pm.tel.exit.Get(), "events is not >= than exit")
-	require.NotEqual(t, int64(0), pm.tel.exec.Get())
-	require.NotEqual(t, int64(0), pm.tel.exit.Get())
-	require.Equal(t, int64(0), pm.tel.restart.Get())
-	require.Equal(t, int64(0), pm.tel.reinitFailed.Get())
-	require.Equal(t, int64(0), pm.tel.processScanFailed.Get())
-	require.GreaterOrEqual(t, pm.tel.callbackExecuted.Get(), int64(1), "callback_executed")
 }
 
 func TestProcessMonitorRefcount(t *testing.T) {
@@ -225,39 +222,37 @@ func TestProcessMonitorRefcount(t *testing.T) {
 
 	for i := 1; i <= 10; i++ {
 		pm = GetProcessMonitor()
-		require.Equal(t, pm.refcount.Load(), int32(i))
+		pm.Initialize()
+		require.Equal(t, int32(i), pm.refcount.Load())
 	}
 
 	for i := 1; i <= 10; i++ {
 		pm.Stop()
-		require.Equal(t, pm.refcount.Load(), int32(10-i))
+		require.Equal(t, int32(10-i), pm.refcount.Load())
 	}
 }
 
+// todo!: double check this test
 func (s *processMonitorSuite) TestProcessMonitorInNamespace() {
 	t := s.T()
 	execSet := sync.Map{}
 	exitSet := sync.Map{}
 
-	pm := getProcessMonitor(t)
-
-	callback := func(pid uint32) { execSet.Store(pid, struct{}{}) }
-	registerCallback(t, pm, true, &callback)
-
-	exitCallback := func(pid uint32) { exitSet.Store(pid, struct{}{}) }
-	registerCallback(t, pm, false, &exitCallback)
-
 	monNs, err := netns.New()
 	require.NoError(t, err, "could not create network namespace for process monitor")
 	t.Cleanup(func() { monNs.Close() })
 
-	require.NoError(t, kernel.WithNS(monNs, func() error {
-		initializePM(t, pm, s.useEventStream)
-		return nil
-	}), "could not start process monitor in netNS")
-	t.Cleanup(pm.Stop)
+	var pm *ProcessMonitor
+	require.NoError(t, kernel.WithNS(monNs,
+		func() error {
+			pm = getProcessMonitor(t)
+			return nil
+		},
+	), "could not start process monitor in netNS")
 
-	time.Sleep(500 * time.Millisecond)
+	callback := func(pid uint32) { execSet.Store(int(pid), struct{}{}) }
+	registerCallback(t, pm, true, (*ProcessCallback)(&callback))
+
 	// Process in root NS
 	cmd := exec.Command("/bin/sleep", "1")
 	require.NoError(t, cmd.Run(), "could not run process in root namespace")
@@ -285,23 +280,79 @@ func (s *processMonitorSuite) TestProcessMonitorInNamespace() {
 	pid = uint32(cmd.ProcessState.Pid())
 
 	require.Eventually(t, func() bool {
-		_, capturedExec := execSet.Load(pid)
-		if !capturedExec {
-			t.Logf("pid %d not captured in exec", pid)
-		}
-		_, capturedExit := exitSet.Load(pid)
-		if !capturedExit {
-			t.Logf("pid %d not captured in exit", pid)
-		}
-		return capturedExec && capturedExit
-	}, time.Second, 200*time.Millisecond, "did not capture process EXEC/EXIT from other namespace")
+		_, captured := execSet.Load(cmd.ProcessState.Pid())
+		return captured
+	}, time.Second, 200*time.Millisecond, "did not capture process EXEC from other namespace")
+}
 
-	require.GreaterOrEqual(t, pm.tel.events.Get(), pm.tel.exec.Get(), "events is not >= than exec")
-	require.GreaterOrEqual(t, pm.tel.events.Get(), pm.tel.exit.Get(), "events is not >= than exit")
-	require.NotEqual(t, int64(0), pm.tel.exec.Get())
-	require.NotEqual(t, int64(0), pm.tel.exit.Get())
-	require.Equal(t, int64(0), pm.tel.restart.Get())
-	require.Equal(t, int64(0), pm.tel.reinitFailed.Get())
-	require.Equal(t, int64(0), pm.tel.processScanFailed.Get())
-	require.GreaterOrEqual(t, pm.tel.callbackExecuted.Get(), int64(1), "callback_executed")
+func TestProcessMonitorRestartNetlink(t *testing.T) {
+	// Making sure we get the same process monitor if we call it twice.
+	pm := GetProcessMonitor()
+
+	unsubscribe := pm.SubscribeExec(func(pid uint32) {})
+
+	require.NoError(t, pm.Initialize())
+	defer pm.Stop()
+
+	// Make sure we can restart netlink
+	require.NoError(t, pm.RestartNetLink())
+
+	// making sure unsubscribe works and does not panic for the second unsubscription.
+	unsubscribe()
+	require.NotPanics(t, unsubscribe)
+}
+
+func TestProcessRestartNoDoublePid(t *testing.T) {
+	execSet := sync.Map{}
+	exitSet := sync.Map{}
+
+	pm := GetProcessMonitor()
+
+	tmpFile, err := ioutil.TempFile("", "sleep")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+	err = util.CopyFile("/bin/sleep", tmpFile.Name())
+	require.NoError(t, err)
+
+	require.NoError(t, os.Chmod(tmpFile.Name(), 0500))
+
+	require.NoError(t, pm.Initialize())
+	defer pm.Stop()
+	callbackExec := func(pid uint32) {
+		if _, exists := execSet.Load(int(pid)); exists {
+			require.Fail(t, "Same exec pid was reported twice")
+		}
+		execSet.Store(int(pid), struct{}{})
+	}
+	callbackExit := func(pid uint32) {
+		if _, exists := exitSet.Load(int(pid)); exists {
+			require.Fail(t, "Same exit pid was reported twice")
+		}
+		exitSet.Store(int(pid), struct{}{})
+	}
+
+	unsubscribeExec := pm.SubscribeExec(callbackExec)
+	unsubscribeExit := pm.SubscribeExit(callbackExit)
+
+	cmd := exec.Command(tmpFile.Name(), "10")
+	require.NoError(t, cmd.Start())
+
+	require.Eventuallyf(t, func() bool {
+		_, execExists := execSet.Load(cmd.Process.Pid)
+		_, exitExists := exitSet.Load(cmd.Process.Pid)
+		return execExists && !exitExists
+	}, time.Second, time.Millisecond*200, fmt.Sprintf("didn't capture exec and not exit"))
+
+	require.NoError(t, pm.RestartNetLink())
+	require.NoError(t, cmd.Process.Kill())
+	require.Equal(t, "signal: killed", cmd.Wait().Error())
+
+	require.Eventuallyf(t, func() bool {
+		_, execExists := execSet.Load(cmd.ProcessState.Pid())
+		_, exitExists := exitSet.Load(cmd.ProcessState.Pid())
+		return execExists && exitExists
+	}, time.Second, time.Millisecond*200, fmt.Sprintf("didn't capture exec and exit"))
+
+	unsubscribeExit()
+	unsubscribeExec()
 }

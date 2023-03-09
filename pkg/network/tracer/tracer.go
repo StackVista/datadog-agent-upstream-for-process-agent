@@ -228,6 +228,9 @@ func newTracer(cfg *config.Config, telemetryComponent telemetryComponent.Compone
 		cfg.MaxRedisStatsBuffered,
 		cfg.EnableNPMConnectionRollup,
 		cfg.EnableProcessEventMonitoring,
+		cfg.MaxMongoStatsBuffered,
+		cfg.MaxAMQPStatsBuffered,
+		cfg.MaxHTTPObservationsBuffered,
 	)
 
 	return tr, nil
@@ -431,8 +434,8 @@ func (t *Tracer) GetActiveConnections(clientID string) (*network.Connections, er
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving connections: %s", err)
 	}
-
-	delta := t.state.GetDelta(clientID, latestTime, active, t.reverseDNS.GetDNSStats(), t.usmMonitor.GetProtocolStats())
+	stats := t.usmMonitor.GetProtocolStats()
+	delta := t.state.GetDelta(clientID, latestTime, active, t.reverseDNS.GetDNSStats(), stats)
 
 	ips := make(map[util.Address]struct{}, len(delta.Conns)/2)
 	var udpConns, tcpConns int
@@ -459,6 +462,9 @@ func (t *Tracer) GetActiveConnections(clientID string) (*network.Connections, er
 	conns.Kafka = delta.Kafka
 	conns.Postgres = delta.Postgres
 	conns.Redis = delta.Redis
+	conns.Mongo = delta.Mongo
+	conns.AMQP = delta.AMQP
+	conns.HTTPObservations = delta.HTTPObservations
 	conns.ConnTelemetry = t.state.GetTelemetryDelta(clientID, t.getConnTelemetry(len(active)))
 	conns.CompilationTelemetryByAsset = t.getRuntimeCompilationTelemetry()
 	conns.KernelHeaderFetchResult = int32(kernel.HeaderProvider.GetResult())

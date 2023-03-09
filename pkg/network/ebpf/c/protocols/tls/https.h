@@ -34,8 +34,6 @@
 #include "protocols/tls/tags-types.h"
 #include "protocols/tls/tls-maps.h"
 
-static __always_inline void http_process(http_event_t *event, skb_info_t *skb_info, __u64 tags);
-
 /* this function is called by all TLS hookpoints (OpenSSL, GnuTLS and GoTLS, JavaTLS) and */
 /* it's used for classify the subset of protocols that is supported by `classify_protocol_for_dispatcher` */
 static __always_inline void classify_decrypted_payload(protocol_stack_t *stack, conn_tuple_t *t, void *buffer, size_t len) {
@@ -51,9 +49,9 @@ static __always_inline void classify_decrypted_payload(protocol_stack_t *stack, 
     }
 
     // Protocol is not HTTP/HTTP2/gRPC
-    if (is_amqp(buffer, len)) {
-        proto = PROTOCOL_AMQP;
-    } else if (is_redis(buffer, len)) {
+    // todo!: in theory we should never reach this `is_redis` since the above classification should detect it.
+    // the only meaningful case is when the redis classification is disabled but if it is disabled why do we want to identify it here?
+    if (is_redis(buffer, len)) {
         proto = PROTOCOL_REDIS;
     } else if (is_mysql(t, buffer, len)) {
         proto = PROTOCOL_MYSQL;
@@ -124,6 +122,16 @@ static __always_inline void tls_process(struct pt_regs *ctx, conn_tuple_t *t, vo
     case PROTOCOL_POSTGRES:
         prog = PROG_POSTGRES;
         final_tuple = normalized_tuple;
+        break;
+    case PROTOCOL_MONGO:
+        prog = PROG_MONGO;
+        // todo!: still need to check what should be final_tuple
+        final_tuple = *t;
+        break;
+    case PROTOCOL_AMQP:
+        prog = PROG_AMQP;
+        // todo!: still need to check
+        final_tuple = *t:
         break;
     default:
         return;

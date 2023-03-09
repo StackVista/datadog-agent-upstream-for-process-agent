@@ -1221,6 +1221,60 @@ func TestMaxRedisStatsBuffered(t *testing.T) {
 	})
 }
 
+func TestMaxMongoStatsBuffered(t *testing.T) {
+	t.Run("value set through env var", func(t *testing.T) {
+		mock.NewSystemProbe(t)
+		t.Setenv("DD_SERVICE_MONITORING_CONFIG_MAX_MONGO_STATS_BUFFERED", "50000")
+
+		cfg := New()
+		assert.Equal(t, 50000, cfg.MaxMongoStatsBuffered)
+	})
+
+	t.Run("value set through yaml", func(t *testing.T) {
+		mockSystemProbe := mock.NewSystemProbe(t)
+		mockSystemProbe.SetWithoutSource("service_monitoring_config.max_mongo_stats_buffered", 30000)
+
+		cfg := New()
+		assert.Equal(t, 30000, cfg.MaxMongoStatsBuffered)
+	})
+}
+
+func TestMaxAMQPStatsBuffered(t *testing.T) {
+	t.Run("value set through env var", func(t *testing.T) {
+		mock.NewSystemProbe(t)
+		t.Setenv("DD_SERVICE_MONITORING_CONFIG_MAX_AMQP_STATS_BUFFERED", "50000")
+
+		cfg := New()
+		assert.Equal(t, 50000, cfg.MaxAMQPStatsBuffered)
+	})
+
+	t.Run("value set through yaml", func(t *testing.T) {
+		mockSystemProbe := mock.NewSystemProbe(t)
+		mockSystemProbe.SetWithoutSource("service_monitoring_config.max_amqp_stats_buffered", 30000)
+
+		cfg := New()
+		assert.Equal(t, 30000, cfg.MaxAMQPStatsBuffered)
+	})
+}
+
+func TestMaxHTTPObservationsBuffered(t *testing.T) {
+	t.Run("value set through env var", func(t *testing.T) {
+		mock.NewSystemProbe(t)
+		t.Setenv("DD_SYSTEM_PROBE_NETWORK_MAX_HTTP_OBSERVATIONS_BUFFERED", "50000")
+
+		cfg := New()
+		assert.Equal(t, 50000, cfg.MaxHTTPObservationsBuffered)
+	})
+
+	t.Run("value set through yaml", func(t *testing.T) {
+		mockSystemProbe := mock.NewSystemProbe(t)
+		mockSystemProbe.SetWithoutSource("service_monitoring_config.max_http_observations_buffered", 30000)
+
+		cfg := New()
+		assert.Equal(t, 30000, cfg.MaxAMQPStatsBuffered)
+	})
+}
+
 func TestNetworkConfigEnabled(t *testing.T) {
 	ys := true
 

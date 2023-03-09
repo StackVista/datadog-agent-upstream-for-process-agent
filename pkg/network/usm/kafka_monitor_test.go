@@ -47,6 +47,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/usm/consts"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/utils"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
+	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
 
 const (
@@ -134,6 +135,7 @@ func (s *KafkaProtocolParsingSuite) getTopicName() string {
 }
 
 func TestKafkaProtocolParsing(t *testing.T) {
+	testutil2.SkipIfStackState(t, "We do not test this yet, it requires compos ein the environment")
 	skipTestIfKernelNotSupported(t)
 	serverHost := "127.0.0.1"
 	require.NoError(t, kafka.RunServer(t, serverHost, kafkaPort))

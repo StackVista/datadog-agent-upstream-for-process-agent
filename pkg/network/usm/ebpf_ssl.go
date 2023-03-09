@@ -245,6 +245,10 @@ var (
 	buildKitProcessName = []byte("buildkitd")
 )
 
+var (
+	buildKitProcessName = []byte("buildkitd")
+)
+
 // Template, will be modified during runtime.
 // The constructor of SSLProgram requires more parameters than we provide in the general way, thus we need to have
 // a dynamic initialization.

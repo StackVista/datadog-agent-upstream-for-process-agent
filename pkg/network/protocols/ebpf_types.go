@@ -53,6 +53,10 @@ const (
 	ProgramHTTP2Termination ProgramType = C.PROG_HTTP2_TERMINATION
 	// ProgramKafka is the Golang representation of the C.PROG_KAFKA enum
 	ProgramKafka ProgramType = C.PROG_KAFKA
+	// ProgramMongo is the Golang representation of the C.PROG_MONGO enum
+	ProgramMongo ProgramType = C.PROG_MONGO
+	// ProgramAMQP is the Golang representation of the C.PROG_AMQP enum
+	ProgramAMQP ProgramType = C.PROG_AMQP
 	// ProgramKafkaFetchResponsePartitionParserV0 is the Golang representation of the C.PROG_KAFKA_FETCH_RESPONSE_PARTITION_PARSER_V0 enum
 	ProgramKafkaFetchResponsePartitionParserV0 ProgramType = C.PROG_KAFKA_FETCH_RESPONSE_PARTITION_PARSER_V0
 	// ProgramKafkaFetchResponsePartitionParserV12 is the Golang representation of the C.PROG_KAFKA_FETCH_RESPONSE_PARTITION_PARSER_V12 enum

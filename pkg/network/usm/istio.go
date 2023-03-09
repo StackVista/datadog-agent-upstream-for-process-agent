@@ -91,6 +91,7 @@ func newIstioMonitor(c *config.Config, mgr *manager.Manager) (*istioMonitor, err
 		return nil, nil
 	}
 
+	// todo!: check nothing is changed with the new interface
 	m := &istioMonitor{
 		envoyCmd:       c.EnvoyPath,
 		attacher:       nil,

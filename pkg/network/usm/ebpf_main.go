@@ -48,6 +48,8 @@ var (
 		kafka.Spec,
 		postgres.Spec,
 		redis.Spec,
+		mongo.Spec,
+		amqp.Spec,
 		// opensslSpec is unique, as we're modifying its factory during runtime to allow getting more parameters in the
 		// factory.
 		opensslSpec,
@@ -125,6 +127,7 @@ func newEBPFProgram(c *config.Config, connectionProtocolMap *ebpf.Map) (*ebpfPro
 					EBPFFuncName: protocolDispatcherSocketFilterFunction,
 					UID:          probeUID,
 				},
+				KeepProgramSpec: true,
 			},
 		},
 	}
@@ -163,6 +166,13 @@ func newEBPFProgram(c *config.Config, connectionProtocolMap *ebpf.Map) (*ebpfPro
 	}
 
 	return program, nil
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // Init initializes the ebpf program.
@@ -412,6 +422,7 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 		manager.ConstantEditor{Name: "ephemeral_range_begin", Value: uint64(begin)},
 		manager.ConstantEditor{Name: "ephemeral_range_end", Value: uint64(end)})
 
+	// todo!: we disabled something in `ActivatedProbes` but now the interface is changed so not sure what we need to disable
 	for _, p := range e.Manager.Probes {
 		options.ActivatedProbes = append(options.ActivatedProbes, &manager.ProbeSelector{ProbeIdentificationPair: p.ProbeIdentificationPair})
 	}
@@ -423,6 +434,20 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 	options.DefaultKProbeMaxActive = maxActive
 	options.DefaultKprobeAttachMethod = kprobeAttachMethod
 	options.BypassEnabled = e.cfg.BypassEnabled
+	options.VerifierOptions.Programs.LogDisabled = false
+	options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelStats
+	options.VerifierOptions.Programs.LogSize = 16000000
+
+	if e.cfg.ProbeDebugLog {
+		log.Warn("Running EBPF probe with debug output")
+		options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelInstruction | ebpf.LogLevelStats
+
+	}
+
+	if e.cfg.ProbeLogBufferSizeBytes != 0 {
+		log.Warnf("Running EBPF probe with log size: %d", e.cfg.ProbeLogBufferSizeBytes)
+		options.VerifierOptions.Programs.LogSize = e.cfg.ProbeLogBufferSizeBytes
+	}
 
 	supported, notSupported := e.getProtocolsForBuildMode()
 	cleanup := e.configureManagerWithSupportedProtocols(supported)
@@ -462,7 +487,82 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 		}
 	}
 
-	err := e.InitWithOptions(buf, &options)
+	err := withoutHardenedBpfJit(func() error {
+		return e.InitWithOptions(buf, &options)
+	})
+
+	if err != nil {
+		var err2 *ebpf.VerifierError
+		if errors.As(err, &err2) {
+			_ = log.Errorf("Error verifying program: last 500 lines")
+			for _, l := range err2.Log[max(len(err2.Log)-500, 0):] {
+				_ = log.Errorf(l)
+			}
+			err2.Log = []string{}
+		}
+		return err
+	}
+
+	programs, err := e.Manager.GetPrograms()
+	if err != nil {
+		return err
+	}
+
+	for name, p := range programs {
+		if e.cfg.ProbeDebugLog {
+			log.Infof("Program '%s': successfully loaded probe", name)
+		} else {
+			// When there is no debug logging all that is logged is branch statistics, which we show for reference.
+			log.Infof("Program '%s': statistics for loading ebpf probe: %s", name, strings.Replace(p.VerifierLog, "\n", " -- ", -1))
+		}
+	}
+
+	return nil
+}
+
+// withoutHardenedBpfJit disables hardening of the bpf jit. this is required to load the http probes, which are big and trip up the jit.
+func withoutHardenedBpfJit(f func() error) error {
+	if value := os.Getenv("STS_DISABLE_BPF_JIT_HARDEN"); value != "true" {
+		return f()
+	}
+
+	var proc = "/proc"
+	if value := os.Getenv("HOST_PROC"); value != "" {
+		proc = value
+	}
+
+	hardenPath := path.Join(proc, "sys", "net", "core", "bpf_jit_harden")
+
+	curValue, err := os.ReadFile(hardenPath)
+	if err != nil {
+		return fmt.Errorf("could not read bpf_jit_harden setting: %w", err)
+	}
+
+	if strings.TrimSpace(string(curValue)) != "0" {
+		log.Infof("Encountered bpf_jit_harden = %s, going to set to 0", strings.TrimSpace(string(curValue)))
+	}
+
+	err = os.WriteFile(hardenPath, []byte("0"), 0644)
+	if err != nil {
+		return fmt.Errorf("could not write to %s to set bpf_jit_harden to 0: %w", hardenPath, err)
+	}
+
+	execErr := f()
+
+	log.Infof("Resetting bpf_jit_harden to %s", strings.TrimSpace(string(curValue)))
+	err = os.WriteFile(hardenPath, curValue, 0644)
+	if err != nil {
+		return fmt.Errorf("could not reset bpf_jit_harden to %s: %w", string(curValue), err)
+	}
+
+	return execErr
+}
+
+const connProtoTTL = 3 * time.Minute
+const connProtoCleaningInterval = 5 * time.Minute
+
+func (e *ebpfProgram) setupMapCleaner() (*ddebpf.MapCleaner, error) {
+	mapCleaner, err := ddebpf.NewMapCleaner(e.connectionProtocolMap, new(netebpf.ConnTuple), new(netebpf.ProtocolStackWrapper))
 	if err != nil {
 		cleanup()
 	} else {

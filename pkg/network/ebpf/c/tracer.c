@@ -12,6 +12,7 @@
 #ifdef COMPILE_PREBUILT
 #include "prebuilt/offsets.h"
 #endif
+#include "tracer/tracepoint_offsets.h"
 #include "skb.h"
 #include "tracer/bind.h"
 #include "tracer/events.h"
@@ -120,7 +121,7 @@ int BPF_BYPASSABLE_KRETPROBE(kretprobe__tcp_sendmsg, int sent) {
     __u32 packets_out = 0;
     get_tcp_segment_counts(skp, &packets_in, &packets_out);
 
-    return handle_message(&t, sent, 0, CONN_DIRECTION_UNKNOWN, packets_out, packets_in, PACKET_COUNT_ABSOLUTE, skp);
+    return handle_message(&t, sent, 0, CONN_DIRECTION_UNKNOWN, packets_out, packets_in, PACKET_COUNT_ABSOLUTE, skp, pid_tgid);
 }
 
 SEC("kprobe/tcp_sendpage")
@@ -164,7 +165,7 @@ int BPF_BYPASSABLE_KRETPROBE(kretprobe__tcp_sendpage, int sent) {
     __u32 packets_out = 0;
     get_tcp_segment_counts(skp, &packets_in, &packets_out);
 
-    return handle_message(&t, sent, 0, CONN_DIRECTION_UNKNOWN, packets_out, packets_in, PACKET_COUNT_ABSOLUTE, skp);
+    return handle_message(&t, sent, 0, CONN_DIRECTION_UNKNOWN, packets_out, packets_in, PACKET_COUNT_ABSOLUTE, skp, pid_tgid);
 }
 
 SEC("kprobe/udp_sendpage")
@@ -199,8 +200,8 @@ int BPF_BYPASSABLE_KRETPROBE(kretprobe__udp_sendpage, int sent) {
     if (!read_conn_tuple(&t, skp, pid_tgid, CONN_TYPE_UDP)) {
         return 0;
     }
-
-    return handle_message(&t, sent, 0, CONN_DIRECTION_UNKNOWN, 1, 0, PACKET_COUNT_INCREMENT, skp);
+    
+    return handle_message(&t, sent, 0, CONN_DIRECTION_UNKNOWN, 1, 0, PACKET_COUNT_INCREMENT, skp, pid_tgid);
 }
 
 SEC("kprobe/tcp_done")
@@ -435,7 +436,7 @@ static __always_inline int handle_ip6_skb(struct sock *sk, size_t size, struct f
     }
 
     log_debug("kprobe/ip6_make_skb: pid_tgid: %llu, size: %zu", pid_tgid, size);
-    handle_message(&t, size, 0, CONN_DIRECTION_UNKNOWN, 1, 0, PACKET_COUNT_INCREMENT, sk);
+    handle_message(&t, size, 0, CONN_DIRECTION_UNKNOWN, 1, 0, PACKET_COUNT_INCREMENT, sk, pid_tgid);
     increment_telemetry_count(udp_send_processed);
 
     return 0;
@@ -612,7 +613,7 @@ static __always_inline int handle_ip_skb(struct sock *sk, size_t size, struct fl
 
     log_debug("kprobe/ip_make_skb: pid_tgid: %llu, size: %zu", pid_tgid, size);
 
-    handle_message(&t, size, 0, CONN_DIRECTION_UNKNOWN, 1, 0, PACKET_COUNT_INCREMENT, sk);
+    handle_message(&t, size, 0, CONN_DIRECTION_UNKNOWN, 1, 0, PACKET_COUNT_INCREMENT, sk, pid_tgid);
     increment_telemetry_count(udp_send_processed);
 
     return 0;
@@ -780,7 +781,7 @@ static __always_inline int handle_ret_udp_recvmsg_pre_4_7_0(int copied, void *ud
     bpf_map_delete_elem(udp_sock_map, &pid_tgid);
 
     log_debug("kretprobe/udp_recvmsg: pid_tgid: %llu, return: %d", pid_tgid, copied);
-    handle_message(&t, 0, copied, CONN_DIRECTION_UNKNOWN, 0, 1, PACKET_COUNT_INCREMENT, st->sk);
+    handle_message(&t, 0, copied, CONN_DIRECTION_UNKNOWN, 0, 1, PACKET_COUNT_INCREMENT, st->sk, pid_tgid);
 
     return 0;
 }
@@ -984,13 +985,57 @@ int BPF_BYPASSABLE_KPROBE(kprobe__tcp_finish_connect, struct sock *skp) {
     }
 
     u64 pid_tgid = pid_tgid_p->pid_tgid;
-    t.pid = GET_USER_MODE_PID(pid_tgid);
     log_debug("kprobe/tcp_finish_connect: kernel thread id: %llu, user mode pid: %llu", GET_KERNEL_THREAD_ID(pid_tgid), GET_USER_MODE_PID(pid_tgid));
 
+    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM2(ctx);
+    tcp_stats_t seq_stats = { };
+    if (!sk_buff_get_tcp_transport(skb, NULL, &(seq_stats.initial_tcp_seq))) {
+        update_tcp_stats(&t, seq_stats);
+    }
+
     handle_tcp_stats(&t, skp, TCP_ESTABLISHED);
-    handle_message(&t, 0, 0, CONN_DIRECTION_OUTGOING, 0, 0, PACKET_COUNT_NONE, skp);
+    handle_message(&t, 0, 0, CONN_DIRECTION_OUTGOING, 0, 0, PACKET_COUNT_NONE, skp, pid_tgid);
 
     log_debug("kprobe/tcp_finish_connect: netns: %u, sport: %u, dport: %u", t.netns, t.sport, t.dport);
+
+    return 0;
+}
+
+// [STS]: We capture this function because it catches the 'synack' connection accept packet,
+// which we want to get the seq/ack for the initial connection.
+// The data is passed in a separate map to makes sure it only gets added to tcp_stats when
+// conn_stats are added in inet_csk_accept, and not leak the stats.
+SEC("kprobe/ip_build_and_send_pkt")
+int kprobe__ip_build_and_send_pkt(struct pt_regs *ctx) {
+    struct sk_buff *skb = (struct sk_buff *)(PT_REGS_PARM1(ctx));
+    if (!skb) {
+        return 0;
+    }
+
+    struct sock *sk = (struct sock *)(PT_REGS_PARM2(ctx));
+    if (!sk) {
+        return 0;
+    }
+
+    conn_tuple_t t = {};
+    bpf_memset(&t, 0, sizeof(conn_tuple_t));
+
+    // Pick source and address from function invocation
+    t.saddr_l = PT_REGS_PARM3(ctx);
+    t.daddr_l = PT_REGS_PARM4(ctx);
+    t.metadata |= CONN_TYPE_TCP;
+
+    t.netns = get_netns_from_sock(sk);
+
+    tcp_seq_t stats = { };
+
+    if (sk_buff_get_tcp_transport(skb, &t, &stats)) {
+        return 0;
+    }
+
+    bpf_map_update_with_telemetry(tcp_accept_seq, &t, &stats, BPF_ANY);
+
+    log_debug("kprobe/ip_build_and_send_pkt: seq=%d, ack = %d\n", stats.seq, stats.ack_seq);
 
     return 0;
 }
@@ -1010,8 +1055,18 @@ int BPF_BYPASSABLE_KRETPROBE(kretprobe__inet_csk_accept, struct sock *sk) {
     }
     log_debug("kretprobe/inet_csk_accept: netns: %u, sport: %u, dport: %u", t.netns, t.sport, t.dport);
 
+    tcp_seq_t *tcp_seq = bpf_map_lookup_elem(&tcp_accept_seq, &t);
+    bpf_map_delete_elem(&tcp_accept_seq, &t);
+
+    log_debug("found seq: %p", tcp_seq);
+
+    if (tcp_seq) {
+        tcp_stats_t seq_stats = { .initial_tcp_seq = *tcp_seq };
+        update_tcp_stats(&t, seq_stats);
+    }
+
     handle_tcp_stats(&t, sk, TCP_ESTABLISHED);
-    handle_message(&t, 0, 0, CONN_DIRECTION_INCOMING, 0, 0, PACKET_COUNT_NONE, sk);
+    handle_message(&t, 0, 0, CONN_DIRECTION_INCOMING, 0, 0, PACKET_COUNT_NONE, sk, pid_tgid);
 
     port_binding_t pb = {};
     pb.netns = t.netns;
@@ -1132,9 +1187,9 @@ static __always_inline struct sock *sk_buff_sk(struct sk_buff *skb) {
 }
 
 SEC("tracepoint/net/net_dev_queue")
-int tracepoint__net__net_dev_queue(struct net_dev_queue_ctx *ctx) {
+int tracepoint__net__net_dev_queue(char* ctx) {
     CHECK_BPF_PROGRAM_BYPASSED()
-    struct sk_buff *skb = ctx->skb;
+    struct sk_buff* skb = sk_buff_from_net_dev_queue_ctx(ctx);
     if (!skb) {
         return 0;
     }
@@ -1158,8 +1213,6 @@ int tracepoint__net__net_dev_queue(struct net_dev_queue_ctx *ctx) {
     if (!read_conn_tuple(&sock_tup, sk, 0, CONN_TYPE_TCP)) {
         return 0;
     }
-    sock_tup.netns = 0;
-    sock_tup.pid = 0;
 
     if (!is_equal(&skb_tup, &sock_tup)) {
         normalize_tuple(&skb_tup);

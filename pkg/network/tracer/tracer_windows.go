@@ -92,6 +92,7 @@ func NewTracer(config *config.Config, telemetry telemetry.Component) (*Tracer, e
 		config.MaxRedisStatsBuffered,
 		config.EnableNPMConnectionRollup,
 		config.EnableProcessEventMonitoring,
+		config.MaxHTTPObservationsBuffered,
 	)
 
 	reverseDNS := dns.NewNullReverseDNS()

@@ -21,7 +21,6 @@ import (
 
 	ddebpf "github.com/DataDog/datadog-agent/pkg/ebpf"
 	"github.com/DataDog/datadog-agent/pkg/network/config"
-	filterpkg "github.com/DataDog/datadog-agent/pkg/network/filter"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/telemetry"
 	usmconfig "github.com/DataDog/datadog-agent/pkg/network/usm/config"
@@ -47,8 +46,7 @@ type Monitor struct {
 
 	processMonitor *monitor.ProcessMonitor
 
-	// termination
-	closeFilterFn func()
+	probes *MonitorProbes
 
 	lastUpdateTime *atomic.Int64
 }
@@ -79,25 +77,17 @@ func NewMonitor(c *config.Config, connectionProtocolMap *ebpf.Map) (m *Monitor, 
 		return nil, fmt.Errorf("error initializing ebpf program: %w", err)
 	}
 
-	filter, _ := mgr.GetProbe(manager.ProbeIdentificationPair{EBPFFuncName: protocolDispatcherSocketFilterFunction, UID: probeUID})
-	if filter == nil {
-		return nil, fmt.Errorf("error retrieving socket filter")
-	}
-	ddebpf.AddNameMappings(mgr.Manager.Manager, "usm_monitor")
-
-	closeFilterFn, err := filterpkg.HeadlessSocketFilter(c, filter)
-	if err != nil {
-		return nil, fmt.Errorf("error enabling traffic inspection: %s", err)
-	}
+	ebpfcheck.AddNameMappings(mgr.Manager.Manager, "usm_monitor")
 
 	processMonitor := monitor.GetProcessMonitor()
+	probes := NewMonitorProbes(c, processMonitor, mgr)
 
 	usmstate.Set(usmstate.Running)
 
 	usmMonitor := &Monitor{
 		cfg:            c,
 		ebpfProgram:    mgr,
-		closeFilterFn:  closeFilterFn,
+		probes:         probes,
 		processMonitor: processMonitor,
 	}
 
@@ -130,6 +120,21 @@ func (m *Monitor) Start() error {
 
 	err = m.ebpfProgram.Start()
 	if err != nil {
+		return fmt.Errorf("error starting ebpf program for usm: %w", err)
+	}
+
+	// todo!: we need to check this!
+	// Starting with updateAllNsProbes.
+	// We run this synchronously here instead of waiting for the NsNetMonitor to be sure all probes are started after this function
+	// returns
+	err = m.probes.Start()
+
+	if err != nil {
+		for _, protocol := range m.enabledProtocols {
+			protocol.Stop(m.ebpfProgram.Manager.Manager)
+		}
+
+		m.ebpfProgram.Close()
 		return err
 	}
 
@@ -138,6 +143,7 @@ func (m *Monitor) Start() error {
 		err = m.processMonitor.Initialize(m.cfg.EnableUSMEventStream)
 	}
 
+	// TODO: check whether we should close the probes and program here.
 	return err
 }
 
@@ -203,11 +209,11 @@ func (m *Monitor) Stop() {
 	}
 
 	m.processMonitor.Stop()
+	m.probes.Stop()
 
 	ddebpf.RemoveNameMappings(m.ebpfProgram.Manager.Manager)
 
 	m.ebpfProgram.Close()
-	m.closeFilterFn()
 	usmstate.Set(usmstate.Stopped)
 }
 

@@ -1077,6 +1077,9 @@ replace github.com/pahanini/go-grpc-bidirectional-streaming-example v0.0.0-20211
 replace github.com/dgrijalva/jwt-go => github.com/golang-jwt/jwt v3.2.1+incompatible
 
 replace github.com/vishvananda/netlink => github.com/DataDog/netlink v1.0.1-0.20240223195320-c7a4f832a3d1
+// todo!: need to check this one.
+// replace github.com/vishvananda/netlink => github.com/StackVista/netlink v0.0.0-20231207101142-91d41874606b
+
 
 // Use custom Trivy fork to reduce binary size
 // Pull in replacements needed by upstream Trivy

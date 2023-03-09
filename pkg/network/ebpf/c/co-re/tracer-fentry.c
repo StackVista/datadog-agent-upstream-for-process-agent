@@ -53,7 +53,6 @@ static __always_inline bool event_in_task(char *prog_name) {
 }
 
 static __always_inline int read_conn_tuple_partial_from_flowi4(conn_tuple_t *t, struct flowi4 *fl4, u64 pid_tgid, metadata_mask_t type) {
-    t->pid = GET_USER_MODE_PID(pid_tgid);
     t->metadata = type;
 
     if (t->saddr_l == 0) {
@@ -86,7 +85,6 @@ static __always_inline int read_conn_tuple_partial_from_flowi4(conn_tuple_t *t, 
 }
 
 static __always_inline int read_conn_tuple_partial_from_flowi6(conn_tuple_t *t, struct flowi6 *fl6, u64 pid_tgid, metadata_mask_t type) {
-    t->pid = GET_USER_MODE_PID(pid_tgid);
     t->metadata = type;
 
     struct in6_addr addr = BPF_CORE_READ(fl6, saddr);
@@ -158,7 +156,7 @@ int BPF_PROG(tcp_sendmsg_exit, struct sock *sk, struct msghdr *msg, size_t size,
     __u32 packets_out = 0;
     get_tcp_segment_counts(sk, &packets_in, &packets_out);
 
-    return handle_message(&t, sent, 0, CONN_DIRECTION_UNKNOWN, packets_out, packets_in, PACKET_COUNT_ABSOLUTE, sk);
+    return handle_message(&t, sent, 0, CONN_DIRECTION_UNKNOWN, packets_out, packets_in, PACKET_COUNT_ABSOLUTE, sk, pid_tgid);
 }
 
 SEC("fexit/tcp_sendpage")
@@ -183,7 +181,7 @@ RETURN_IF_NOT_IN_SYSPROBE_TASK("fexit/tcp_sendpage");
     __u32 packets_out = 0;
     get_tcp_segment_counts(sk, &packets_in, &packets_out);
 
-    return handle_message(&t, sent, 0, CONN_DIRECTION_UNKNOWN, packets_out, packets_in, PACKET_COUNT_ABSOLUTE, sk);
+    return handle_message(&t, sent, 0, CONN_DIRECTION_UNKNOWN, packets_out, packets_in, PACKET_COUNT_ABSOLUTE, sk, pid_tgid);
 }
 
 SEC("fexit/udp_sendpage")
@@ -202,7 +200,7 @@ int BPF_PROG(udp_sendpage_exit, struct sock *sk, struct page *page, int offset, 
         return 0;
     }
 
-    return handle_message(&t, sent, 0, CONN_DIRECTION_UNKNOWN, 1, 0, PACKET_COUNT_INCREMENT, sk);
+    return handle_message(&t, sent, 0, CONN_DIRECTION_UNKNOWN, 1, 0, PACKET_COUNT_INCREMENT, sk, pid_tgid);
 }
 
 SEC("fexit/tcp_recvmsg")
@@ -265,7 +263,7 @@ static __always_inline int handle_udp_send(struct sock *sk, int sent) {
 
     if (sent > 0) {
         log_debug("udp_sendmsg: sent: %d", sent);
-        handle_message(t, sent, 0, CONN_DIRECTION_UNKNOWN, 1, 0, PACKET_COUNT_INCREMENT, sk);
+        handle_message(t, sent, 0, CONN_DIRECTION_UNKNOWN, 1, 0, PACKET_COUNT_INCREMENT, sk, pid_tgid);
     }
 
     bpf_map_delete_elem(&udp_send_skb_args, &pid_tgid);
@@ -480,11 +478,10 @@ int BPF_PROG(tcp_finish_connect, struct sock *sk, struct sk_buff *skb, int rc) {
         return 0;
     }
     u64 pid_tgid = pid_tgid_p->pid_tgid;
-    t.pid = GET_USER_MODE_PID(pid_tgid);
     log_debug("fentry/tcp_finish_connect: kernel thread id: %llu, user mode pid: %llu", GET_KERNEL_THREAD_ID(pid_tgid), GET_USER_MODE_PID(pid_tgid));
 
     handle_tcp_stats(&t, sk, TCP_ESTABLISHED);
-    handle_message(&t, 0, 0, CONN_DIRECTION_OUTGOING, 0, 0, PACKET_COUNT_NONE, sk);
+    handle_message(&t, 0, 0, CONN_DIRECTION_OUTGOING, 0, 0, PACKET_COUNT_NONE, sk, pid_tgid);
 
     log_debug("fentry/tcp_connect: netns: %u, sport: %u, dport: %u", t.netns, t.sport, t.dport);
 
@@ -506,7 +503,7 @@ int BPF_PROG(inet_csk_accept_exit, struct sock *_sk, int flags, int *err, bool k
         return 0;
     }
     handle_tcp_stats(&t, sk, TCP_ESTABLISHED);
-    handle_message(&t, 0, 0, CONN_DIRECTION_INCOMING, 0, 0, PACKET_COUNT_NONE, sk);
+    handle_message(&t, 0, 0, CONN_DIRECTION_INCOMING, 0, 0, PACKET_COUNT_NONE, sk, pid_tgid);
 
     port_binding_t pb = {};
     pb.netns = t.netns;
