@@ -32,8 +32,6 @@
 
 #define HTTPS_PORT 443
 
-static __always_inline void http_process(http_event_t *event, skb_info_t *skb_info, __u64 tags);
-
 /* this function is called by all TLS hookpoints (OpenSSL, GnuTLS and GoTLS, JavaTLS) and */
 /* it's used for classify the subset of protocols that is supported by `classify_protocol_for_dispatcher` */
 static __always_inline void classify_decrypted_payload(protocol_stack_t *stack, conn_tuple_t *t, void *buffer, size_t len) {
@@ -45,8 +43,13 @@ static __always_inline void classify_decrypted_payload(protocol_stack_t *stack, 
         return;
     }
 
+    bpf_buffer_desc_t buf_desc = { 
+        .type = BPF_BUFFER_TYPE_USER, 
+        .ptr = buffer,
+        .data_offset = 0
+    };
     protocol_t proto = PROTOCOL_UNKNOWN;
-    classify_protocol_for_dispatcher(&proto, t, buffer, len);
+    classify_protocol_for_dispatcher(&proto, t, buffer, len, &buf_desc);
     if (proto == PROTOCOL_UNKNOWN) {
         return;
     }
@@ -77,6 +80,12 @@ static __always_inline void tls_process(struct pt_regs *ctx, conn_tuple_t *t, vo
     case PROTOCOL_HTTP:
         prog = TLS_HTTP_PROCESS;
         break;
+    case PROTOCOL_MONGO:
+        prog = TLS_MONGO_PROCESS;
+        break;
+    case PROTOCOL_AMQP:
+        prog = TLS_AMQP_PROCESS;
+        break;
     default:
         return;
     }
@@ -89,6 +98,7 @@ static __always_inline void tls_process(struct pt_regs *ctx, conn_tuple_t *t, vo
     bpf_memset(args, 0, sizeof(tls_dispatcher_arguments_t));
     bpf_memcpy(&args->tup, t, sizeof(conn_tuple_t));
     args->buffer_ptr = buffer_ptr;
+    args->len = len;
     args->tags = tags;
     bpf_tail_call_compat(ctx, &tls_process_progs, prog);
 }
@@ -154,18 +164,9 @@ static __always_inline conn_tuple_t* tup_from_ssl_ctx(void *ssl_ctx, u64 pid_tgi
     }
 
     conn_tuple_t t;
-    if (!read_conn_tuple(&t, *sock, pid_tgid, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&t, *sock, CONN_TYPE_TCP)) {
         return NULL;
     }
-
-    // Set the `.netns` and `.pid` values to always be 0.
-    // They can't be sourced from inside `read_conn_tuple_skb`,
-    // which is used elsewhere to produce the same `conn_tuple_t` value from a `struct __sk_buff*` value,
-    // so we ensure it is always 0 here so that both paths produce the same `conn_tuple_t` value.
-    // `netns` is not used in the userspace program part that binds http information to `ConnectionStats`,
-    // so this is isn't a problem.
-    t.netns = 0;
-    t.pid = 0;
 
     bpf_memcpy(&ssl_sock->tup, &t, sizeof(conn_tuple_t));
 
@@ -191,11 +192,9 @@ static __always_inline void map_ssl_ctx_to_sock(struct sock *skp) {
     bpf_map_delete_elem(&ssl_ctx_by_pid_tgid, &pid_tgid);
 
     ssl_sock_t ssl_sock = {};
-    if (!read_conn_tuple(&ssl_sock.tup, skp, pid_tgid, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&ssl_sock.tup, skp, CONN_TYPE_TCP)) {
         return;
     }
-    ssl_sock.tup.netns = 0;
-    ssl_sock.tup.pid = 0;
     normalize_tuple(&ssl_sock.tup);
 
     // copy map value to stack. required for older kernels

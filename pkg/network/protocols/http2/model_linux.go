@@ -61,6 +61,7 @@ func (tx *EbpfTx) ConnTuple() types.ConnectionKey {
 		DstIPLow:  tx.Tup.Daddr_l,
 		SrcPort:   tx.Tup.Sport,
 		DstPort:   tx.Tup.Dport,
+		NetNs:     tx.Tup.Netns,
 	}
 }
 
@@ -118,6 +119,36 @@ func (tx *EbpfTx) StaticTags() uint64 {
 
 func (tx *EbpfTx) DynamicTags() []string {
 	return nil
+}
+
+// RequestTracingID returns the request tracing id for this HTTP transaction
+// [sts]
+func (tx *EbpfTx) RequestTracingID() string {
+	return ""
+}
+
+// ResponseTracingID returns the request tracing id for this HTTP transaction
+// [sts]
+func (tx *EbpfTx) ResponseTracingID() string {
+	return ""
+}
+
+func (tx *EbpfTx) RawResponseTracingID() [40]byte {
+	return [40]byte{}
+}
+
+func (tx *EbpfTx) SetResponseTracingID(id [40]byte) {
+}
+
+func (tx *EbpfTx) RequestParseResult() http.HeaderParseResult {
+	return http.HeaderNoParse
+}
+
+func (tx *EbpfTx) ResponseParseResult() http.HeaderParseResult {
+	return http.HeaderNoParse
+}
+
+func (tx *EbpfTx) SetResponseParseResult(res http.HeaderParseResult) {
 }
 
 func (tx *EbpfTx) String() string {

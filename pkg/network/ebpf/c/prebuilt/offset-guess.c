@@ -2,6 +2,7 @@
 #include "offset-guess.h"
 #include "bpf_tracing.h"
 #include "map-defs.h"
+#include "tracer/tracepoint_offsets.h"
 
 #include <net/net_namespace.h>
 #include <net/sock.h>
@@ -331,13 +332,8 @@ int kretprobe__tcp_v6_connect(struct pt_regs* __attribute__((unused)) ctx) {
     return 0;
 }
 
-struct net_dev_queue_ctx {
-    u64 unused;
-    void* skb;
-};
-
 SEC("tracepoint/net/net_dev_queue")
-int tracepoint__net__net_dev_queue(struct net_dev_queue_ctx* ctx) {
+int tracepoint__net__net_dev_queue(char* ctx) {
     u64 zero = 0;
     tracer_status_t* status = bpf_map_lookup_elem(&tracer_status, &zero);
     // If we've triggered the hook and we are not under the context of guess offsets for GUESS_SK_BUFF_SOCK,
@@ -346,7 +342,7 @@ int tracepoint__net__net_dev_queue(struct net_dev_queue_ctx* ctx) {
         return 0;
     }
 
-    guess_offsets(status, ctx->skb);
+    guess_offsets(status, (char*)sk_buff_from_net_dev_queue_ctx(ctx));
     return 0;
 }
 

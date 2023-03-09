@@ -18,10 +18,12 @@ type ConnectionKey struct {
 	// ports separated for alignment/size optimization
 	SrcPort uint16
 	DstPort uint16
+
+	NetNs uint32
 }
 
 // NewConnectionKey generates a new ConnectionKey
-func NewConnectionKey(saddr, daddr util.Address, sport, dport uint16) ConnectionKey {
+func NewConnectionKey(saddr, daddr util.Address, sport, dport uint16, netns uint32) ConnectionKey {
 	saddrl, saddrh := util.ToLowHigh(saddr)
 	daddrl, daddrh := util.ToLowHigh(daddr)
 	return ConnectionKey{
@@ -31,5 +33,6 @@ func NewConnectionKey(saddr, daddr util.Address, sport, dport uint16) Connection
 		DstIPHigh: daddrh,
 		DstIPLow:  daddrl,
 		DstPort:   dport,
+		NetNs:     netns,
 	}
 }

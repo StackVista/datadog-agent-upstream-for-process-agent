@@ -10,13 +10,15 @@ package usm
 import (
 	"context"
 	"fmt"
-	"github.com/DataDog/datadog-agent/pkg/network/protocols"
 	"io"
 	"net"
 	nethttp "net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DataDog/datadog-agent/pkg/network/protocols"
+	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
 
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -78,6 +80,7 @@ func skipTestIfKernelNotSupported(t *testing.T) {
 }
 
 func TestKafkaProtocolParsing(t *testing.T) {
+	testutil2.SkipIfStackState(t, "We do not test this yet, it requires compos ein the environment")
 	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt, ebpftest.RuntimeCompiled, ebpftest.CORE}, "", testKafkaProtocolParsing)
 }
 

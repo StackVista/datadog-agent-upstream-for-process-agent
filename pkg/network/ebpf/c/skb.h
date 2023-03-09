@@ -6,6 +6,7 @@
 #include "bpf_helpers_custom.h"
 #include "bpf_endian.h"
 #include "bpf_builtins.h"
+#include "tracer/tracer.h"
 
 #ifndef COMPILE_CORE
 #include <linux/skbuff.h>
@@ -188,5 +189,45 @@ static __always_inline int sk_buff_to_tuple(struct sk_buff *skb, conn_tuple_t *t
     log_debug("ERR unknown connection type\n");
     return 0;
 }
+
+// parse a kernel skb which has transport set into a conn tuple
+static __always_inline int sk_buff_get_tcp_transport(struct sk_buff *skb, conn_tuple_t *tup, tcp_seq_t *tcp_seq) {
+    unsigned char *head = sk_buff_head(skb);
+    if (!head) {
+        log_debug("ERR reading head\n");
+        return -1;
+    }
+
+    u16 trans_head = sk_buff_transport_header(skb);
+    if (!trans_head) {
+        log_debug("ERR reading trans_head\n");
+        return -1;
+    }
+
+    struct tcphdr tcph;
+    bpf_memset(&tcph, 0, sizeof(struct tcphdr));
+    int ret = bpf_probe_read_kernel_with_telemetry(&tcph, sizeof(tcph), (struct tcphdr *)(head + trans_head));
+    if (ret) {
+        log_debug("ERR reading tcphdr\n");
+        return ret;
+    }
+
+    if (tup) {
+        tup->sport = bpf_ntohs(tcph.source);
+        tup->dport = bpf_ntohs(tcph.dest);
+    }
+
+    __u8 tcp_flags = *(((__u8*)(&tcph)) + TCP_FLAGS_OFFSET);
+
+    if (tcp_flags & TCPHDR_SYN && tcp_flags & TCPHDR_ACK) {
+        tcp_seq->seq = bpf_ntohl(tcph.seq);
+        tcp_seq->ack_seq = bpf_ntohl(tcph.ack_seq);
+        return 0;
+    }
+
+    log_debug("tcp flags did not match SYN and ACK flags");
+    return -1;
+}
+
 
 #endif

@@ -103,6 +103,28 @@ func GetNetNamespaces(procRoot string) ([]netns.NsHandle, error) {
 	return nss, nil
 }
 
+func ForAllNS(procRoot string, fn func(handle netns.NsHandle) error) error {
+	nss, err := GetNetNamespaces(procRoot)
+
+	if err != nil {
+		return err
+	}
+
+	for _, ns := range nss {
+		err = fn(ns)
+
+		if err != nil {
+			break
+		}
+	}
+
+	for _, ns := range nss {
+		ns.Close()
+	}
+
+	return err
+}
+
 // GetCurrentIno returns the ino number for the current network namespace
 func GetCurrentIno() (uint32, error) {
 	curNS, err := netns.Get()

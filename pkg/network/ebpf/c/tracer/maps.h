@@ -14,7 +14,7 @@ BPF_HASH_MAP(conn_stats, conn_tuple_t, conn_stats_ts_t, 0)
 /* This is a key/value store with the keys being a conn_tuple_t
  * and the values being a tcp_stats_t *.
  */
-BPF_HASH_MAP(tcp_stats, conn_tuple_t, tcp_stats_t, 0)
+BPF_LRU_MAP(tcp_stats, conn_tuple_t, tcp_stats_t, 0)
 
 /*
  * Hash map to store conn_tuple_t to retransmits. We use a separate map
@@ -25,6 +25,12 @@ BPF_HASH_MAP(tcp_retransmits, conn_tuple_t, __u32, 0)
 
 /* Will hold the PIDs initiating TCP connections */
 BPF_HASH_MAP(tcp_ongoing_connect_pid, struct sock *, __u64, 1024)
+
+/* Will store the seq/ack number that were seen while accepting a connection.
+   Making this an LRU map, because a connected connection might not get accepted, which
+   would ultimately leak data into this map.
+ */
+BPF_LRU_MAP(tcp_accept_seq, conn_tuple_t, tcp_seq_t, 1024)
 
 /* Will hold the tcp/udp close events
  * The keys are the cpu number and the values a perf file descriptor for a perf event

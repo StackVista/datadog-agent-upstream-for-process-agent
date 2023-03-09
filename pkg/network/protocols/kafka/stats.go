@@ -24,9 +24,9 @@ type Key struct {
 }
 
 // NewKey generates a new Key
-func NewKey(saddr, daddr util.Address, sport, dport uint16, topicName string, requestAPIKey, requestAPIVersion uint16) Key {
+func NewKey(saddr, daddr util.Address, sport, dport uint16, netns uint32, topicName string, requestAPIKey, requestAPIVersion uint16) Key {
 	return Key{
-		ConnectionKey:  types.NewConnectionKey(saddr, daddr, sport, dport),
+		ConnectionKey:  types.NewConnectionKey(saddr, daddr, sport, dport, netns),
 		TopicName:      topicName,
 		RequestAPIKey:  requestAPIKey,
 		RequestVersion: requestAPIVersion,
