@@ -12,6 +12,8 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/DataDog/datadog-agent/pkg/process/util"
+	"github.com/google/uuid"
 	"io"
 	"math/rand"
 	"net"
@@ -36,18 +38,10 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http/testutil"
 	libtelemetry "github.com/DataDog/datadog-agent/pkg/network/protocols/telemetry"
+	"github.com/DataDog/datadog-agent/pkg/network/tracer/testutil/grpc"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
-	"github.com/DataDog/datadog-agent/pkg/util/log"
+	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
-
-func TestMain(m *testing.M) {
-	logLevel := os.Getenv("DD_LOG_LEVEL")
-	if logLevel == "" {
-		logLevel = "warn"
-	}
-	log.SetupLogger(seelog.Default, logLevel)
-	os.Exit(m.Run())
-}
 
 const (
 	kb = 1024
@@ -95,10 +89,7 @@ type HTTPTestSuite struct {
 }
 
 func TestHTTP(t *testing.T) {
-	if kv < http.MinimumKernelVersion {
-		t.Skipf("USM is not supported on %v", kv)
-	}
-	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt, ebpftest.RuntimeCompiled, ebpftest.CORE}, "", func(t *testing.T) {
+	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt /* STS edit:, ebpftest.RuntimeCompiled, ebpftest.CORE */}, "", func(t *testing.T) {
 		suite.Run(t, new(HTTPTestSuite))
 	})
 }
@@ -110,19 +101,14 @@ func (s *HTTPTestSuite) TestHTTPStats() {
 		name                  string
 		aggregateByStatusCode bool
 	}{
-		{
-			name:                  "status code",
-			aggregateByStatusCode: true,
-		},
-		{
-			name:                  "status class",
-			aggregateByStatusCode: false,
-		},
-	}
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			// Start an HTTP server on localhost:8080
-			serverAddr := "127.0.0.1:8080"
+		{name: "without TCP timestamp option", value: false},
+		{name: "with TCP timestamp option", value: true},
+	} {
+		t.Run(TCPTimestamp.name, func(t *testing.T) {
+
+			monitor := newHTTPMonitor(t, testutil.Options{})
+
+			serverAddr := "localhost:8081"
 			srvDoneFn := testutil.HTTPServer(t, serverAddr, testutil.Options{
 				EnableKeepAlive: true,
 			})
@@ -134,24 +120,23 @@ func (s *HTTPTestSuite) TestHTTPStats() {
 
 			resp, err := nethttp.Get(fmt.Sprintf("http://%s/%d/test", serverAddr, nethttp.StatusNoContent))
 			require.NoError(t, err)
-			_ = resp.Body.Close()
+
+			expectedOccurrences := 10
+			for i := 0; i < expectedOccurrences; i++ {
+				resp, err := client.Do(req)
+				require.NoError(t, err)
+				// Have to read the response body to ensure the client will be able to properly close the connection.
+				io.ReadAll(resp.Body)
+				resp.Body.Close()
+			}
 			srvDoneFn()
 
-			// Iterate through active connections until we find connection created above
-			require.Eventuallyf(t, func() bool {
-				stats := getHTTPLikeProtocolStats(monitor, protocols.HTTP)
-
-				for key, reqStats := range stats {
-					if key.Method == http.MethodGet && strings.HasSuffix(key.Path.Content.Get(), "/test") && (key.SrcPort == 8080 || key.DstPort == 8080) {
-						currentStats := reqStats.Data[reqStats.NormalizeStatusCode(204)]
-						if currentStats != nil && currentStats.Count == 1 {
-							return true
-						}
-					}
-				}
-
-				return false
-			}, 3*time.Second, 100*time.Millisecond, "couldn't find http connection matching: %s", serverAddr)
+			occurrences := 0
+			require.Eventually(t, func() bool {
+				stats := getHttpStats(t, monitor)
+				occurrences += countRequestOccurrences(stats, req)
+				return occurrences == expectedOccurrences
+			}, time.Second*3, time.Millisecond*100, "Expected to find a request %d times, instead captured %d", occurrences, expectedOccurrences)
 		})
 	}
 }
@@ -164,7 +149,7 @@ func (s *HTTPTestSuite) TestHTTPMonitorLoadWithIncompleteBuffers() {
 	slowServerAddr := "localhost:8080"
 	fastServerAddr := "localhost:8081"
 
-	monitor := newHTTPMonitorWithCfg(t, config.New())
+	monitor := newHTTPMonitor(t, testutil.Options{})
 	slowSrvDoneFn := testutil.HTTPServer(t, slowServerAddr, testutil.Options{
 		SlowResponse: time.Millisecond * 500, // Half a second.
 		WriteTimeout: time.Millisecond * 200,
@@ -172,7 +157,7 @@ func (s *HTTPTestSuite) TestHTTPMonitorLoadWithIncompleteBuffers() {
 	})
 
 	fastSrvDoneFn := testutil.HTTPServer(t, fastServerAddr, testutil.Options{})
-	abortedRequestFn := requestGenerator(t, fmt.Sprintf("%s/ignore", slowServerAddr), emptyBody)
+	abortedRequestFn := requestGenerator(t, fmt.Sprintf("%s/ignore", slowServerAddr), "", emptyBody)
 	wg := sync.WaitGroup{}
 	abortedRequests := make(chan *nethttp.Request, 100)
 	for i := 0; i < 100; i++ {
@@ -183,7 +168,7 @@ func (s *HTTPTestSuite) TestHTTPMonitorLoadWithIncompleteBuffers() {
 			abortedRequests <- req
 		}()
 	}
-	fastReq := requestGenerator(t, fastServerAddr, emptyBody)()
+	fastReq := requestGenerator(t, fastServerAddr, "", emptyBody)()
 	wg.Wait()
 	close(abortedRequests)
 	slowSrvDoneFn()
@@ -239,19 +224,18 @@ func (s *HTTPTestSuite) TestHTTPMonitorIntegrationWithResponseBody() {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			monitor := newHTTPMonitorWithCfg(t, config.New())
+			monitor := newHTTPMonitor(t, testutil.Options{})
 			srvDoneFn := testutil.HTTPServer(t, serverAddr, testutil.Options{
 				EnableKeepAlive: true,
 			})
 			t.Cleanup(srvDoneFn)
 
-			requestFn := requestGenerator(t, serverAddr, bytes.Repeat([]byte("a"), tt.requestBodySize))
+			requestFn := requestGenerator(t, targetAddr, "", bytes.Repeat([]byte("a"), tt.requestBodySize))
 			var requests []*nethttp.Request
 			for i := 0; i < 100; i++ {
 				requests = append(requests, requestFn())
 			}
 			srvDoneFn()
-
 			assertAllRequestsExists(t, monitor, requests)
 		})
 	}
@@ -295,10 +279,10 @@ func (s *HTTPTestSuite) TestHTTPMonitorIntegrationSlowResponse() {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := config.New()
-			cfg.HTTPMapCleanerInterval = time.Duration(tt.mapCleanerIntervalSeconds) * time.Second
-			cfg.HTTPIdleConnectionTTL = time.Duration(tt.httpIdleConnectionTTLSeconds) * time.Second
-			monitor := newHTTPMonitorWithCfg(t, cfg)
+			config.ResetSystemProbeConfig(t)
+			t.Setenv("DD_SERVICE_MONITORING_CONFIG_HTTP_MAP_CLEANER_INTERVAL_IN_S", strconv.Itoa(tt.mapCleanerIntervalSeconds))
+			t.Setenv("DD_SERVICE_MONITORING_CONFIG_HTTP_IDLE_CONNECTION_TTL_IN_S", strconv.Itoa(tt.httpIdleConnectionTTLSeconds))
+			monitor := newHTTPMonitor(t, testutil.Options{})
 
 			slowResponseTimeout := time.Duration(tt.slowResponseTime) * time.Second
 			serverTimeout := slowResponseTimeout + time.Second
@@ -309,86 +293,205 @@ func (s *HTTPTestSuite) TestHTTPMonitorIntegrationSlowResponse() {
 			})
 			t.Cleanup(srvDoneFn)
 
-			// Create a request generator `requestGenerator(t, serverAddr, emptyBody)`, and runs it once. We save
-			// the request for a later comparison.
-			req := requestGenerator(t, serverAddr, emptyBody)()
+			// Perform a number of random requests
+			req := requestGenerator(t, targetAddr, "", emptyBody)()
 			srvDoneFn()
 
 			// Ensure all captured transactions get sent to user-space
 			time.Sleep(10 * time.Millisecond)
-			checkRequestIncluded(t, getHTTPLikeProtocolStats(monitor, protocols.HTTP), req, tt.shouldCapture)
-		})
-	}
-}
+			stats := getHttpStats(t, monitor)
 
-func testNameHelper(optionTrue, optionFalse string, value bool) string {
-	if value {
-		return optionTrue
-	}
-	return optionFalse
-}
-
-// TestSanity checks that USM capture a random generated 100 requests send to a local HTTP server under the following
-// conditions:
-// 1. Server and client support keep alive, and there is no NAT.
-// 2. Server and client do not support keep alive, and there is no NAT.
-// 3. Server and client support keep alive, and there is DNAT.
-// 4. Server and client do not support keep alive, and there is DNAT.
-func (s *HTTPTestSuite) TestSanity() {
-	t := s.T()
-	serverAddrWithoutNAT := "localhost:8080"
-	targetAddrWithNAT := "2.2.2.2:8080"
-	serverAddrWithNAT := "1.1.1.1:8080"
-	// SetupDNAT sets up a NAT translation from 2.2.2.2 to 1.1.1.1
-	netlink.SetupDNAT(t)
-
-	testCases := []struct {
-		name          string
-		serverAddress string
-		targetAddress string
-	}{
-		{
-			name:          "with dnat",
-			serverAddress: serverAddrWithNAT,
-			targetAddress: targetAddrWithNAT,
-		},
-		{
-			name:          "without dnat",
-			serverAddress: serverAddrWithoutNAT,
-			targetAddress: serverAddrWithoutNAT,
-		},
-	}
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			for _, keepAliveEnabled := range []bool{true, false} {
-				t.Run(testNameHelper("with keep alive", "without keep alive", keepAliveEnabled), func(t *testing.T) {
-					monitor := newHTTPMonitorWithCfg(t, config.New())
-
-					srvDoneFn := testutil.HTTPServer(t, tt.serverAddress, testutil.Options{EnableKeepAlive: keepAliveEnabled})
-					t.Cleanup(srvDoneFn)
-
-					// Create a request generator that will be used to randomly generate requests and send them to the server.
-					requestFn := requestGenerator(t, tt.targetAddress, emptyBody)
-					var requests []*nethttp.Request
-					for i := 0; i < 100; i++ {
-						// Send a request to the server and save it for later comparison.
-						requests = append(requests, requestFn())
-					}
-					srvDoneFn()
-
-					// Ensure USM captured all requests.
-					assertAllRequestsExists(t, monitor, requests)
-				})
+			if tt.shouldCapture {
+				includesRequest(t, stats, req)
+			} else {
+				requestNotIncluded(t, stats, req)
 			}
 		})
 	}
 }
 
-// TestRSTPacketRegression checks that USM captures a request that was forcefully terminated by a RST packet.
+func (s *HTTPTestSuite) TestHTTPMonitorIntegration() {
+	t := s.T()
+	targetAddr := "localhost:8080"
+	serverAddr := "localhost:8080"
+
+	t.Run("with keep-alives", func(t *testing.T) {
+		testHTTPMonitor(t, targetAddr, serverAddr, 100, testutil.Options{
+			EnableKeepAlive: true,
+		})
+	})
+	t.Run("without keep-alives", func(t *testing.T) {
+		testHTTPMonitor(t, targetAddr, serverAddr, 100, testutil.Options{
+			EnableKeepAlive: false,
+		})
+	})
+}
+
+func (s *HTTPTestSuite) TestHTTPMonitorRequestId() {
+	t := s.T()
+
+	targetAddr := "localhost:8080"
+	serverAddr := "localhost:8080"
+
+	t.Run("with keep-alives", func(t *testing.T) {
+		testHTTPMonitor(t, targetAddr, serverAddr, 1, testutil.Options{
+			EnableHttpTracing: true,
+			RequestTraceId:    "random",
+			EnableKeepAlive:   true,
+		})
+	})
+	t.Run("without keep-alives", func(t *testing.T) {
+		testHTTPMonitor(t, targetAddr, serverAddr, 1, testutil.Options{
+			EnableHttpTracing: true,
+			RequestTraceId:    "random",
+			EnableKeepAlive:   false,
+		})
+	})
+}
+
+func (s *HTTPTestSuite) TestHTTPMonitorResponseId() {
+	t := s.T()
+	targetAddr := "localhost:8080"
+	serverAddr := "localhost:8080"
+	traceId := "672aef67-566f-4206-8da1-d8c11c80585c"
+
+	monitor, _ := runHTTPMonitor(t, targetAddr, serverAddr, 1, testutil.Options{
+		EnableHttpTracing: true,
+		RequestTraceId:    "",
+		ResponseTraceId:   traceId,
+		EnableKeepAlive:   false,
+	})
+
+	stats, observations := getAllStats(t, monitor)
+	require.Equal(t, 0, len(stats))
+	require.Equal(t, 1, len(observations))
+
+	require.Equal(t, http.TransactionTraceId{
+		Type: http.TraceIdResponse,
+		Id:   traceId,
+	}, observations[0].TraceId)
+}
+
+func (s *HTTPTestSuite) TestHTTPMonitorBothId() {
+	t := s.T()
+	targetAddr := "localhost:8080"
+	serverAddr := "localhost:8080"
+	traceId := "672aef67-566f-4206-8da1-d8c11c80585c"
+
+	monitor, _ := runHTTPMonitor(t, targetAddr, serverAddr, 1, testutil.Options{
+		EnableHttpTracing: true,
+		RequestTraceId:    traceId,
+		ResponseTraceId:   traceId,
+		EnableKeepAlive:   false,
+	})
+
+	stats, observations := getAllStats(t, monitor)
+	require.Equal(t, 0, len(stats))
+	require.Equal(t, 1, len(observations))
+
+	require.Equal(t, http.TransactionTraceId{
+		Type: http.TraceIdBoth,
+		Id:   traceId,
+	}, observations[0].TraceId)
+}
+
+func (s *HTTPTestSuite) TestHTTPMonitorAmbiguousId() {
+	t := s.T()
+	targetAddr := "localhost:8080"
+	serverAddr := "localhost:8080"
+	traceId := "672aef67-566f-4206-8da1-d8c11c80585c"
+
+	monitor, _ := runHTTPMonitor(t, targetAddr, serverAddr, 1, testutil.Options{
+		EnableHttpTracing: true,
+		RequestTraceId:    "random",
+		ResponseTraceId:   traceId,
+		EnableKeepAlive:   false,
+	})
+
+	stats, observations := getAllStats(t, monitor)
+	require.Equal(t, 0, len(stats))
+	require.Equal(t, 1, len(observations))
+
+	require.Equal(t, http.TransactionTraceId{
+		Type: http.TraceIdAmbiguous,
+		Id:   "",
+	}, observations[0].TraceId)
+}
+
+func (s *HTTPTestSuite) TestHTTPMonitorIntegrationWithNAT() {
+	t := s.T()
+	testutil2.SkipIfStackState(t, "Not running dnat test where iptables cannot be ran")
+
+	// SetupDNAT sets up a NAT translation from 2.2.2.2 to 1.1.1.1
+	netlink.SetupDNAT(t)
+
+	targetAddr := "2.2.2.2:8080"
+	serverAddr := "1.1.1.1:8080"
+
+	t.Run("with keep-alives", func(t *testing.T) {
+		testHTTPMonitor(t, targetAddr, serverAddr, 100, testutil.Options{
+			EnableKeepAlive: true,
+		})
+	})
+	t.Run("without keep-alives", func(t *testing.T) {
+		testHTTPMonitor(t, targetAddr, serverAddr, 100, testutil.Options{
+			EnableKeepAlive: false,
+		})
+	})
+}
+
+func (s *HTTPTestSuite) TestUnknownMethodRegression() {
+	t := s.T()
+	testutil2.SkipIfStackState(t, "Not running dnat test where iptables cannot be ran")
+
+	// SetupDNAT sets up a NAT translation from 2.2.2.2 to 1.1.1.1
+	netlink.SetupDNAT(t)
+
+	monitor := newHTTPMonitor(t, testutil.Options{})
+	targetAddr := "2.2.2.2:8080"
+	serverAddr := "1.1.1.1:8080"
+	serverAddrIP := util.AddressFromString("1.1.1.1")
+	srvDoneFn := testutil.HTTPServer(t, serverAddr, testutil.Options{
+		EnableTLS:       false,
+		EnableKeepAlive: true,
+	})
+	t.Cleanup(srvDoneFn)
+
+	requestFn := requestGenerator(t, targetAddr, "", emptyBody)
+	for i := 0; i < 100; i++ {
+		requestFn()
+	}
+
+	time.Sleep(5 * time.Second)
+	stats := getHttpStats(t, monitor)
+	tel := telemetry.ReportPayloadTelemetry("1")
+	requestsSum := 0
+
+	for key := range stats {
+		if key.Method == http.MethodUnknown {
+			t.Error("detected HTTP request with method unknown")
+		}
+		// we just want our requests
+		if strings.Contains(key.Path.Content.Get(), "/request-") &&
+			key.DstPort == 8080 &&
+			util.FromLowHigh(key.DstIPLow, key.DstIPHigh) == serverAddrIP {
+			requestsSum++
+		}
+	}
+
+	require.Equal(t, int64(0), tel["usm.http.dropped"])
+	require.Equal(t, int64(0), tel["usm.http.rejected"])
+	require.Equal(t, int64(0), tel["usm.http.malformed"])
+	// requestGenerator() doesn't query 100 responses
+	require.Equal(t, int64(0), tel["usm.http.hits1XX"])
+
+	require.Equal(t, int(100), requestsSum)
+}
+
 func (s *HTTPTestSuite) TestRSTPacketRegression() {
 	t := s.T()
 
-	monitor := newHTTPMonitorWithCfg(t, config.New())
+	monitor := newHTTPMonitor(t, testutil.Options{})
 
 	serverAddr := "127.0.0.1:8080"
 	srvDoneFn := testutil.HTTPServer(t, serverAddr, testutil.Options{
@@ -423,7 +526,7 @@ func (s *HTTPTestSuite) TestRSTPacketRegression() {
 func (s *HTTPTestSuite) TestKeepAliveWithIncompleteResponseRegression() {
 	t := s.T()
 
-	monitor := newHTTPMonitorWithCfg(t, config.New())
+	monitor := newHTTPMonitor(t, testutil.Options{})
 
 	const req = "GET /200/foobar HTTP/1.1\n"
 	const rsp = "HTTP/1.1 200 OK\n"
@@ -509,19 +612,141 @@ func assertAllRequestsExists(t *testing.T, monitor *Monitor, requests []*nethttp
 			}
 		}
 
-		return true
-	}, 3*time.Second, time.Millisecond*100, "connection not found")
-
-	if t.Failed() {
-		ebpftest.DumpMapsTestHelper(t, monitor.DumpMaps, "http_in_flight")
-
-		for reqIndex, exists := range requestsExist {
-			if !exists {
-				// reqIndex is 0 based, while the number is requests[reqIndex] is 1 based.
-				t.Logf("request %d was not found (req %v)", reqIndex+1, requests[reqIndex])
-			}
+					return true
+				}, time.Second*5, time.Millisecond*100, "%v != %v", res, tt.expectedEndpoints)
+			})
 		}
 	}
+}
+
+func getClientsArray(t *testing.T, size int, options grpc.Options) []*nethttp.Client {
+	t.Helper()
+
+	res := make([]*nethttp.Client, size)
+	for i := 0; i < size; i++ {
+		res[i] = newH2CClient(t)
+	}
+
+	return res
+}
+
+func startH2CServer(t *testing.T) {
+	t.Helper()
+
+	srv := &nethttp.Server{
+		Addr: http2SrvPortStr,
+		Handler: h2c.NewHandler(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+			w.WriteHeader(200)
+			w.Write([]byte("test"))
+		}), &http2.Server{}),
+		IdleTimeout: 2 * time.Second,
+	}
+
+	err := http2.ConfigureServer(srv, nil)
+	require.NoError(t, err)
+
+	l, err := net.Listen("tcp", http2SrvPortStr)
+	require.NoError(t, err, "could not create listening socket")
+
+	go func() {
+		srv.Serve(l)
+		require.NoErrorf(t, err, "could not start HTTP2 server")
+	}()
+
+	t.Cleanup(func() { srv.Close() })
+}
+
+func newH2CClient(t *testing.T) *nethttp.Client {
+	t.Helper()
+
+	client := &nethttp.Client{
+		Transport: &http2.Transport{
+			AllowHTTP: true,
+			DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+				return net.Dial(network, addr)
+			},
+		},
+	}
+
+	return client
+}
+
+func getClientsIndex(index, totalCount int) int {
+	return index % totalCount
+}
+
+func assertAllRequestsExists(t *testing.T, monitor *Monitor, requests []*nethttp.Request) {
+	requestsExist := make([]bool, len(requests))
+	for i := 0; i < 10; i++ {
+		time.Sleep(10 * time.Millisecond)
+		stats, observations := getAllStats(t, monitor)
+		require.Equal(t, 0, len(observations))
+		for reqIndex, req := range requests {
+			included, err := isRequestIncludedOnce(stats, req)
+			require.NoError(t, err)
+			requestsExist[reqIndex] = requestsExist[reqIndex] || included
+		}
+		if allTrue(requestsExist) {
+			return
+		}
+	}
+
+	for reqIndex, exists := range requestsExist {
+		require.Truef(t, exists, "request %d was not found (req %v)", reqIndex, requests[reqIndex])
+	}
+}
+
+func assertAllObservationsExists(t *testing.T, monitor *Monitor, requests []*nethttp.Request) {
+	requestsExist := make([]bool, len(requests))
+	for i := 0; i < 10; i++ {
+		time.Sleep(10 * time.Millisecond)
+		stats, observations := getAllStats(t, monitor)
+		require.Equal(t, 0, len(stats))
+		for reqIndex, req := range requests {
+			included, err := isObservationIncludedOnce(observations, req)
+			require.NoError(t, err)
+			requestsExist[reqIndex] = requestsExist[reqIndex] || included
+		}
+	}
+
+	for reqIndex, exists := range requestsExist {
+		require.Truef(t, exists, "request %d was not found (req %v)", reqIndex, requests[reqIndex])
+	}
+}
+
+func allTrue(x []bool) bool {
+	for _, v := range x {
+		if !v {
+			return false
+		}
+	}
+	return true
+}
+
+func testHTTPMonitor(t *testing.T, targetAddr, serverAddr string, numReqs int, o testutil.Options) {
+	monitor, requests := runHTTPMonitor(t, targetAddr, serverAddr, numReqs, o)
+
+	// Ensure all captured transactions get sent to user-space
+	if o.EnableHttpTracing {
+		assertAllObservationsExists(t, monitor, requests)
+	} else {
+		assertAllRequestsExists(t, monitor, requests)
+	}
+}
+
+func runHTTPMonitor(t *testing.T, targetAddr, serverAddr string, numReqs int, o testutil.Options) (*Monitor, []*nethttp.Request) {
+	monitor := newHTTPMonitor(t, o)
+	srvDoneFn := testutil.HTTPServer(t, serverAddr, o)
+
+	// Perform a number of random requests
+	requestFn := requestGenerator(t, targetAddr, o.RequestTraceId, emptyBody)
+	var requests []*nethttp.Request
+	for i := 0; i < numReqs; i++ {
+		requests = append(requests, requestFn())
+	}
+	srvDoneFn()
+
+	return monitor, requests
 }
 
 var (
@@ -530,7 +755,7 @@ var (
 	statusCodes         = []int{nethttp.StatusOK, nethttp.StatusMultipleChoices, nethttp.StatusBadRequest, nethttp.StatusInternalServerError}
 )
 
-func requestGenerator(t *testing.T, targetAddr string, reqBody []byte) func() *nethttp.Request {
+func requestGenerator(t *testing.T, targetAddr string, requestId string, reqBody []byte) func() *nethttp.Request {
 	var (
 		random  = rand.New(rand.NewSource(time.Now().Unix()))
 		idx     = 0
@@ -567,6 +792,13 @@ func requestGenerator(t *testing.T, targetAddr string, reqBody []byte) func() *n
 		status := statusCodes[random.Intn(len(statusCodes))]
 		url := fmt.Sprintf("http://%s/%d/request-%d", targetAddr, status, idx)
 		req, err := nethttp.NewRequest(method, url, body)
+		if requestId != "" {
+			if requestId == "random" {
+				req.Header.Set("x-request-id", uuid.New().String())
+			} else {
+				req.Header.Set("x-request-id", requestId)
+			}
+		}
 		require.NoError(t, err)
 
 		resp, err := client.Do(req)
@@ -616,6 +848,43 @@ func isRequestIncludedOnce(allStats map[http.Key]*http.RequestStats, req *nethtt
 	return false, fmt.Errorf("expected to find 1 occurrence of %v, but found %d instead", req, occurrences)
 }
 
+func getAllStats(t *testing.T, mon *Monitor) (map[http.Key]*http.RequestStats, []http.TransactionObservation) {
+	t.Helper()
+
+	allStats := mon.GetProtocolStats()
+	require.NotNil(t, allStats)
+
+	httpStats, ok := allStats[protocols.HTTP]
+	require.True(t, ok)
+
+	allHttpStats := httpStats.(http.AllHttpStats)
+	return allHttpStats.RequestStats, allHttpStats.Observations
+}
+
+func getHttpStats(t *testing.T, mon *Monitor) map[http.Key]*http.RequestStats {
+	t.Helper()
+
+	allStats := mon.GetProtocolStats()
+	require.NotNil(t, allStats)
+
+	httpStats, ok := allStats[protocols.HTTP]
+	require.True(t, ok)
+
+	return httpStats.(http.AllHttpStats).RequestStats
+}
+
+func getHttpObservations(t *testing.T, mon *Monitor) []http.TransactionObservation {
+	t.Helper()
+
+	allStats := mon.GetProtocolStats()
+	require.NotNil(t, allStats)
+
+	httpStats, ok := allStats[protocols.HTTP]
+	require.True(t, ok)
+
+	return httpStats.(http.AllHttpStats).Observations
+}
+
 func countRequestOccurrences(allStats map[http.Key]*http.RequestStats, req *nethttp.Request) int {
 	expectedStatus := testutil.StatusFromPath(req.URL.Path)
 	occurrences := 0
@@ -631,20 +900,24 @@ func countRequestOccurrences(allStats map[http.Key]*http.RequestStats, req *neth
 	return occurrences
 }
 
-func newHTTPMonitorWithCfg(t *testing.T, cfg *config.Config) *Monitor {
+func newHTTPMonitor(t *testing.T, o testutil.Options) *Monitor {
+	cfg := networkconfig.New()
 	cfg.EnableHTTPMonitoring = true
+	cfg.EnableHTTPTracing = o.EnableHttpTracing
 
-	monitor, err := NewMonitor(cfg, nil, nil)
-	skipIfNotSupported(t, err)
+	monitor, err := NewMonitor(cfg, nil, nil, nil)
 	require.NoError(t, err)
+
+	// at this stage the test can be legitimately skipped due to missing BTF information
+	// in the context of CO-RE
+	err = monitor.Start()
+	require.NoError(t, err)
+
 	t.Cleanup(func() {
 		monitor.Stop()
 		libtelemetry.Clear()
 	})
 
-	// at this stage the test can be legitimately skipped due to missing BTF information
-	// in the context of CO-RE
-	require.NoError(t, monitor.Start())
 	return monitor
 }
 
@@ -653,4 +926,32 @@ func skipIfNotSupported(t *testing.T, err error) {
 	if errors.As(err, &notSupported) {
 		t.Skipf("skipping test because this kernel is not supported: %s", notSupported)
 	}
+}
+
+func isObservationIncludedOnce(allObservations []http.TransactionObservation, req *nethttp.Request) (bool, error) {
+	occurrences := countObservationOccurrences(allObservations, req)
+
+	if occurrences == 1 {
+		return true, nil
+	} else if occurrences == 0 {
+		return false, nil
+	}
+	return false, fmt.Errorf("expected to find 1 occurrence of %v, but found %d instead", req, occurrences)
+}
+
+func countObservationOccurrences(allObservations []http.TransactionObservation, req *nethttp.Request) int {
+	expectedStatus := testutil.StatusFromPath(req.URL.Path)
+	occurrences := 0
+	netNs, err := kernel.GetCurrentIno()
+	if err != nil {
+		return 0
+	}
+
+	for _, observation := range allObservations {
+		if observation.Key.NetNs == netNs && observation.Key.Path.Content.Get() == req.URL.Path && observation.Status == expectedStatus && req.Header.Get("X-Request-ID") == observation.TraceId.Id && observation.TraceId.Type == http.TraceIdRequest {
+			occurrences++
+		}
+	}
+
+	return occurrences
 }

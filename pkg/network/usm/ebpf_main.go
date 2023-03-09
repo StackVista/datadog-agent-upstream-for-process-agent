@@ -125,6 +125,7 @@ func newEBPFProgram(c *config.Config, connectionProtocolMap *ebpf.Map, bpfTeleme
 					EBPFFuncName: protocolDispatcherSocketFilterFunction,
 					UID:          probeUID,
 				},
+				KeepProgramSpec: true,
 			},
 		},
 	}
@@ -163,6 +164,13 @@ func newEBPFProgram(c *config.Config, connectionProtocolMap *ebpf.Map, bpfTeleme
 	}
 
 	return program, nil
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func (e *ebpfProgram) Init() error {
@@ -404,8 +412,20 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 		manager.ConstantEditor{Name: "ephemeral_range_begin", Value: uint64(begin)},
 		manager.ConstantEditor{Name: "ephemeral_range_end", Value: uint64(end)})
 
-	for _, p := range e.Manager.Probes {
-		options.ActivatedProbes = append(options.ActivatedProbes, &manager.ProbeSelector{ProbeIdentificationPair: p.ProbeIdentificationPair})
+	options.TailCallRouter = e.tailCallRouter
+	options.ActivatedProbes = []manager.ProbesSelector{
+		&manager.ProbeSelector{
+			ProbeIdentificationPair: manager.ProbeIdentificationPair{
+				EBPFFuncName: "kprobe__tcp_sendmsg",
+				UID:          probeUID,
+			},
+		},
+		&manager.ProbeSelector{
+			ProbeIdentificationPair: manager.ProbeIdentificationPair{
+				EBPFFuncName: "tracepoint__net__netif_receive_skb",
+				UID:          probeUID,
+			},
+		},
 	}
 
 	// Some parts of USM (https capturing, and part of the classification) use `read_conn_tuple`, and has some if
@@ -414,19 +434,27 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 
 	options.DefaultKProbeMaxActive = maxActive
 	options.DefaultKprobeAttachMethod = kprobeAttachMethod
-	options.VerifierOptions.Programs.LogSize = 10 * 1024 * 1024
+	options.VerifierOptions.Programs.LogDisabled = false
+	options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelStats
+	options.VerifierOptions.Programs.LogSize = 16000000
 
-	supported, notSupported := e.getProtocolsForBuildMode()
-	cleanup := e.configureManagerWithSupportedProtocols(supported)
-	options.TailCallRouter = e.tailCallRouter
-	for _, p := range supported {
-		p.Instance.ConfigureOptions(e.Manager.Manager, &options)
+	if e.cfg.ProbeDebugLog {
+		log.Warn("Running EBPF probe with debug output")
+		options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelInstruction
+
 	}
-	if e.cfg.InternalTelemetryEnabled {
-		for _, pm := range e.PerfMaps {
-			pm.TelemetryEnabled = true
-			ebpftelemetry.ReportPerfMapTelemetry(pm)
-		}
+
+	if e.cfg.ProbeLogBufferSizeBytes != 0 {
+		log.Warnf("Running EBPF probe with log size: %d", e.cfg.ProbeLogBufferSizeBytes)
+		options.VerifierOptions.Programs.LogSize = e.cfg.ProbeLogBufferSizeBytes
+	}
+
+	for _, s := range e.subprograms {
+		s.ConfigureOptions(&options)
+	}
+
+	for _, p := range e.enabledProtocols {
+		p.ConfigureOptions(e.Manager.Manager, &options)
 	}
 
 	// Add excluded functions from disabled protocols
@@ -452,14 +480,32 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 
 	err := e.InitWithOptions(buf, options)
 	if err != nil {
-		cleanup()
-	} else {
-		// Update the protocols lists to reflect the ones we actually enabled
-		e.enabledProtocols = supported
-		e.disabledProtocols = notSupported
+		var err2 *ebpf.VerifierError
+		if errors.As(err, &err2) {
+			_ = log.Errorf("Error verifying program: last 500 lines")
+			for _, l := range err2.Log[max(len(err2.Log)-500, 0):] {
+				_ = log.Errorf(l)
+			}
+		}
+		return err
 	}
 
-	return err
+	programs, ok, _ := e.Manager.GetProgram(manager.ProbeIdentificationPair{
+		EBPFFuncName: "socket__http_filter",
+	})
+
+	if ok {
+		if e.cfg.ProbeDebugLog {
+			_ = log.Warnf("Successfully loaded probes")
+		} else {
+			// When there is no debug logging all that is logged is branch statistics, which we show for reference.
+			for _, p := range programs {
+				_ = log.Warnf("Statistics for loading http_filter ebpf probe: \n%s", p.VerifierLog)
+			}
+		}
+	}
+
+	return nil
 }
 
 const connProtoTTL = 3 * time.Minute

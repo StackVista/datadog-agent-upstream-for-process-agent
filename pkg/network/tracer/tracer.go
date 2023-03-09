@@ -220,6 +220,7 @@ func newTracer(cfg *config.Config) (_ *Tracer, reterr error) {
 		cfg.MaxDNSStatsBuffered,
 		cfg.MaxHTTPStatsBuffered,
 		cfg.MaxKafkaStatsBuffered,
+		cfg.MaxHTTPObservationsBuffered,
 	)
 
 	return tr, nil
@@ -406,8 +407,8 @@ func (t *Tracer) GetActiveConnections(clientID string) (*network.Connections, er
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving connections: %s", err)
 	}
-
-	delta := t.state.GetDelta(clientID, latestTime, active, t.reverseDNS.GetDNSStats(), t.usmMonitor.GetProtocolStats())
+	stats := t.usmMonitor.GetProtocolStats()
+	delta := t.state.GetDelta(clientID, latestTime, active, t.reverseDNS.GetDNSStats(), stats)
 
 	ips := make(map[util.Address]struct{}, len(delta.Conns)/2)
 	var udpConns, tcpConns int
@@ -432,6 +433,7 @@ func (t *Tracer) GetActiveConnections(clientID string) (*network.Connections, er
 	conns.HTTP = delta.HTTP
 	conns.HTTP2 = delta.HTTP2
 	conns.Kafka = delta.Kafka
+	conns.HTTPObservations = delta.HTTPObservations
 	conns.ConnTelemetry = t.state.GetTelemetryDelta(clientID, t.getConnTelemetry(len(active)))
 	conns.CompilationTelemetryByAsset = t.getRuntimeCompilationTelemetry()
 	conns.KernelHeaderFetchResult = int32(kernel.HeaderProvider.GetResult())

@@ -93,15 +93,15 @@ require (
 	code.cloudfoundry.org/lager v2.0.0+incompatible
 	github.com/CycloneDX/cyclonedx-go v0.7.1
 	github.com/DataDog/appsec-internal-go v1.0.1-0.20230723140106-7cb513f54ce1
-	github.com/DataDog/datadog-agent/pkg/gohai v0.49.1
-	github.com/DataDog/datadog-agent/pkg/obfuscate v0.49.1
-	github.com/DataDog/datadog-agent/pkg/remoteconfig/state v0.49.1
-	github.com/DataDog/datadog-agent/pkg/security/secl v0.49.1
-	github.com/DataDog/datadog-agent/pkg/trace v0.49.1
-	github.com/DataDog/datadog-agent/pkg/util/cgroups v0.49.1
-	github.com/DataDog/datadog-agent/pkg/util/log v0.49.1
-	github.com/DataDog/datadog-agent/pkg/util/pointer v0.49.1
-	github.com/DataDog/datadog-agent/pkg/util/scrubber v0.49.1
+	github.com/DataDog/datadog-agent/pkg/gohai v0.49.1-rc.1
+	github.com/DataDog/datadog-agent/pkg/obfuscate v0.49.1-rc.1
+	github.com/DataDog/datadog-agent/pkg/remoteconfig/state v0.49.1-rc.1
+	github.com/DataDog/datadog-agent/pkg/security/secl v0.49.1-rc.1
+	github.com/DataDog/datadog-agent/pkg/trace v0.49.1-rc.1
+	github.com/DataDog/datadog-agent/pkg/util/cgroups v0.49.1-rc.1
+	github.com/DataDog/datadog-agent/pkg/util/log v0.49.1-rc.1
+	github.com/DataDog/datadog-agent/pkg/util/pointer v0.49.1-rc.1
+	github.com/DataDog/datadog-agent/pkg/util/scrubber v0.49.1-rc.1
 	github.com/DataDog/datadog-go/v5 v5.3.0
 	github.com/DataDog/datadog-operator v1.1.0
 	github.com/DataDog/ebpf-manager v0.5.0
@@ -603,8 +603,8 @@ require github.com/lorenzosaino/go-sysctl v0.3.1
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/DataDog/agent-payload/v5 v5.0.97
-	github.com/DataDog/datadog-agent/pkg/networkdevice/profile v0.49.1
-	github.com/DataDog/datadog-agent/pkg/proto v0.49.1
+	github.com/DataDog/datadog-agent/pkg/networkdevice/profile v0.49.1-rc.1
+	github.com/DataDog/datadog-agent/pkg/proto v0.49.1-rc.1
 	github.com/DataDog/opentelemetry-mapping-go/pkg/otlp/logs v0.8.0
 	github.com/aquasecurity/trivy v0.0.0-00010101000000-000000000000
 	github.com/aws/aws-sdk-go-v2/service/kms v1.27.1
@@ -709,7 +709,7 @@ replace github.com/pahanini/go-grpc-bidirectional-streaming-example v0.0.0-20211
 // Fixing a CVE on a transitive dep of k8s/etcd, should be cleaned-up once k8s.io/apiserver dep is removed (but double-check with `go mod why` that no other dep pulls it)
 replace github.com/dgrijalva/jwt-go => github.com/golang-jwt/jwt v3.2.1+incompatible
 
-replace github.com/vishvananda/netlink => github.com/DataDog/netlink v1.0.1-0.20230703150631-f11d5ab05838
+replace github.com/vishvananda/netlink => github.com/StackVista/netlink v0.0.0-20231207101142-91d41874606b
 
 // Cannot be upgraded to 0.26 without lossing CRI API v1alpha2
 replace k8s.io/cri-api => k8s.io/cri-api v0.25.5

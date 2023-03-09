@@ -10,15 +10,17 @@ package usm
 import (
 	"context"
 	"fmt"
-	"github.com/DataDog/datadog-agent/pkg/network/protocols"
-	"github.com/stretchr/testify/suite"
 	"io"
 	"net"
 	nethttp "net/http"
 	"testing"
 	"time"
 
+	"github.com/DataDog/datadog-agent/pkg/network/protocols"
+	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
+
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kversion"
 
@@ -88,6 +90,11 @@ func (s *KafkaProtocolParsingSuite) getTopicName() string {
 }
 
 func TestKafkaProtocolParsing(t *testing.T) {
+	testutil2.SkipIfStackState(t, "We do not test this yet, it requires compos ein the environment")
+	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt, ebpftest.RuntimeCompiled, ebpftest.CORE}, "", testKafkaProtocolParsing)
+}
+
+func testKafkaProtocolParsing(t *testing.T) {
 	skipTestIfKernelNotSupported(t)
 	serverHost := "127.0.0.1"
 	require.NoError(t, kafka.RunServer(t, serverHost, kafkaPort))
@@ -501,6 +508,7 @@ func newKafkaMonitor(t *testing.T, cfg *config.Config) *Monitor {
 
 // This test will help us identify if there is any verifier problems while loading the Kafka binary in the CI environment
 func TestLoadKafkaBinary(t *testing.T) {
+	testutil2.SkipIfStackState(t, "Runtime compilation not supported")
 	skipTestIfKernelNotSupported(t)
 
 	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt, ebpftest.RuntimeCompiled, ebpftest.CORE}, "", func(t *testing.T) {

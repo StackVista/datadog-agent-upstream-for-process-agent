@@ -108,7 +108,7 @@ func (m *WindowsMonitor) process(transactionBatch []http.WinHttpTransaction) {
 
 // GetHTTPStats returns a map of HTTP stats stored in the following format:
 // [source, dest tuple, request path] -> RequestStats object
-func (m *WindowsMonitor) GetHTTPStats() map[protocols.ProtocolType]interface{} {
+func (m *WindowsMonitor) GetHTTPStats() (map[protocols.ProtocolType]interface{}, []TransactionObservation) {
 	// dbtodo  This is now going to cause any pending transactions
 	// to be read and then stuffed into the channel.  Which then I think
 	// creates a race condition that there still could be some mid-

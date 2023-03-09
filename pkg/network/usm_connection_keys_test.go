@@ -25,8 +25,8 @@ func TestWithKey(t *testing.T) {
 		}
 
 		shouldGenerateKeys(t, c,
-			types.NewConnectionKey(c.Source, c.Dest, c.SPort, c.DPort),
-			types.NewConnectionKey(c.Dest, c.Source, c.DPort, c.SPort),
+			types.NewConnectionKey(c.Source, c.Dest, c.SPort, c.DPort, 0),
+			types.NewConnectionKey(c.Dest, c.Source, c.DPort, c.SPort, 0),
 		)
 	})
 
@@ -45,10 +45,10 @@ func TestWithKey(t *testing.T) {
 		}
 
 		shouldGenerateKeys(t, c,
-			types.NewConnectionKey(c.Source, c.Dest, c.SPort, c.DPort),
-			types.NewConnectionKey(c.Dest, c.Source, c.DPort, c.SPort),
-			types.NewConnectionKey(c.IPTranslation.ReplSrcIP, c.IPTranslation.ReplDstIP, c.IPTranslation.ReplSrcPort, c.IPTranslation.ReplDstPort),
-			types.NewConnectionKey(c.IPTranslation.ReplDstIP, c.IPTranslation.ReplSrcIP, c.IPTranslation.ReplDstPort, c.IPTranslation.ReplSrcPort),
+			types.NewConnectionKey(c.Source, c.Dest, c.SPort, c.DPort, 0),
+			types.NewConnectionKey(c.Dest, c.Source, c.DPort, c.SPort, 0),
+			types.NewConnectionKey(c.IPTranslation.ReplSrcIP, c.IPTranslation.ReplDstIP, c.IPTranslation.ReplSrcPort, c.IPTranslation.ReplDstPort, 0),
+			types.NewConnectionKey(c.IPTranslation.ReplDstIP, c.IPTranslation.ReplSrcIP, c.IPTranslation.ReplDstPort, c.IPTranslation.ReplSrcPort, 0),
 		)
 	})
 }

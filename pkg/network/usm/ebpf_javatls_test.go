@@ -13,6 +13,8 @@ import (
 	"regexp"
 	"testing"
 
+	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
+
 	"github.com/stretchr/testify/require"
 
 	networkconfig "github.com/DataDog/datadog-agent/pkg/network/config"
@@ -33,7 +35,7 @@ func createJavaTempFile(t *testing.T, dir string) string {
 }
 
 func TestJavaInjection(t *testing.T) {
-	t.Skip("JavaTLS tests are currently disabled")
+	testutil2.SkipIfStackState(t, "Java injection not supported yet")
 	cfg := networkconfig.New()
 	cfg.EnableJavaTLSSupport = true
 	if !http.TLSSupported(cfg) {

@@ -49,9 +49,6 @@ pkg/status/template.go
 # gotestsum-generated files
 module_test_output.json
 
-# jetbrains IDE directory
-/.idea/
-
 # Ignore debs from the root of the project.
 datadog-agent*_amd64.deb
 
@@ -77,9 +74,7 @@ last-change
 *.app
 *.framework
 *.aar
-*.iml
 *.jar
-.idea
 .gradle
 cmd/agent/android/app/src/main/assets/conf.d
 

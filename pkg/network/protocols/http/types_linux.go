@@ -36,7 +36,11 @@ type EbpfTx struct {
 	Response_status_code uint16
 	Request_method       uint8
 	Pad_cgo_0            [1]byte
-	Request_fragment     [208]byte
+	Request_fragment     [160]byte
+	Request_tracing_id   [40]byte
+	Response_tracing_id  [40]byte
+	Request_parse_result uint8
+	Response_parse_result uint8
 }
 
 const (

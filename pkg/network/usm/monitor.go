@@ -17,12 +17,9 @@ import (
 	"github.com/cilium/ebpf"
 	"go.uber.org/atomic"
 
-	manager "github.com/DataDog/ebpf-manager"
-
 	"github.com/DataDog/datadog-agent/pkg/collector/corechecks/ebpf/probe/ebpfcheck"
 	ebpftelemetry "github.com/DataDog/datadog-agent/pkg/ebpf/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/network/config"
-	filterpkg "github.com/DataDog/datadog-agent/pkg/network/filter"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/process/monitor"
@@ -53,8 +50,7 @@ type Monitor struct {
 
 	processMonitor *monitor.ProcessMonitor
 
-	// termination
-	closeFilterFn func()
+	probes *MonitorProbes
 
 	lastUpdateTime *atomic.Int64
 }
@@ -85,26 +81,20 @@ func NewMonitor(c *config.Config, connectionProtocolMap *ebpf.Map, bpfTelemetry 
 		return nil, fmt.Errorf("error initializing ebpf program: %w", err)
 	}
 
-	filter, _ := mgr.GetProbe(manager.ProbeIdentificationPair{EBPFFuncName: protocolDispatcherSocketFilterFunction, UID: probeUID})
-	if filter == nil {
-		return nil, fmt.Errorf("error retrieving socket filter")
-	}
 	ebpfcheck.AddNameMappings(mgr.Manager.Manager, "usm_monitor")
-
-	closeFilterFn, err := filterpkg.HeadlessSocketFilter(c, filter)
-	if err != nil {
-		return nil, fmt.Errorf("error enabling traffic inspection: %s", err)
-	}
 
 	processMonitor := monitor.GetProcessMonitor()
 
-	state = running
+	probes := NewMonitorProbes(c, processMonitor, mgr)
+
+	state = Running
 
 	usmMonitor := &Monitor{
-		cfg:            c,
-		ebpfProgram:    mgr,
-		closeFilterFn:  closeFilterFn,
-		processMonitor: processMonitor,
+		cfg:              c,
+		enabledProtocols: enabledProtocols,
+		ebpfProgram:      mgr,
+		processMonitor:   processMonitor,
+		probes:           probes,
 	}
 
 	usmMonitor.lastUpdateTime = atomic.NewInt64(time.Now().Unix())
@@ -136,6 +126,48 @@ func (m *Monitor) Start() error {
 
 	err = m.ebpfProgram.Start()
 	if err != nil {
+		return fmt.Errorf("error starting ebpf program for usm: %w", err)
+	}
+
+	enabledProtocolsTmp = m.enabledProtocols[:0]
+	for _, protocol := range m.enabledProtocols {
+		startErr := protocol.PostStart(m.ebpfProgram.Manager.Manager)
+		if startErr != nil {
+			// Cleanup the protocol. Note that at this point we can't unload the
+			// ebpf programs of a specific protocol without shutting down the
+			// entire manager.
+			protocol.Stop(m.ebpfProgram.Manager.Manager)
+
+			// Log and reset the error value
+			log.Errorf("could not complete post-start phase of %s monitoring: %s", protocol.Name(), startErr)
+			continue
+		}
+		enabledProtocolsTmp = append(enabledProtocolsTmp, protocol)
+	}
+	m.enabledProtocols = enabledProtocolsTmp
+
+	// We check again if there are protocols that could be enabled, and abort if
+	// it is not the case.
+	if len(m.enabledProtocols) == 0 {
+		err = m.ebpfProgram.Close()
+		if err != nil {
+			log.Errorf("error during USM shutdown: %s", err)
+		}
+
+		return errNoProtocols
+	}
+
+	// Starting with updateAllNsProbes.
+	// We run this synchronously here instead of waiting for the NsNetMonitor to be sure all probes are started after this function
+	// returns
+	err = m.probes.Start()
+
+	if err != nil {
+		for _, protocol := range m.enabledProtocols {
+			protocol.Stop(m.ebpfProgram.Manager.Manager)
+		}
+
+		m.ebpfProgram.Close()
 		return err
 	}
 
@@ -144,6 +176,11 @@ func (m *Monitor) Start() error {
 		err = m.processMonitor.Initialize()
 	}
 
+	for _, protocolName := range m.enabledProtocols {
+		log.Infof("enabled USM protocol: %s", protocolName.Name())
+	}
+
+	// TODO: check whether we should close the probes and program here.
 	return err
 }
 
@@ -186,11 +223,15 @@ func (m *Monitor) Stop() {
 	}
 
 	m.processMonitor.Stop()
+	m.probes.Stop()
 
 	ebpfcheck.RemoveNameMappings(m.ebpfProgram.Manager.Manager)
 
+	for _, protocol := range m.enabledProtocols {
+		protocol.Stop(m.ebpfProgram.Manager.Manager)
+	}
+
 	m.ebpfProgram.Close()
-	m.closeFilterFn()
 }
 
 // DumpMaps dumps the maps associated with the monitor

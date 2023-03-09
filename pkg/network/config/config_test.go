@@ -1188,6 +1188,30 @@ service_monitoring_config:
 	})
 }
 
+func TestMaxHTTPObservationsBuffered(t *testing.T) {
+	t.Run("value set through env var", func(t *testing.T) {
+		newConfig()
+		t.Cleanup(restoreGlobalConfig)
+
+		t.Setenv("DD_SYSTEM_PROBE_NETWORK_MAX_HTTP_OBSERVATIONS_BUFFERED", "50000")
+
+		cfg := New()
+		assert.Equal(t, 50000, cfg.MaxHTTPObservationsBuffered)
+	})
+
+	t.Run("value set through yaml", func(t *testing.T) {
+		newConfig()
+		t.Cleanup(restoreGlobalConfig)
+
+		cfg := configurationFromYAML(t, `
+network_config:
+  max_http_observations_buffered: 30000
+`)
+
+		assert.Equal(t, 30000, cfg.MaxHTTPObservationsBuffered)
+	})
+}
+
 func TestNetworkConfigEnabled(t *testing.T) {
 	ys := true
 

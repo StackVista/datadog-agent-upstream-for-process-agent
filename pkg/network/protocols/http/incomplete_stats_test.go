@@ -37,8 +37,10 @@ func TestOrphanEntries(t *testing.T) {
 
 		response := &EbpfEvent{
 			Http: EbpfTx{
-				Response_status_code: 200,
-				Response_last_seen:   uint64(now.UnixNano()),
+				Response_status_code:  200,
+				Response_last_seen:    uint64(now.UnixNano()),
+				Response_tracing_id:   [40]byte{1, 2},
+				Response_parse_result: HeaderParseFound,
 			},
 		}
 		response.Tuple.Sport = 60000
@@ -50,6 +52,8 @@ func TestOrphanEntries(t *testing.T) {
 		path, _ := completeTX.Path(make([]byte, 256))
 		assert.Equal(t, "/foo/bar", string(path))
 		assert.Equal(t, uint16(200), completeTX.StatusCode())
+		assert.Equal(t, [40]byte{1, 2}, completeTX.RawResponseTracingID())
+		assert.Equal(t, HeaderParseFound, completeTX.ResponseParseResult())
 	})
 
 	t.Run("orphan entries are not kept indefinitely", func(t *testing.T) {

@@ -78,8 +78,9 @@ func initManager(mgr *ebpftelemetry.Manager, closedHandler *ebpf.PerfHandler, ru
 		{Name: probes.TcpSendPageArgsMap},
 		{Name: probes.UdpSendPageArgsMap},
 		{Name: probes.IpMakeSkbArgsMap},
-		{Name: probes.MapErrTelemetryMap},
-		{Name: probes.HelperErrTelemetryMap},
+		// [STS] Disabling ebpf stats due to instruction count.
+		//{Name: probes.MapErrTelemetryMap},
+		//{Name: probes.HelperErrTelemetryMap},
 		{Name: probes.TcpRecvMsgArgsMap},
 		{Name: probes.ClassificationProgsMap},
 		{Name: probes.TCPCloseProgsMap},

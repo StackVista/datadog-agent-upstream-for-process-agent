@@ -8,14 +8,13 @@
 package network
 
 import (
-	"bufio"
-	"fmt"
+	"net"
 	"os"
 	"os/exec"
-	"regexp"
-	"strconv"
 	"testing"
 	"time"
+
+	"github.com/DataDog/datadog-agent/pkg/util/testutil"
 
 	"github.com/cihub/seelog"
 	"github.com/stretchr/testify/assert"
@@ -50,69 +49,70 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-var (
-	ip4Re = regexp.MustCompile(`.+listening on.+0.0.0.0:([0-9]+)`)
-	ip6Re = regexp.MustCompile(`.+listening on.+\[0000:0000:0000:0000:0000:0000:0000:0000\]:([0-9]+)`)
-)
+func TestReadInitialTCPState(t *testing.T) {
+	testutil.SkipIfStackState(t, "In a docker container we cannot setup network namespaces")
+	nsName := netlinktestutil.AddNS(t)
+	t.Cleanup(func() {
+		err := exec.Command("testdata/teardown_netns.sh").Run()
+		assert.NoError(t, err, "failed to teardown netns")
+	})
 
-// runServerProcess runs a server using `socat` externally
-//
-// `proto` can be "tcp4", "tcp6", "udp4", or "udp6"
-// `port` can be `0` in which case the os assigned port is returned
-func runServerProcess(t *testing.T, proto string, port uint16, ns netns.NsHandle) uint16 {
-	var re *regexp.Regexp
-	address := fmt.Sprintf("%s-listen:%d", proto, port)
-	switch proto {
-	case "tcp4", "udp4":
-		re = ip4Re
-	case "tcp6", "udp6":
-		re = ip6Re
-	default:
-		require.FailNow(t, "unrecognized protocol")
+	err := exec.Command("testdata/setup_netns.sh", nsName).Run()
+	require.NoError(t, err, "setup_netns.sh failed")
+
+	l, err := net.Listen("tcp", ":0")
+	require.NoError(t, err)
+	defer func() { _ = l.Close() }()
+
+	l6, err := net.Listen("tcp6", ":0")
+	require.NoError(t, err)
+	defer func() { _ = l.Close() }()
+
+	ports := []uint16{
+		getPort(t, l),
+		getPort(t, l6),
+		34567,
+		34568,
 	}
 
-	kernel.WithNS(ns, func() error {
-		cmd := exec.Command("socat", "-d", "-d", "STDIO", address)
-		stderr, err := cmd.StderrPipe()
-		require.NoError(t, err, "error getting stderr pipe for command %s", cmd)
-		require.NoError(t, cmd.Start())
-		t.Cleanup(func() { cmd.Process.Kill() })
-		if port != 0 {
-			return nil
-		}
+	ns, err := netns.GetFromName(nsName)
+	require.NoError(t, err)
+	defer ns.Close()
 
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			matches := re.FindStringSubmatch(scanner.Text())
-			if len(matches) == 0 {
-				continue
+	nsIno, err := kernel.GetInoForNs(ns)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		initialPorts, err := ReadInitialState("/proc", TCP, true)
+		require.NoError(t, err)
+		for _, p := range ports[:2] {
+			if _, ok := initialPorts[PortMapping{testRootNs, p}]; !ok {
+				t.Errorf("PortMapping(testRootNs) returned false for port %d", p)
+				return false
 			}
-
-			require.Len(t, matches, 2)
-			_port, err := strconv.ParseUint(matches[1], 10, 16)
-			require.NoError(t, err)
-			port = uint16(_port)
-			break
+		}
+		for _, p := range ports[2:] {
+			if _, ok := initialPorts[PortMapping{nsIno, p}]; !ok {
+				t.Errorf("PortMapping(test ns) returned false for port %d", p)
+				return false
+			}
 		}
 
-		return nil
-	})
+		if _, ok := initialPorts[PortMapping{testRootNs, 999}]; ok {
+			t.Errorf("expected PortMapping(testRootNs, 999) to not be in the map, but it was")
+			return false
+		}
+		if _, ok := initialPorts[PortMapping{nsIno, 999}]; ok {
+			t.Errorf("expected PortMapping(nsIno, 999) to not be in the map, but it was")
+			return false
+		}
 
-	return port
+		return true
+	}, 3*time.Second, time.Second, "tcp/tcp6 ports are listening")
 }
 
-func TestReadInitialState(t *testing.T) {
-	t.Run("TCP", func(t *testing.T) {
-		testReadInitialState(t, "tcp")
-	})
-	t.Run("UDP", func(t *testing.T) {
-		testReadInitialState(t, "udp")
-	})
-}
-
-func testReadInitialState(t *testing.T, proto string) {
-	var ns, rootNs netns.NsHandle
-	var err error
+func TestReadInitialUDPState(t *testing.T) {
+	testutil.SkipIfStackState(t, "In a docker container we cannot setup network namespaces")
 	nsName := netlinktestutil.AddNS(t)
 	ns, err = netns.GetFromName(nsName)
 	require.NoError(t, err)

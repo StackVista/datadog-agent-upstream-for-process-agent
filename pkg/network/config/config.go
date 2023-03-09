@@ -169,6 +169,18 @@ type Config struct {
 	// MaxKafkaStatsBuffered represents the maximum number of Kafka stats we'll buffer in memory. These stats
 	// get flushed on every client request (default 30s check interval)
 	MaxKafkaStatsBuffered int
+	// MaxHTTPObservationsBuffered represents the maximum number of HTTP observations we'll buffer in memory. These stats
+	// get flushed on every client request (default 30s check interval)
+	MaxHTTPObservationsBuffered int
+
+	// EnableHTTPTracing enables distributed tracing by reading the X-Request-Id header and reporting that for distributed tracing
+	EnableHTTPTracing bool
+
+	// ProbeDebugLog enables additional logging when initializing the probe. This costs additional memory/disk space
+	ProbeDebugLog bool
+
+	// ProbeLogBufferSizeBytes increase the probe log buffer for debugging purposes
+	ProbeLogBufferSizeBytes int
 
 	// MaxConnectionsStateBuffered represents the maximum number of state objects that we'll store in memory. These state objects store
 	// the stats for a connection so we can accurately determine traffic change between client requests.
@@ -320,6 +332,9 @@ func New() *Config {
 		MaxUSMConcurrentRequests:  uint32(cfg.GetInt(join(smNS, "max_concurrent_requests"))),
 		MaxHTTPStatsBuffered:      cfg.GetInt(join(smNS, "max_http_stats_buffered")),
 		MaxKafkaStatsBuffered:     cfg.GetInt(join(smNS, "max_kafka_stats_buffered")),
+
+		EnableHTTPTracing:           cfg.GetBool(join(netNS, "enable_http_tracing")),
+		MaxHTTPObservationsBuffered: cfg.GetInt(join(netNS, "max_http_observations_buffered")),
 
 		MaxTrackedHTTPConnections: cfg.GetInt64(join(smNS, "max_tracked_http_connections")),
 		HTTPNotificationThreshold: cfg.GetInt64(join(smNS, "http_notification_threshold")),

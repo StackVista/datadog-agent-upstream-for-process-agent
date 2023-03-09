@@ -203,9 +203,13 @@ func (p *protocol) setupMapCleaner(mgr *manager.Manager) {
 func (p *protocol) GetStats() *protocols.ProtocolStats {
 	p.eventsConsumer.Sync()
 	p.telemetry.Log()
+	stats, observations := p.statkeeper.GetAndResetAllStats()
 	return &protocols.ProtocolStats{
-		Type:  protocols.HTTP,
-		Stats: p.statkeeper.GetAndResetAllStats(),
+		Type: protocols.HTTP,
+		Stats: AllHttpStats{
+			RequestStats: stats,
+			Observations: observations,
+		},
 	}
 }
 

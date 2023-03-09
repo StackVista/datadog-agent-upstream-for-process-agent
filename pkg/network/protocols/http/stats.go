@@ -86,8 +86,8 @@ func (k Key) String() string {
 }
 
 // NewKey generates a new Key
-func NewKey(saddr, daddr util.Address, sport, dport uint16, path []byte, fullPath bool, method Method) Key {
-	return NewKeyWithConnection(types.NewConnectionKey(saddr, daddr, sport, dport), path, fullPath, method)
+func NewKey(saddr, daddr util.Address, sport, dport uint16, path []byte, fullPath bool, method Method, netns uint32) Key {
+	return NewKeyWithConnection(types.NewConnectionKey(saddr, daddr, sport, dport, netns), path, fullPath, method)
 }
 
 // NewKeyWithConnection generates a new Key with a given connection tuple
@@ -132,7 +132,11 @@ func (r *RequestStat) initSketch() (err error) {
 	return
 }
 
-// RequestStats stores HTTP request statistics.
+type AllHttpStats struct {
+	RequestStats map[Key]*RequestStats
+	Observations []TransactionObservation
+}
+
 type RequestStats struct {
 	aggregateByStatusCode bool
 	Data                  map[uint16]*RequestStat
@@ -254,3 +258,36 @@ func (r *RequestStats) HalfAllCounts() {
 		}
 	}
 }
+
+type TraceIdType uint8
+
+const (
+	TraceIdNone TraceIdType = iota
+	TraceIdRequest
+	TraceIdResponse
+	TraceIdBoth
+	TraceIdAmbiguous
+)
+
+type TransactionTraceId struct {
+	Type TraceIdType
+	Id   string
+}
+
+type TransactionObservation struct {
+	// This field holds the value (in nanoseconds) of the HTTP request.
+	LatencyNs float64
+	Status    uint16
+	Key       Key
+	TraceId   TransactionTraceId
+}
+
+type HeaderParseResult = uint8
+
+const (
+	HeaderNoParse               HeaderParseResult = 0x0
+	HeaderParseFound            HeaderParseResult = 0x1
+	HeaderParseNotFound         HeaderParseResult = 0x2
+	HeaderParseLimitReached     HeaderParseResult = 0x3
+	HeaderParsePacketEndReached HeaderParseResult = 0x4
+)

@@ -41,6 +41,10 @@ type Telemetry struct {
 	rejected                                                         *libtelemetry.Counter // this happens when an user-defined reject-filter matches a request
 	emptyPath, unknownMethod, invalidLatency, nonPrintableCharacters *libtelemetry.Counter // this happens when the request doesn't have the expected format
 	aggregations                                                     *libtelemetry.Counter
+	observations                                                     *libtelemetry.Counter
+
+	requestFound, requestNotFound, requestLimitReached, requestPacketEnd     *libtelemetry.Counter
+	responseFound, responseNotFound, responseLimitReached, responsePacketEnd *libtelemetry.Counter
 
 	joiner telemetryJoiner
 }
@@ -54,6 +58,7 @@ func NewTelemetry(protocol string) *Telemetry {
 		protocol:     protocol,
 		metricGroup:  metricGroup,
 		aggregations: metricGroup.NewCounter("aggregations", libtelemetry.OptPrometheus),
+		observations: metricGroup.NewCounter("observations"),
 
 		// these metrics are also exported as statsd metrics
 		hits1XX:                NewTLSCounter(metricGroup, "total_hits", "status:1xx", libtelemetry.OptStatsd),
@@ -67,6 +72,15 @@ func NewTelemetry(protocol string) *Telemetry {
 		unknownMethod:          metricGroup.NewCounter("malformed", "type:unknown-method", libtelemetry.OptStatsd),
 		invalidLatency:         metricGroup.NewCounter("malformed", "type:invalid-latency", libtelemetry.OptStatsd),
 		nonPrintableCharacters: metricGroup.NewCounter("malformed", "type:non-printable-char", libtelemetry.OptStatsd),
+
+		requestFound:         metricGroup.NewCounter("requestFound"),
+		requestNotFound:      metricGroup.NewCounter("requestNotFound"),
+		requestLimitReached:  metricGroup.NewCounter("requestLimitReached"),
+		requestPacketEnd:     metricGroup.NewCounter("requestPacketEnd"),
+		responseFound:        metricGroup.NewCounter("responseFound"),
+		responseNotFound:     metricGroup.NewCounter("responseNotFound"),
+		responseLimitReached: metricGroup.NewCounter("responseLimitReached"),
+		responsePacketEnd:    metricGroup.NewCounter("responsePacketEnd"),
 
 		joiner: telemetryJoiner{
 			requests:         metricGroupJoiner.NewCounter("requests", libtelemetry.OptPrometheus),
@@ -97,5 +111,5 @@ func (t *Telemetry) Count(tx Transaction) {
 
 // Log logs the telemetry.
 func (t *Telemetry) Log() {
-	log.Debugf("%s stats summary: %s", t.protocol, t.metricGroup.Summary())
+	log.Infof("%s stats summary: %s", t.protocol, t.metricGroup.Summary())
 }

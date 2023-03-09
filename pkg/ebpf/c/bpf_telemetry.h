@@ -8,12 +8,14 @@
 #define STR(x) #x
 #define MK_KEY(key) STR(key##_telemetry_key)
 
-BPF_HASH_MAP(map_err_telemetry_map, unsigned long, map_err_telemetry_t, 128)
-BPF_HASH_MAP(helper_err_telemetry_map, unsigned long, helper_err_telemetry_t, 256)
+// STS: Making this configurable, because the telemetry helpers here cause very many instructions to be generated, due
+// to the conditionals in the telemetry code.
+// #define ENABLE_BPF_TELEMETRY
 
 #define PATCH_TARGET_TELEMETRY -1
 static void *(*bpf_telemetry_update_patch)(unsigned long, ...) = (void *)PATCH_TARGET_TELEMETRY;
 
+#ifdef ENABLE_BPF_TELEMETRY
 #define map_update_with_telemetry(fn, map, args...)                                \
     ({                                                                             \
         long errno_ret, errno_slot;                                                \
@@ -41,6 +43,9 @@ static void *(*bpf_telemetry_update_patch)(unsigned long, ...) = (void *)PATCH_T
         }                                                                          \
         errno_ret;                                                                 \
     })
+#else
+#define map_update_with_telemetry(fn, map, args...) fn(&map, args)
+#endif
 
 #define MK_FN_INDX(fn) FN_INDX_##fn
 
@@ -55,6 +60,7 @@ static void *(*bpf_telemetry_update_patch)(unsigned long, ...) = (void *)PATCH_T
 #define FN_INDX_bpf_skb_load_bytes skb_load_bytes
 #define FN_INDX_bpf_perf_event_output perf_event_output
 
+#ifdef ENABLE_BPF_TELEMETRY
 #define helper_with_telemetry(fn, ...)                                                          \
     ({                                                                                          \
         int helper_indx = -1;                                                                   \
@@ -90,6 +96,9 @@ static void *(*bpf_telemetry_update_patch)(unsigned long, ...) = (void *)PATCH_T
         }                                                                                       \
         errno_ret;                                                                              \
     })
+#else
+#define helper_with_telemetry(fn, ...) fn(__VA_ARGS__)
+#endif
 
 #define bpf_map_update_with_telemetry(map, key, val, flags) \
     map_update_with_telemetry(bpf_map_update_elem, map, key, val, flags)
