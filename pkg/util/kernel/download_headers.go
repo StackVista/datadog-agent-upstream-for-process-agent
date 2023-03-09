@@ -103,8 +103,8 @@ func (h *headerDownloader) verifyReposDir(target types.Target) (string, error) {
 	}
 
 	if _, err := os.Stat(reposDir); err != nil {
-		log.Warnf("Unable to read %v, which is necessary for downloading kernel headers. If you are in a "+
-			"containerized environment, please ensure this directory is mounted.", reposDir)
+		log.Warnf("Unable to read repo dir %v, which is necessary for downloading kernel headers for distribution %s. If you are in a "+
+			"containerized environment, please ensure this directory is mounted.", reposDir, target.Distro.Display)
 		return reposDir, errReposDirInaccessible
 	}
 	return reposDir, nil

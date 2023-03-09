@@ -25,6 +25,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DataDog/datadog-agent/pkg/util/log"
+	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
+
 	krpretty "github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -38,8 +41,10 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/config"
 	netlink "github.com/DataDog/datadog-agent/pkg/network/netlink/testutil"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/amqp"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http/testutil"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/mongo"
 	gotlstestutil "github.com/DataDog/datadog-agent/pkg/network/protocols/tls/gotls/testutil"
 	javatestutil "github.com/DataDog/datadog-agent/pkg/network/protocols/tls/java/testutil"
 	prototls "github.com/DataDog/datadog-agent/pkg/network/protocols/tls/openssl"
@@ -48,6 +53,8 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/tracer/connection/kprobe"
 	"github.com/DataDog/datadog-agent/pkg/network/tracer/testutil/grpc"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/utils"
+
+	mongooptions "go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func httpSupported() bool {
@@ -79,6 +86,231 @@ func classificationSupported(config *config.Config) bool {
 
 type USMSuite struct {
 	suite.Suite
+}
+
+func TestAMQPTracerSetup(t *testing.T) {
+
+	cfg := testConfig()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableAMQPMonitoring = true
+	cfg.BPFDebug = true
+	_ = setupTracer(t, cfg)
+}
+
+func TestAMQPStats(t *testing.T) {
+	cfg := testConfig()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableAMQPMonitoring = true
+	cfg.MaxAMQPStatsBuffered = 1000
+	cfg.BPFDebug = true
+	tr := setupTracer(t, cfg)
+
+	require.NoError(t, amqp.RunServer(t, "0.0.0.0", "5672"))
+
+	client, err := amqp.NewClient(amqp.Options{ServerAddress: "localhost:5672"})
+	require.NoError(t, err)
+	defer client.Terminate()
+
+	// Make a queue, send some messages, consume them.
+	// It is important to send many messages to properly test the many-frames-in-a-single-packet case.
+	client.DeclareQueue("queue-name", client.PublishChannel)
+	// for i := range 500 { // Requires Go 1.22
+	for i := 0; i < 500; i++ {
+		client.Publish("queue-name", fmt.Sprintf("message-%d", i))
+	}
+
+	// Make sure we will consume all the messages batched.
+	time.Sleep(1 * time.Second)
+	client.Consume("queue-name", 500)
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("amqp-testing-client")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for tup, metrics := range payload.AMQP {
+			log.Errorf("AMQP metrics %v:%v", tup, metrics)
+		}
+
+		return len(payload.AMQP) > 0
+	}, time.Second*30, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
+
+}
+
+func TestAMQPStatsOnExistingConnection(t *testing.T) {
+	require.NoError(t, amqp.RunServer(t, "0.0.0.0", "5672"))
+
+	client, err := amqp.NewClient(amqp.Options{ServerAddress: "localhost:5672"})
+	require.NoError(t, err)
+	defer client.Terminate()
+
+	// Start consuming and send one message to make sure the connection is established.
+	client.DeclareQueue("queue-name", client.PublishChannel)
+	go client.Consume("queue-name", 501)
+	client.Publish("queue-name", "my-first-message")
+
+	// Only now start the tracer
+	cfg := testConfig()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableAMQPMonitoring = true
+	cfg.MaxAMQPStatsBuffered = 1000
+	cfg.MaxUSMConcurrentRequests = 1000
+	cfg.BPFDebug = true
+	tr := setupTracer(t, cfg)
+
+	// Now generate data on the existing connection
+	// We will not see exactly 500 messages in the stats, because we need to collect evidence of the connection first.
+	for i := 0; i < 500; i++ {
+		client.Publish("queue-name", fmt.Sprintf("message-%d", i))
+	}
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("amqp-testing-client")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return len(payload.AMQP) > 0
+	}, time.Second*30, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
+
+}
+
+func TestAMQPOverTLSStats(t *testing.T) {
+	// This test fails because AMQP over GoTLS is not properly detected for unknown reasons.
+	// To see AMQP over TLS working, run this test whilst running another AMQP client using OpenSSL or similar.
+
+	cfg := testConfig()
+	cfg.EnableHTTPMonitoring = true
+	cfg.EnableHTTP2Monitoring = true
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableAMQPMonitoring = true
+	cfg.MaxAMQPStatsBuffered = 1000
+	cfg.BPFDebug = true
+	tr := setupTracer(t, cfg)
+
+	// This is kept here for future reference.
+	/*
+		client, err := amqp.NewTLSClient(amqp.Options{ServerAddress: "kangaroo.rmq.cloudamqp.com:5671/<vhost>", Username: "<user>", Password: "<pass>"})
+		require.NoError(t, err)
+		defer client.Terminate()
+
+		// Make a queue, send some messages, consume them.
+		// It is important to send many messages to properly test the many-frames-in-a-single-packet case.
+		client.DeclareQueue("queue-name", client.PublishChannel)
+		// for i := range 500 { // Requires Go 1.22
+		for i := 0; i < 500; i++ {
+			client.Publish("queue-name", fmt.Sprintf("message-%d", i))
+		}
+
+		// Make sure we will consume all the messages batched.
+		time.Sleep(1 * time.Second)
+		client.Consume("queue-name", 500)
+	*/
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("amqp-testing-client")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for tup, metrics := range payload.AMQP {
+			log.Errorf("AMQP metrics %v:%v", tup, metrics)
+		}
+
+		return len(payload.AMQP) > 0
+	}, time.Second*30, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
+
+}
+
+func TestMongoOverTLSTracerSetup(t *testing.T) {
+	cfg := testConfig()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableMongoMonitoring = true
+	cfg.BPFDebug = true
+	_ = setupTracer(t, cfg)
+}
+
+// To run this test, you need to have a TLS-enabled MongoDB instance running.
+// One way to do this is to use the MongoDB Atlas service, the free tier is enough.
+// Provide the URI of your MongoDB Atlas cluster in the MONGODB_URI environment variable.
+//
+//	export MONGODB_URI="mongodb+srv://secret_user:secret_pass@free-cluster-01.mongodb.net/?retryWrites=true&w=majority"
+func TestEnableMongoOverTLSMonitoringNamespaces(t *testing.T) {
+	mongoURI := os.Getenv("MONGODB_URI")
+
+	if mongoURI == "" {
+		t.Skip("MONGODB_URI not set, skipping test")
+	}
+
+	cfg := testConfig()
+	cfg.EnableHTTPMonitoring = true
+	cfg.EnableHTTP2Monitoring = true
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableMongoMonitoring = true
+	tr := setupTracer(t, cfg)
+
+	opts := mongooptions.Client().ApplyURI(mongoURI)
+	client, err := mongo.NewClientWithClientOptions(opts, 10*time.Second)
+	require.NoError(t, err)
+	defer client.Stop()
+
+	client.GenerateLoad()
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("1")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for key, metrics := range payload.Mongo {
+			if metrics.Latencies.GetCount() > 0.0 && key.NetNs != 0 {
+				return true
+			}
+		}
+		return false
+	}, time.Second*5, time.Millisecond*100, "Expected to find a stats, instead captured none")
+
+}
+
+func TestMongoStats(t *testing.T) {
+	cfg := testConfig()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableMongoMonitoring = true
+	tr := setupTracer(t, cfg)
+
+	// If these tests time out, do a docker pull mongo:<version> first and try again.
+	for _, mongoVersion := range []string{"4", "6", "7"} {
+		t.Run(fmt.Sprintf("MongoVersion%s", mongoVersion), func(t *testing.T) {
+			testMongoStats(t, tr, mongoVersion)
+		})
+	}
+
+}
+
+func testMongoStats(t *testing.T, tr *Tracer, mongoVersion string) {
+	require.NoError(t, mongo.RunServer(t, "0.0.0.0", "27017", mongoVersion))
+
+	client, err := mongo.NewClient(mongo.Options{ServerAddress: "localhost:" + mongoPort, Username: "root", Password: "password"})
+	require.NoError(t, err)
+	defer client.Stop()
+
+	client.GenerateLoad()
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("mongo-testing-client")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, metrics := range payload.Mongo {
+			if metrics.Latencies.GetCount() > 3.0 {
+				log.Errorf("Avg. of latencies: %.2f ms", metrics.Latencies.GetSum()/1000000.0/metrics.Latencies.GetCount())
+				return true
+			}
+		}
+
+		return false
+	}, time.Second*5, time.Millisecond*100, "Expected to find a stats, instead captured none")
 }
 
 func TestUSMSuite(t *testing.T) {
@@ -380,6 +612,129 @@ func testHTTPSLibrary(t *testing.T, fetchCmd []string, prefetchLibs []string) {
 			}
 		}
 	}
+}
+
+func TestHTTPSObservationViaLibraryIntegration(t *testing.T) {
+	if !httpSupported() {
+		t.Skip("HTTPS feature not available on pre 4.14.0 kernels")
+	}
+	if !httpsSupported() {
+		t.Skip("HTTPS feature not available/supported for this setup")
+	}
+
+	tlsLibs := []*regexp.Regexp{
+		regexp.MustCompile(`/[^\ ]+libssl.so[^\ ]*`),
+		regexp.MustCompile(`/[^\ ]+libgnutls.so[^\ ]*`),
+	}
+	tests := []struct {
+		name     string
+		fetchCmd []string
+	}{
+		{name: "curl", fetchCmd: []string{"curl", "--http1.1", "-k", "-H", "X-Request-Id: 8cda17a5-eb41-4ced-9843-acc826f95c8c", "-o/dev/null"}},
+	}
+
+	// [STS] Disable because gnutls does not work from them main testing container it seems.
+	if !testutil2.TestingStackState() {
+		tests = append(tests, struct {
+			name     string
+			fetchCmd []string
+		}{
+			name: "wget", fetchCmd: []string{"wget", "--no-check-certificate", "-O/dev/null"},
+		})
+	}
+
+	for _, keepAlives := range []struct {
+		name  string
+		value bool
+	}{
+		{name: "without keep-alives", value: false},
+		{name: "with keep-alives", value: true},
+	} {
+		t.Run(keepAlives.name, func(t *testing.T) {
+			// Spin-up HTTPS server
+			serverDoneFn := testutil.HTTPServer(t, "127.0.0.1:443", testutil.Options{
+				EnableTLS:       true,
+				EnableKeepAlive: keepAlives.value,
+			})
+			t.Cleanup(serverDoneFn)
+
+			for _, test := range tests {
+				t.Run(test.name, func(t *testing.T) {
+					fetch, err := exec.LookPath(test.fetchCmd[0])
+					if err != nil {
+						t.Skipf("%s not found; skipping test.", test.fetchCmd)
+					}
+					ldd, err := exec.LookPath("ldd")
+					if err != nil {
+						t.Skip("ldd not found; skipping test.")
+					}
+					linked, _ := exec.Command(ldd, fetch).Output()
+
+					var prefechLibs []string
+					for _, lib := range tlsLibs {
+						libSSLPath := lib.FindString(string(linked))
+						if _, err := os.Stat(libSSLPath); err == nil {
+							prefechLibs = append(prefechLibs, libSSLPath)
+						}
+					}
+					if len(prefechLibs) == 0 {
+						t.Fatalf("%s not linked with any of these libs %v", test.name, tlsLibs)
+					}
+
+					testHTTPSObservationLibrary(t, test.fetchCmd, prefechLibs)
+
+				})
+			}
+		})
+	}
+}
+
+func testHTTPSObservationLibrary(t *testing.T, fetchCmd []string, prefechLibs []string) {
+	// Start tracer with HTTPS support
+	cfg := testConfig()
+	cfg.EnableHTTPMonitoring = true
+	cfg.EnableNativeTLSMonitoring = true
+
+	cfg.EnableHTTPTracing = true
+	tr, err := NewTracer(cfg)
+	require.NoError(t, err)
+	defer tr.Stop()
+	err = tr.RegisterClient("1")
+	require.NoError(t, err)
+
+	// not ideal but, short process are hard to catch
+	for _, lib := range prefechLibs {
+		f, _ := os.Open(lib)
+		defer f.Close()
+	}
+	time.Sleep(time.Second)
+
+	// Issue request using fetchCmd (wget, curl, ...)
+	// This is necessary (as opposed to using net/http) because we want to
+	// test a HTTP client linked to OpenSSL or GnuTLS
+	const targetURL = "https://127.0.0.1:443/200/foobar"
+	cmd := append(fetchCmd, targetURL)
+	requestCmd := exec.Command(cmd[0], cmd[1:]...)
+	var out []byte
+	out, err = requestCmd.CombinedOutput()
+	require.NoErrorf(t, err, "failed to issue request via %s: %s\n%s", fetchCmd, err, string(out))
+
+	// [STS] Adapted test to test observations instead of stats
+	require.Eventuallyf(t, func() bool {
+		payload, err := tr.GetActiveConnections("1")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Logf("Observing: %+v", payload.HTTPObservations)
+
+		return len(payload.HTTPObservations) == 1 &&
+			payload.HTTPObservations[0].Status == 200 &&
+			payload.HTTPObservations[0].TraceId == http.TransactionTraceId{
+				Type: http.TraceIdRequest,
+				Id:   "8cda17a5-eb41-4ced-9843-acc826f95c8c",
+			}
+	}, 10*time.Second, 1*time.Second, "couldn't find HTTPS stats")
 }
 
 const (

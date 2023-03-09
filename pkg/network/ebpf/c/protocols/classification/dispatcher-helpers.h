@@ -15,6 +15,10 @@
 #include "protocols/http2/usm-events.h"
 #include "protocols/kafka/kafka-classification.h"
 #include "protocols/kafka/usm-events.h"
+#include "protocols/mongo/helpers.h"
+#include "protocols/mongo/usm-events.h"
+#include "protocols/amqp/helpers.h"
+#include "protocols/amqp/usm-events.h"
 
 __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protocol_t proto) {
     switch(proto) {
@@ -24,6 +28,10 @@ __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protoc
         return PROG_HTTP2;
     case PROTOCOL_KAFKA:
         return PROG_KAFKA;
+    case PROTOCOL_MONGO:
+        return PROG_MONGO;
+    case PROTOCOL_AMQP:
+        return PROG_AMQP;
     default:
         if (proto != PROTOCOL_UNKNOWN) {
             log_debug("protocol doesn't have a matching program: %d\n", proto);
@@ -62,7 +70,7 @@ static __always_inline bool has_sequence_seen_before(conn_tuple_t *tup, skb_info
 
 // Determines the protocols of the given buffer. If we already classified the payload (a.k.a protocol out param
 // has a known protocol), then we do nothing.
-static __always_inline void classify_protocol_for_dispatcher(protocol_t *protocol, conn_tuple_t *tup, const char *buf, __u32 size) {
+static __always_inline void classify_protocol_for_dispatcher(protocol_t *protocol, conn_tuple_t *tup, const char *buf, __u32 size, bpf_buffer_desc_t *buffer_desc) {
     if (protocol == NULL || *protocol != PROTOCOL_UNKNOWN) {
         return;
     }
@@ -71,11 +79,15 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
         *protocol = PROTOCOL_HTTP;
     } else if (is_http2_monitoring_enabled() && is_http2(buf, size)) {
         *protocol = PROTOCOL_HTTP2;
+    } else if (is_mongo_monitoring_enabled() && is_mongo(tup, buf, size)) {
+        *protocol = PROTOCOL_MONGO;
+    } else if (is_amqp_monitoring_enabled() && is_amqp(tup, buffer_desc)) {
+        *protocol = PROTOCOL_AMQP;
     } else {
         *protocol = PROTOCOL_UNKNOWN;
     }
 
-    log_debug("[protocol_dispatcher_classifier]: Classified protocol as %d %d; %s\n", *protocol, size, buf);
+    log_debug("[classify_protocol_for_dispatcher]: Classified protocol as %d (buffer size:%d, contents: %s)\n", *protocol, size, buf);
 }
 
 static __always_inline void dispatcher_delete_protocol_stack(conn_tuple_t *tuple, protocol_stack_t *stack) {
@@ -84,6 +96,12 @@ static __always_inline void dispatcher_delete_protocol_stack(conn_tuple_t *tuple
     if (flipped) {
         flip_tuple(tuple);
     }
+}
+
+static __attribute__((always_inline)) u32 get_netns() {
+    u64 netns;
+    LOAD_CONSTANT("netns", netns);
+    return (u32) netns;
 }
 
 // A shared implementation for the runtime & prebuilt socket filter that classifies & dispatches the protocols of the connections.
@@ -95,6 +113,9 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
     if (!read_conn_tuple_skb(skb, &skb_info, &skb_tup)) {
         return;
     }
+
+    // Add netns to separate localhost traffic
+    skb_tup.netns = get_netns();
 
     bool tcp_termination = is_tcp_termination(&skb_info);
     // We don't process non tcp packets, nor empty tcp packets which are not tcp termination packets.
@@ -137,10 +158,17 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
         read_into_buffer_for_classification((char *)request_fragment, skb, skb_info.data_off);
         const size_t payload_length = skb_info.data_end - skb_info.data_off;
         const size_t final_fragment_size = payload_length < CLASSIFICATION_MAX_BUFFER ? payload_length : CLASSIFICATION_MAX_BUFFER;
-        classify_protocol_for_dispatcher(&cur_fragment_protocol, &skb_tup, request_fragment, final_fragment_size);
+        bpf_buffer_desc_t buffer_desc = {
+            .type = BPF_BUFFER_TYPE_SKB,
+            .ptr = skb,
+            .data_offset = skb_info.data_off,
+        };
+        classify_protocol_for_dispatcher(&cur_fragment_protocol, &skb_tup, request_fragment, final_fragment_size, &buffer_desc);
+
         if (is_kafka_monitoring_enabled() && cur_fragment_protocol == PROTOCOL_UNKNOWN) {
             bpf_tail_call_compat(skb, &dispatcher_classification_progs, DISPATCHER_KAFKA_PROG);
         }
+
         log_debug("[protocol_dispatcher_entrypoint]: %p Classifying protocol as: %d\n", skb, cur_fragment_protocol);
         // If there has been a change in the classification, save the new protocol.
         if (cur_fragment_protocol != PROTOCOL_UNKNOWN) {
@@ -150,6 +178,12 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
 
     if (cur_fragment_protocol != PROTOCOL_UNKNOWN) {
         // dispatch if possible
+
+        // [STS] Comment added by stackstate, why this approach is ok.
+        // Okey, here it goes: We would like to use a LRU_HASHMAP here based on the skb pointer, to communicate additional arguments
+        // to the tail call. However, earlier kernel versions (<5.19) do not allow bringing in kernel pointers as map keys.
+        // So we go with the old PER_CPU_MAP approach, which is actually problematic due to  https://lore.kernel.org/bpf/CAMy7=ZWPc279vnKK6L1fssp5h7cb6cqS9_EuMNbfVBg_ixmTrQ@mail.gmail.com/T/,
+        // but there is not other option:
         const u32 zero = 0;
         dispatcher_arguments_t *args = bpf_map_lookup_elem(&dispatcher_arguments, &zero);
         if (args == NULL) {
@@ -173,6 +207,9 @@ static __always_inline void dispatch_kafka(struct __sk_buff *skb) {
         return;
     }
 
+    // Add netns to separate localhost traffic
+    skb_tup.netns = get_netns();
+
     char request_fragment[CLASSIFICATION_MAX_BUFFER];
     bpf_memset(request_fragment, 0, sizeof(request_fragment));
     read_into_buffer_for_classification((char *)request_fragment, skb, skb_info.data_off);
@@ -186,6 +223,12 @@ static __always_inline void dispatch_kafka(struct __sk_buff *skb) {
 
     if (cur_fragment_protocol != PROTOCOL_UNKNOWN) {
         // dispatch if possible
+
+        // [STS] Comment added by stackstate, why this approach is ok.
+        // Okey, here it goes: We would like to use a LRU_HASHMAP here based on the skb pointer, to communicate additional arguments
+        // to the tail call. However, earlier kernel versions (<5.19) do not allow bringing in kernel pointers as map keys.
+        // So we go with the old PER_CPU_MAP approach, which is actually problematic due to  https://lore.kernel.org/bpf/CAMy7=ZWPc279vnKK6L1fssp5h7cb6cqS9_EuMNbfVBg_ixmTrQ@mail.gmail.com/T/,
+        // but there is not other option:
         const u32 zero = 0;
         dispatcher_arguments_t *args = bpf_map_lookup_elem(&dispatcher_arguments, &zero);
         if (args == NULL) {

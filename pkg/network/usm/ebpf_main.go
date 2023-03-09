@@ -8,8 +8,11 @@
 package usm
 
 import (
+	"errors"
 	"fmt"
 	"math"
+	"os"
+	"path"
 	"strings"
 	"time"
 	"unsafe"
@@ -116,6 +119,7 @@ func newEBPFProgram(c *config.Config, sockFD, connectionProtocolMap *ebpf.Map, b
 			{Name: protocols.TLSDispatcherProgramsMap},
 			{Name: protocols.ProtocolDispatcherProgramsMap},
 			{Name: connectionStatesMap},
+			{Name: protocols.ProtocolDispatcherClassificationPrograms},
 		},
 		Probes: []*manager.Probe{
 			{
@@ -136,6 +140,7 @@ func newEBPFProgram(c *config.Config, sockFD, connectionProtocolMap *ebpf.Map, b
 					EBPFFuncName: protocolDispatcherSocketFilterFunction,
 					UID:          probeUID,
 				},
+				KeepProgramSpec: true,
 			},
 		},
 	}
@@ -160,6 +165,13 @@ func newEBPFProgram(c *config.Config, sockFD, connectionProtocolMap *ebpf.Map, b
 	}
 
 	return program, nil
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func (e *ebpfProgram) Init() error {
@@ -314,12 +326,6 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 	options.ActivatedProbes = []manager.ProbesSelector{
 		&manager.ProbeSelector{
 			ProbeIdentificationPair: manager.ProbeIdentificationPair{
-				EBPFFuncName: protocolDispatcherSocketFilterFunction,
-				UID:          probeUID,
-			},
-		},
-		&manager.ProbeSelector{
-			ProbeIdentificationPair: manager.ProbeIdentificationPair{
 				EBPFFuncName: "kprobe__tcp_sendmsg",
 				UID:          probeUID,
 			},
@@ -337,7 +343,20 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 	utils.AddBoolConst(&options, e.cfg.CollectTCPv6Conns, "tcpv6_enabled")
 
 	options.DefaultKprobeAttachMethod = kprobeAttachMethod
-	options.VerifierOptions.Programs.LogSize = 10 * 1024 * 1024
+	options.VerifierOptions.Programs.LogDisabled = false
+	options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelStats
+	options.VerifierOptions.Programs.LogSize = 16000000
+
+	if e.cfg.ProbeDebugLog {
+		log.Warn("Running EBPF probe with debug output")
+		options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelInstruction | ebpf.LogLevelStats
+
+	}
+
+	if e.cfg.ProbeLogBufferSizeBytes != 0 {
+		log.Warnf("Running EBPF probe with log size: %d", e.cfg.ProbeLogBufferSizeBytes)
+		options.VerifierOptions.Programs.LogSize = e.cfg.ProbeLogBufferSizeBytes
+	}
 
 	for _, s := range e.subprograms {
 		s.ConfigureOptions(&options)
@@ -368,7 +387,75 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 		}
 	}
 
-	return e.InitWithOptions(buf, options)
+	err := withoutHardenedBpfJit(func() error {
+		return e.InitWithOptions(buf, options)
+	})
+
+	if err != nil {
+		var err2 *ebpf.VerifierError
+		if errors.As(err, &err2) {
+			_ = log.Errorf("Error verifying program: last 500 lines")
+			for _, l := range err2.Log[max(len(err2.Log)-500, 0):] {
+				_ = log.Errorf(l)
+			}
+			err2.Log = []string{}
+		}
+		return err
+	}
+
+	programs, err := e.Manager.GetPrograms()
+	if err != nil {
+		return err
+	}
+
+	for name, p := range programs {
+		if e.cfg.ProbeDebugLog {
+			log.Infof("Program '%s': successfully loaded probe", name)
+		} else {
+			// When there is no debug logging all that is logged is branch statistics, which we show for reference.
+			log.Infof("Program '%s': statistics for loading ebpf probe: %s", name, strings.Replace(p.VerifierLog, "\n", " -- ", -1))
+		}
+	}
+
+	return nil
+}
+
+// withoutHardenedBpfJit disables hardening of the bpf jit. this is required to load the http probes, which are big and trip up the jit.
+func withoutHardenedBpfJit(f func() error) error {
+	if value := os.Getenv("STS_DISABLE_BPF_JIT_HARDEN"); value != "true" {
+		return f()
+	}
+
+	var proc = "/proc"
+	if value := os.Getenv("HOST_PROC"); value != "" {
+		proc = value
+	}
+
+	hardenPath := path.Join(proc, "sys", "net", "core", "bpf_jit_harden")
+
+	curValue, err := os.ReadFile(hardenPath)
+	if err != nil {
+		return fmt.Errorf("could not read bpf_jit_harden setting: %w", err)
+	}
+
+	if strings.TrimSpace(string(curValue)) != "0" {
+		log.Infof("Encountered bpf_jit_harden = %s, going to set to 0", strings.TrimSpace(string(curValue)))
+	}
+
+	err = os.WriteFile(hardenPath, []byte("0"), 0644)
+	if err != nil {
+		return fmt.Errorf("could not write to %s to set bpf_jit_harden to 0: %w", hardenPath, err)
+	}
+
+	execErr := f()
+
+	log.Infof("Resetting bpf_jit_harden to %s", strings.TrimSpace(string(curValue)))
+	err = os.WriteFile(hardenPath, curValue, 0644)
+	if err != nil {
+		return fmt.Errorf("could not reset bpf_jit_harden to %s: %w", string(curValue), err)
+	}
+
+	return execErr
 }
 
 const connProtoTTL = 3 * time.Minute

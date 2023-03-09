@@ -204,9 +204,13 @@ func (p *protocol) processHTTP2(data []byte) {
 func (p *protocol) GetStats() *protocols.ProtocolStats {
 	p.eventsConsumer.Sync()
 	p.telemetry.Log()
+	stats, observations := p.statkeeper.GetAndResetAllStats()
 	return &protocols.ProtocolStats{
-		Type:  protocols.HTTP2,
-		Stats: p.statkeeper.GetAndResetAllStats(),
+		Type: protocols.HTTP2,
+		Stats: http.AllHttpStats{
+			RequestStats: stats,
+			Observations: observations,
+		},
 	}
 }
 

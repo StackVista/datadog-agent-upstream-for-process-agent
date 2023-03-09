@@ -177,9 +177,8 @@ static __always_inline u16 _sk_family(struct sock *skp) {
  * Reads values into a `conn_tuple_t` from a `sock`. Any values that are already set in conn_tuple_t
  * are not overwritten. Returns 1 success, 0 otherwise.
  */
-static __always_inline int read_conn_tuple_partial(conn_tuple_t* t, struct sock* skp, u64 pid_tgid, metadata_mask_t type) {
+static __always_inline int read_conn_tuple_partial(conn_tuple_t* t, struct sock* skp, metadata_mask_t type) {
     int err = 0;
-    t->pid = pid_tgid >> 32;
     t->metadata = type;
 
     // Retrieve network namespace id first since addresses and ports may not be available for unconnected UDP
@@ -260,9 +259,9 @@ static __always_inline int read_conn_tuple_partial(conn_tuple_t* t, struct sock*
 /**
  * Reads values into a `conn_tuple_t` from a `sock`. Initializes all values in conn_tuple_t to `0`. Returns 1 success, 0 otherwise.
  */
-static __always_inline int read_conn_tuple(conn_tuple_t* t, struct sock* skp, u64 pid_tgid, metadata_mask_t type) {
+static __always_inline int read_conn_tuple(conn_tuple_t* t, struct sock* skp, metadata_mask_t type) {
     bpf_memset(t, 0, sizeof(conn_tuple_t));
-    return read_conn_tuple_partial(t, skp, pid_tgid, type);
+    return read_conn_tuple_partial(t, skp, type);
 }
 
 static __always_inline int get_proto(conn_tuple_t *t) {

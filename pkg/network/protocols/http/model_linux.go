@@ -71,6 +71,7 @@ func (e *EbpfEvent) ConnTuple() types.ConnectionKey {
 		DstIPLow:  e.Tuple.Daddr_l,
 		SrcPort:   e.Tuple.Sport,
 		DstPort:   e.Tuple.Dport,
+		NetNs:     e.Tuple.Netns,
 	}
 }
 
@@ -127,6 +128,8 @@ func (e *EbpfEvent) String() string {
 	output.WriteString("Method: '" + Method(e.Http.Request_method).String() + "', ")
 	output.WriteString("Tags: '0x" + strconv.FormatUint(e.Http.Tags, 16) + "', ")
 	output.WriteString("Fragment: '" + hex.EncodeToString(e.Http.Request_fragment[:]) + "', ")
+	output.WriteString("Request Tracing ID: '" + parseRequestIdHeader(e.Http.Request_tracing_id) + "', ")
+	output.WriteString("Response Tracing ID: '" + parseRequestIdHeader(e.Http.Response_tracing_id) + "', ")
 	output.WriteString("}")
 	return output.String()
 }
@@ -138,6 +141,50 @@ func requestFragment(fragment []byte) [BufferSize]byte {
 	var b [BufferSize]byte
 	copy(b[:], fragment)
 	return b
+}
+
+func parseRequestIdHeader(reqId [40]byte) string {
+	reqIdString := string(reqId[:])
+	// Make sure we observed the newline of the request id
+	parts := strings.Split(reqIdString, "\r")
+	if len(parts) == 1 {
+		return ""
+	}
+
+	// Trim whitespace
+	return strings.TrimSpace(parts[0])
+}
+
+// RequestTracingID returns the request tracing id for this HTTP transaction
+// [sts]
+func (tx *EbpfEvent) RequestTracingID() string {
+	return parseRequestIdHeader(tx.Http.Request_tracing_id)
+}
+
+// ResponseTracingID returns the request tracing id for this HTTP transaction
+// [sts]
+func (tx *EbpfEvent) ResponseTracingID() string {
+	return parseRequestIdHeader(tx.Http.Response_tracing_id)
+}
+
+func (tx *EbpfEvent) RawResponseTracingID() [40]byte {
+	return tx.Http.Response_tracing_id
+}
+
+func (tx *EbpfEvent) SetResponseTracingID(id [40]byte) {
+	tx.Http.Response_tracing_id = id
+}
+
+func (tx *EbpfEvent) RequestParseResult() HeaderParseResult {
+	return tx.Http.Request_parse_result
+}
+
+func (tx *EbpfEvent) ResponseParseResult() HeaderParseResult {
+	return tx.Http.Response_parse_result
+}
+
+func (tx *EbpfEvent) SetResponseParseResult(res HeaderParseResult) {
+	tx.Http.Response_parse_result = res
 }
 
 func isEncrypted(tx Transaction) bool {

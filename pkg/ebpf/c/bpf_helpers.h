@@ -309,4 +309,31 @@ enum libbpf_tristate {
 /* Helper macro to print out debug messages */
 #define bpf_printk(fmt, args...) ___bpf_pick_printk(args)(fmt, ##args)
 
+/**
+Okay, here it goes:
+The verifier for ebpf creates an explosion of states for every branch, however, all boolean logic is implemented using branching,
+which causes the instruction limit to be reached very quickly when branching is involved. This helper allows for doing branchless
+comparisons based on integer arithmatic. To do control flow it is still required to use an if statement with comparison.
+
+This function produces 0 when equal and 1 when unequal, of type __u8.
+*/
+#define __bpf_no_branch_cmp_unequal(input, comp) \
+     ({ \
+        __u64 unequal = (input) ^ (comp); \
+        __u8 unequal_boolean; \
+        /* We want to have a 1 or 0 value for inequality, so we use division to normalize for 1 or 0
+         Using assembly instruction to do division, because division by 0 is actually defined by bpf, but not clang, so clang will optimize undefined away. */ \
+        asm volatile( \
+                  "%[unequal_boolean] = %[unequal]\n\t" \
+                  "%[unequal_boolean] /= %[unequal]\n\t" \
+                  : [unequal_boolean]"=r"(unequal_boolean) \
+                  : [unequal]"r"(unequal) \
+                  ); \
+        unequal_boolean; \
+     })
+
+#define __bpf_no_branch_neg(v) (1 - (v))
+
+#define __bpf_no_branch_true_mask(v) (0 - (v))
+
 #endif

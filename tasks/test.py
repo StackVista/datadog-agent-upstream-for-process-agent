@@ -373,10 +373,12 @@ def test_flavor(
 
     def command(test_results, module, module_result):
         with ctx.cd(module.full_path()):
+            command = cmd.format(
+                packages=' '.join(module.targets), **args
+            )
+            print(f"Running: {command}")
             res = ctx.run(
-                cmd.format(
-                    packages=' '.join(f"{t}/..." if not t.endswith("/...") else t for t in module.targets), **args
-                ),
+                command,
                 env=env,
                 out_stream=test_profiler,
                 warn=True,

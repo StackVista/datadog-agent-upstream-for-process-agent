@@ -30,7 +30,15 @@ type Client struct {
 	ConsumeChannel *amqp.Channel
 }
 
+func NewTLSClient(opts Options) (*Client, error) {
+	return newClient(opts, "amqps")
+}
+
 func NewClient(opts Options) (*Client, error) {
+	return newClient(opts, "amqp")
+}
+
+func newClient(opts Options, protocol string) (*Client, error) {
 	if opts.Username == "" {
 		opts.Username = User
 	}
@@ -44,7 +52,7 @@ func NewClient(opts Options) (*Client, error) {
 		dialOptions.Dial = opts.Dialer.Dial
 	}
 
-	publishConn, err := amqp.DialConfig(fmt.Sprintf("amqp://%s:%s@%s/", opts.Username, opts.Password, opts.ServerAddress), dialOptions)
+	publishConn, err := amqp.DialConfig(fmt.Sprintf("%s://%s:%s@%s", protocol, opts.Username, opts.Password, opts.ServerAddress), dialOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +60,7 @@ func NewClient(opts Options) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	consumeConn, err := amqp.DialConfig(fmt.Sprintf("amqp://%s:%s@%s/", opts.Username, opts.Password, opts.ServerAddress), dialOptions)
+	consumeConn, err := amqp.DialConfig(fmt.Sprintf("%s://%s:%s@%s", protocol, opts.Username, opts.Password, opts.ServerAddress), dialOptions)
 	if err != nil {
 		return nil, err
 	}

@@ -1529,7 +1529,7 @@ func LoadDatadogCustom(config Config, origin string, loadSecret bool, additional
 	defer func() {
 		// Environment feature detection needs to run before applying override funcs
 		// as it may provide such overrides
-		detectFeatures()
+		DetectFeatures()
 		applyOverrideFuncs(config)
 	}()
 

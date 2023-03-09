@@ -136,6 +136,8 @@ typedef enum {
     PROG_HTTP2,
     PROG_HTTP2_FRAME_PARSER,
     PROG_KAFKA,
+    PROG_MONGO,
+    PROG_AMQP,
     PROG_GRPC,
     // Add before this value.
     PROG_MAX,
@@ -145,6 +147,8 @@ typedef enum {
     TLS_PROG_UNKNOWN = 0,
     TLS_HTTP_PROCESS,
     TLS_HTTP_TERMINATION,
+    TLS_MONGO_PROCESS,
+    TLS_AMQP_PROCESS,
     TLS_PROG_MAX,
 } tls_prog_t;
 

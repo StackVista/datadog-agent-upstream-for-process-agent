@@ -60,10 +60,9 @@ func (t ConnTuple) DestEndpoint() string {
 
 func (t ConnTuple) String() string {
 	return fmt.Sprintf(
-		"[%s%s] [PID: %d] [%s ⇄ %s] (ns: %d)",
+		"[%s%s] [%s ⇄ %s] (ns: %d)",
 		t.Type(),
 		t.Family(),
-		t.Pid,
 		t.SourceEndpoint(),
 		t.DestEndpoint(),
 		t.Netns,

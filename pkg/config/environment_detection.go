@@ -95,7 +95,7 @@ func IsAutoconfigEnabled() bool {
 // DetectFeatures runs the feature detection.
 // We guarantee that Datadog configuration is entirely loaded (env + YAML)
 // before this function is called
-func detectFeatures() {
+func DetectFeatures() {
 	featureLock.Lock()
 	defer featureLock.Unlock()
 

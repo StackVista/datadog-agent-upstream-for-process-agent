@@ -1,6 +1,8 @@
 module github.com/DataDog/datadog-agent/test/new-e2e
 
-go 1.20
+go 1.21
+
+toolchain go1.22.7
 
 // Do not upgrade Pulumi plugins to versions different from `test-infra-definitions`.
 // The plugin versions NEED to be aligned.
@@ -9,7 +11,7 @@ go 1.20
 replace github.com/DataDog/datadog-agent/test/fakeintake => ../fakeintake
 
 require (
-	github.com/DataDog/datadog-agent/test/fakeintake v0.49.1
+	github.com/DataDog/datadog-agent/test/fakeintake v0.49.1-rc.1
 	// Are you bumping github.com/DataDog/test-infra-definitions ?
 	// You should bump `TEST_INFRA_DEFINITIONS_BUILDIMAGES` in `.gitlab-ci.yml`
 	// `TEST_INFRA_DEFINITIONS_BUILDIMAGES` matches the commit sha in the module version

@@ -15,8 +15,10 @@ import (
 
 	"github.com/DataDog/datadog-agent/pkg/network/dns"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/amqp"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/kafka"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/mongo"
 	"github.com/DataDog/datadog-agent/pkg/process/util"
 )
 
@@ -118,6 +120,12 @@ func (e EphemeralPortType) String() string {
 	}
 }
 
+// TCPSeq represnts tcp sequence information (seq/ack)
+type TCPSeq struct {
+	Seq     uint32
+	Ack_seq uint32
+}
+
 // BufferedData encapsulates data whose underlying memory can be recycled
 type BufferedData struct {
 	Conns  []ConnectionStats
@@ -136,6 +144,9 @@ type Connections struct {
 	HTTP                        map[http.Key]*http.RequestStats
 	HTTP2                       map[http.Key]*http.RequestStats
 	Kafka                       map[kafka.Key]*kafka.RequestStat
+	Mongo                       map[mongo.Key]*mongo.RequestStat
+	AMQP                        map[amqp.Key]*amqp.RequestStat
+	HTTPObservations            []http.TransactionObservation
 	DNSStats                    dns.StatsByKeyByNameByType
 }
 
@@ -259,6 +270,8 @@ type ConnectionStats struct {
 
 	RTT    uint32 // Stored in µs
 	RTTVar uint32
+
+	InitialTCPSeq TCPSeq
 
 	Pid   uint32
 	NetNS uint32
@@ -399,12 +412,13 @@ func ConnectionSummary(c *ConnectionStats, names map[util.Address][]dns.Hostname
 
 	if c.Type == TCP {
 		str += fmt.Sprintf(
-			", %d retransmits (+%d), RTT %s (± %s), %d established (+%d), %d closed (+%d)",
+			", %d retransmits (+%d), RTT %s (± %s), %d established (+%d), %d closed (+%d), %d seq, %d ack",
 			c.Monotonic.Retransmits, c.Last.Retransmits,
 			time.Duration(c.RTT)*time.Microsecond,
 			time.Duration(c.RTTVar)*time.Microsecond,
 			c.Monotonic.TCPEstablished, c.Last.TCPEstablished,
 			c.Monotonic.TCPClosed, c.Last.TCPClosed,
+			c.InitialTCPSeq.Seq, c.InitialTCPSeq.Ack_seq,
 		)
 	}
 

@@ -17,6 +17,7 @@ func (tx *EbpfTx) ConnTuple() types.ConnectionKey {
 		DstIPLow:  tx.Tup.Daddr_l,
 		SrcPort:   tx.Tup.Sport,
 		DstPort:   tx.Tup.Dport,
+		NetNs:     tx.Tup.Netns,
 	}
 }
 
