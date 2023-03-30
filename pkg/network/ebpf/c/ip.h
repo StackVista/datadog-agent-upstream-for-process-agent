@@ -109,6 +109,8 @@ __maybe_unused static __always_inline __u64 read_conn_tuple_skb(struct __sk_buff
         return 0;
     }
 
+    info->data_length = skb->len - info->data_off;
+
     return 1;
 }
 

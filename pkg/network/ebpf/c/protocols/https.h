@@ -49,7 +49,10 @@ static __always_inline void https_process(conn_tuple_t *t, void *buffer, size_t 
             }
         }
     }
-    http_process(&http, NULL, tags);
+
+    skb_info_t skb_info = {0};
+    skb_info.data_length = (__u32)len;
+    http_process(&http, &skb_info, tags);
 }
 
 static __always_inline void https_finish(conn_tuple_t *t) {
