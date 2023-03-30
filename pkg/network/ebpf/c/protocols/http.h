@@ -143,7 +143,9 @@ static __always_inline int http_process(http_transaction_t *http_stack, skb_info
 
     http->tags |= tags;
 
-    if (http_responding(http)) {
+    // STS Addition: Only set the response time when there is actual data flowing, to
+    // avoid a delayed connection close with no data (empty FIN packet) falsely increases the latency.
+    if (http_responding(http) && skb_info && skb_info->data_length != 0) {
         http->response_last_seen = bpf_ktime_get_ns();
     }
 
