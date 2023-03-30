@@ -50,6 +50,7 @@ static __always_inline void https_process(conn_tuple_t *t, void *buffer, size_t 
         }
     }
 
+    // STS Addition: We need to add the length of data here to make sure the http_process advances the response time
     skb_info_t skb_info = {0};
     skb_info.data_length = (__u32)len;
     http_process(&http, &skb_info, tags);
