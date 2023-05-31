@@ -55,6 +55,9 @@ typedef struct {
     __u32 tcp_seq;
 
     __u64 tags;
+
+    // used as a correlation id to correlate different observations of the same connection.
+    char tracing_id[37];
 } http_transaction_t;
 
 // OpenSSL types

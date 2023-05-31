@@ -34,6 +34,7 @@ type ebpfHttpTx struct {
 	Owned_by_src_port    uint16
 	Tcp_seq              uint32
 	Tags                 uint64
+	Tracing_id 			 [37]byte
 }
 
 type libPath struct {
