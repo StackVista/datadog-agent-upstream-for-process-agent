@@ -120,7 +120,7 @@ func (tx *ebpfHttpTx) String() string {
 	output.WriteString("Method: '" + Method(tx.Request_method).String() + "', ")
 	output.WriteString("Tags: '0x" + strconv.FormatUint(tx.Tags, 16) + "', ")
 	output.WriteString("Fragment: '" + hex.EncodeToString(tx.Request_fragment[:]) + "', ")
-	output.WriteString("Tracing ID: '" + hex.EncodeToString(tx.Tracing_id[:]) + "', ")
+	//output.WriteString("Tracing ID: '" + hex.EncodeToString(tx.Tracing_id[:]) + "', ")
 	output.WriteString("}")
 	return output.String()
 }
@@ -128,7 +128,8 @@ func (tx *ebpfHttpTx) String() string {
 // TracingID returns the tracing id for this HTTP transaction
 // [sts]
 func (tx *ebpfHttpTx) TracingID() string {
-	return hex.EncodeToString(tx.Tracing_id[:])
+	return ""
+	//return hex.EncodeToString(tx.Tracing_id[:])
 }
 
 // below is copied from pkg/trace/stats/statsraw.go

@@ -35,6 +35,196 @@ static __always_inline void http_begin_response(http_transaction_t *http, const 
     log_debug("http_begin_response: htx=%llx status=%d\n", http, status_code);
 }
 
+static __always_inline bool http_response_line_end_offset(skb_info_t *skb_info, const char *buffer) {
+    // Read the response status_line until we hit a return character up to a maximum of HTTP_RESPONSE_STATUS_LINE_MAX_SIZE
+    // and set the offset.
+    // HTTP/1.1 200 OK
+    // _______________^
+    __u8 return_found = 0;
+#pragma unroll
+    for (int i = 0; i < HTTP_RESPONSE_STATUS_LINE_MAX_SIZE; i++)
+    {
+        // check to see if we've reached the end of the status line, signified by a new line (13 10 - unicode) U+000D U+000A
+        if (!return_found && buffer[i] == '\n')
+        {
+            skb_info->http_header_off = skb_info->data_off + i + 1;
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+//    int match_result;
+//
+//#pragma unroll
+//    for (int i = 0; i < 10; i++)
+//    {
+//        match_result = match_trace_id_header_char('x', i, trace_match);
+//
+//        // end of the match buffer
+//        if(match_result != 1) {
+//            break;
+//        }
+//    }
+//
+//    // mismatch for the current header, proceed to new line
+//    if(match_result == 0)
+//    {
+//        __u8 return_found = 0;
+//#pragma unroll
+//        for (int i = 0; i < HTTP_TRACING_ID_HEADER_SIZE-trace_match->position; i++)
+//        {
+//            trace_match->position++;
+//
+//            // new line found
+//            if (!return_found && buffer[i] == '\n') {
+//                return is_x_trace_id_header();
+//            }
+//        }
+//    }
+//
+//    // end of match buffer without any matches
+//    if(match_result == -1)
+//    {
+//        trace_match->matches = 0;
+//        trace_match->position = 0;
+//        return 0;
+//    }
+
+static __always_inline int is_x_trace_id_header(char *match_buffer, trace_match_t *trace_match)
+{
+    // set the local position to be used as the "starting" point.
+    int local_position = trace_match->position;
+
+    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[local_position] == 'x') { trace_match->matches++; trace_match->position++; }
+    else { return 0; }
+    local_position++;
+
+    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[local_position] == '-') { trace_match->matches++; trace_match->position++; }
+    else { return 0; }
+    local_position++;
+
+    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[local_position] == 't') { trace_match->matches++; trace_match->position++; }
+    else { return 0; }
+    local_position++;
+
+    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[local_position] == 'r') { trace_match->matches++; trace_match->position++; }
+    else { return 0; }
+    local_position++;
+
+    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[local_position] == 'a') { trace_match->matches++; trace_match->position++; }
+    else { return 0; }
+    local_position++;
+
+    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[local_position] == 'c') { trace_match->matches++; trace_match->position++; }
+    else { return 0; }
+    local_position++;
+
+    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[local_position] == 'e') { trace_match->matches++; trace_match->position++; }
+    else { return 0; }
+    local_position++;
+
+    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[local_position] == '-') { trace_match->matches++; trace_match->position++; }
+    else { return 0; }
+    local_position++;
+
+    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[local_position] == 'i') { trace_match->matches++; trace_match->position++; }
+    else { return 0; }
+    local_position++;
+
+    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[local_position] == 'd') { trace_match->matches++; trace_match->position++; }
+    else { return 0; }
+    local_position++;
+
+    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[local_position] == ':') { trace_match->matches++; trace_match->position++; }
+    else { return 0; }
+
+    // everything matched, this is the x-trace-id header
+    return 1;
+}
+
+static __always_inline int find_trace_id_header(char *match_buffer, trace_match_t *trace_match)
+{
+    do {
+        int is_trace_id_header = is_x_trace_id_header(match_buffer, trace_match);
+
+        // trace header match
+        if(is_trace_id_header == 1)
+        {
+            trace_match->matches = 0;
+            trace_match->position = 0;
+            return 1;
+        }
+
+        // not a match for the trace header
+        if(is_trace_id_header == 0)
+        {
+            trace_match->matches = 0;
+            trace_match->position = 0;
+            return 0;
+        }
+
+        continue;
+    }
+    while (trace_match->position < HTTP_TRACING_ID_HEADER_SIZE);
+
+    return 0;
+
+}
+
+static __always_inline void http_read_response_headers(http_transaction_t *http, struct __sk_buff* skb, skb_info_t *skb_info) {
+
+    // load chunks of 49 chars and try to find x-trace-id header in the format -> x-trace-id: 16266295-c3fa-4fae-994c-b35f1d02c1c8
+    char trace_buffer[HTTP_TRACING_ID_HEADER_SIZE];
+    bpf_memset(trace_buffer, 0, HTTP_TRACING_ID_HEADER_SIZE);
+
+    if (skb->len - skb_info->data_off < HTTP_RESPONSE_STATUS_LINE_MAX_SIZE)
+    {
+        return;
+    }
+
+    u64 offset = (u64)skb_info->http_header_off;
+    const u32 len = HTTP_HEADER_LIMIT < (skb->len - (u32)offset) ? (u32)offset + HTTP_HEADER_LIMIT : skb->len;
+
+// HTTP_HEADER_LIMIT = 8196
+// HTTP_TRACING_ID_HEADER_SIZE = 49
+
+    trace_match_t *trace_match;
+    bpf_memset(&trace_match, 0, sizeof(trace_match));
+    trace_match->matches = 0;
+    trace_match->position = 0;
+
+#pragma unroll (HTTP_HEADER_LIMIT / HTTP_TRACING_ID_HEADER_SIZE)
+    for (int i = 0; i < len; i++)
+    {
+        if (offset + HTTP_TRACING_ID_HEADER_SIZE - 1 >= len) { break; }
+
+        bpf_skb_load_bytes(skb, offset, (char *)trace_buffer, HTTP_TRACING_ID_HEADER_SIZE);
+
+        if (find_trace_id_header((char *)trace_buffer, trace_match)) {
+            log_debug("http_x_trace_id_header_in_response: trace_buffer=%s\n", trace_buffer);
+
+            bpf_memcpy(&http->tracing_id, trace_buffer, HTTP_BUFFER_SIZE);
+        }
+
+        offset += HTTP_TRACING_ID_HEADER_SIZE;
+    }
+
+    return;
+}
+
 static __always_inline void http_parse_data(char const *p, http_packet_t *packet_type, http_method_t *method) {
     if ((p[0] == 'H') && (p[1] == 'T') && (p[2] == 'T') && (p[3] == 'P')) {
         *packet_type = HTTP_RESPONSE;
@@ -139,6 +329,7 @@ static __always_inline int http_process(http_transaction_t *http_stack, skb_info
     } else if (packet_type == HTTP_RESPONSE) {
         http_begin_response(http, buffer);
         http_update_seen_before(http, skb_info);
+        http_response_line_end_offset(skb_info, buffer);
     }
 
     http->tags |= tags;

@@ -5,8 +5,16 @@
 
 // This determines the size of the payload fragment that is captured for each HTTP request
 #define HTTP_BUFFER_SIZE (8 * 20)
+// This determines the size of the tracing id; we expect a 288 bit UUID => 16 bytes + null termination
+#define HTTP_TRACING_ID_SIZE 37
+// x-trace-id: 16266295-c3fa-4fae-994c-b35f1d02c1c8
+#define HTTP_TRACING_ID_HEADER_SIZE 49
+//
+#define HTTP_RESPONSE_STATUS_LINE_MAX_SIZE 25
+//
+#define HTTP_HEADER_LIMIT 8190
 // This controls the number of HTTP transactions read from userspace at a time
-#define HTTP_BATCH_SIZE 15
+#define HTTP_BATCH_SIZE 14
 
 // HTTP/1.1 XXX
 // _________^
@@ -57,7 +65,7 @@ typedef struct {
     __u64 tags;
 
     // used as a correlation id to correlate different observations of the same connection.
-    char tracing_id[37];
+    char tracing_id[HTTP_TRACING_ID_SIZE];
 } http_transaction_t;
 
 // OpenSSL types
@@ -95,5 +103,10 @@ typedef struct {
     __u32 len;
     char buf[LIB_PATH_MAX_SIZE];
 } lib_path_t;
+
+typedef struct {
+    __u32 matches;
+    __u32 position;
+} trace_match_t;
 
 #endif

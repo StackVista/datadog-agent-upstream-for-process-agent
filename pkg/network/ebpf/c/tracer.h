@@ -112,6 +112,7 @@ typedef struct {
 // that manipulates a `__sk_buff` object.
 typedef struct {
     __u32 data_off;
+    __u32 http_header_off;
     __u32 data_length;
     __u32 tcp_seq;
     __u8 tcp_flags;
