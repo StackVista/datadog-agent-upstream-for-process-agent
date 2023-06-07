@@ -213,6 +213,11 @@ static __always_inline void http_read_response_headers(http_transaction_t *http,
 
         bpf_skb_load_bytes(skb, offset, (char *)trace_buffer, HTTP_TRACING_ID_HEADER_SIZE);
 
+        // try to find the trace id header, result can be:
+        // full match -> We have the header, set the connection tracing_id
+        // partial match -> We have a partial match, increase the offset with trace_match->matches and load another chunk.
+        //                  This next chunk should be a complete match on the header + uuid.
+        // no match -> no match was found in the current chunk. Load the next HTTP_TRACING_ID_HEADER_SIZE chunk.
         if (find_trace_id_header((char *)trace_buffer, trace_match)) {
             log_debug("http_x_trace_id_header_in_response: trace_buffer=%s\n", trace_buffer);
 
