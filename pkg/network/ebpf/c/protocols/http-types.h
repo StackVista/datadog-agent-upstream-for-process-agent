@@ -109,4 +109,12 @@ typedef struct {
     __u32 position;
 } trace_match_t;
 
+typedef enum
+{
+    NO_MATCH,
+    PARTIAL_MATCH,
+    FULL_MATCH
+} trace_header_match_t;
+
+
 #endif

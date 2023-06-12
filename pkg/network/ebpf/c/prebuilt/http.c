@@ -47,6 +47,15 @@ int socket__http_filter(struct __sk_buff* skb) {
 
     read_into_buffer_skb((char *)http.request_fragment, skb, &skb_info);
     http_process(&http, &skb_info, NO_TAGS);
+
+    // check if we have a response status code, then attempt to read the response headers.
+    if (http.response_status_code > 0)
+    {
+        if (!http_read_response_headers(&http, skb, &skb_info)) {
+            return 0;
+        }
+    }
+
     return 0;
 }
 

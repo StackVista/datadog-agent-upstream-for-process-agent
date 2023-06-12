@@ -54,180 +54,170 @@ static __always_inline bool http_response_line_end_offset(skb_info_t *skb_info, 
 
     return 0;
 }
-
-//    int match_result;
-//
-//#pragma unroll
-//    for (int i = 0; i < 10; i++)
-//    {
-//        match_result = match_trace_id_header_char('x', i, trace_match);
-//
-//        // end of the match buffer
-//        if(match_result != 1) {
-//            break;
-//        }
-//    }
-//
-//    // mismatch for the current header, proceed to new line
-//    if(match_result == 0)
-//    {
-//        __u8 return_found = 0;
-//#pragma unroll
-//        for (int i = 0; i < HTTP_TRACING_ID_HEADER_SIZE-trace_match->position; i++)
-//        {
-//            trace_match->position++;
-//
-//            // new line found
-//            if (!return_found && buffer[i] == '\n') {
-//                return is_x_trace_id_header();
-//            }
-//        }
-//    }
-//
-//    // end of match buffer without any matches
-//    if(match_result == -1)
-//    {
-//        trace_match->matches = 0;
-//        trace_match->position = 0;
-//        return 0;
-//    }
-
 static __always_inline int is_x_trace_id_header(char *match_buffer, trace_match_t *trace_match)
 {
     // set the local position to be used as the "starting" point.
-    int local_position = trace_match->position;
-
-    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
-    if (match_buffer[local_position] == 'x') { trace_match->matches++; trace_match->position++; }
+    if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[trace_match->position] == 'x') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    local_position++;
+    trace_match->position++;
 
-    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
-    if (match_buffer[local_position] == '-') { trace_match->matches++; trace_match->position++; }
+    if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[trace_match->position] == '-') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    local_position++;
+    trace_match->position++;
 
-    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
-    if (match_buffer[local_position] == 't') { trace_match->matches++; trace_match->position++; }
+    if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[trace_match->position] == 't') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    local_position++;
+    trace_match->position++;
 
-    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
-    if (match_buffer[local_position] == 'r') { trace_match->matches++; trace_match->position++; }
+    if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[trace_match->position] == 'r') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    local_position++;
+    trace_match->position++;
 
-    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
-    if (match_buffer[local_position] == 'a') { trace_match->matches++; trace_match->position++; }
+    if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[trace_match->position] == 'a') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    local_position++;
+    trace_match->position++;
 
-    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
-    if (match_buffer[local_position] == 'c') { trace_match->matches++; trace_match->position++; }
+    if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[trace_match->position] == 'c') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    local_position++;
+    trace_match->position++;
 
-    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
-    if (match_buffer[local_position] == 'e') { trace_match->matches++; trace_match->position++; }
+    if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[trace_match->position] == 'e') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    local_position++;
+    trace_match->position++;
 
-    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
-    if (match_buffer[local_position] == '-') { trace_match->matches++; trace_match->position++; }
+    if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[trace_match->position] == '-') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    local_position++;
+    trace_match->position++;
 
-    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
-    if (match_buffer[local_position] == 'i') { trace_match->matches++; trace_match->position++; }
+    if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[trace_match->position] == 'i') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    local_position++;
+    trace_match->position++;
 
-    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
-    if (match_buffer[local_position] == 'd') { trace_match->matches++; trace_match->position++; }
+    if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[trace_match->position] == 'd') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    local_position++;
+    trace_match->position++;
 
-    if (local_position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
-    if (match_buffer[local_position] == ':') { trace_match->matches++; trace_match->position++; }
+    if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
+    if (match_buffer[trace_match->position] == ':') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
 
     // everything matched, this is the x-trace-id header
     return 1;
 }
-
-static __always_inline int find_trace_id_header(char *match_buffer, trace_match_t *trace_match)
+//
+static __always_inline trace_header_match_t find_trace_id_header(char *match_buffer, trace_match_t *trace_match)
 {
+    __u8 skip_current_header = 0;
     do {
-        int is_trace_id_header = is_x_trace_id_header(match_buffer, trace_match);
-
-        // trace header match
-        if(is_trace_id_header == 1)
+        if (skip_current_header && match_buffer[trace_match->position] == '\n')
         {
+            // move to the character after the new-line
+            trace_match->position++;
             trace_match->matches = 0;
-            trace_match->position = 0;
-            return 1;
+            continue;
         }
 
-        // not a match for the trace header
+        int is_trace_id_header = is_x_trace_id_header(match_buffer, trace_match);
+        // not a match for the trace header, skip this header and continue traversing the buffer
         if(is_trace_id_header == 0)
         {
+            // skip this header; ie. read until we reach a new-line / end of buffer
+            skip_current_header = 1;
             trace_match->matches = 0;
-            trace_match->position = 0;
-            return 0;
+            continue;
+        }
+        else if(is_trace_id_header == 1)
+        {  // trace header match
+            return FULL_MATCH;
+        }
+        else if(is_trace_id_header == -1)
+        { // end of the buffer
+            if(trace_match->matches > 0)
+            {
+                return PARTIAL_MATCH;
+            }
+            else
+            {
+                return NO_MATCH;
+            }
         }
 
-        continue;
+        // move to the next position
+        trace_match->position++;
     }
     while (trace_match->position < HTTP_TRACING_ID_HEADER_SIZE);
 
-    return 0;
-
+    return NO_MATCH;
 }
 
-static __always_inline void http_read_response_headers(http_transaction_t *http, struct __sk_buff* skb, skb_info_t *skb_info) {
+static __always_inline bool http_read_response_headers(http_transaction_t *http, struct __sk_buff* skb, skb_info_t *skb_info) {
 
     // load chunks of 49 chars and try to find x-trace-id header in the format -> x-trace-id: 16266295-c3fa-4fae-994c-b35f1d02c1c8
     char trace_buffer[HTTP_TRACING_ID_HEADER_SIZE];
-    bpf_memset(trace_buffer, 0, HTTP_TRACING_ID_HEADER_SIZE);
+    bpf_memset(trace_buffer, 0, sizeof(HTTP_TRACING_ID_HEADER_SIZE));
 
-    if (skb->len - skb_info->data_off < HTTP_RESPONSE_STATUS_LINE_MAX_SIZE)
+    if (skb->len - skb_info->http_header_off < HTTP_TRACING_ID_HEADER_SIZE)
     {
-        return;
+        return false;
     }
 
     u64 offset = (u64)skb_info->http_header_off;
     const u32 len = HTTP_HEADER_LIMIT < (skb->len - (u32)offset) ? (u32)offset + HTTP_HEADER_LIMIT : skb->len;
 
+    trace_match_t trace_match;
+    bpf_memset(&trace_match, 0, sizeof(trace_match));
+    trace_match.matches = 0;
+    trace_match.position = 0;
+
 // HTTP_HEADER_LIMIT = 8196
 // HTTP_TRACING_ID_HEADER_SIZE = 49
-
-    trace_match_t *trace_match;
-    bpf_memset(&trace_match, 0, sizeof(trace_match));
-    trace_match->matches = 0;
-    trace_match->position = 0;
-
 #pragma unroll (HTTP_HEADER_LIMIT / HTTP_TRACING_ID_HEADER_SIZE)
     for (int i = 0; i < len; i++)
     {
         if (offset + HTTP_TRACING_ID_HEADER_SIZE - 1 >= len) { break; }
-
+//
         bpf_skb_load_bytes(skb, offset, (char *)trace_buffer, HTTP_TRACING_ID_HEADER_SIZE);
-
-        // try to find the trace id header, result can be:
-        // full match -> We have the header, set the connection tracing_id
-        // partial match -> We have a partial match, increase the offset with trace_match->matches and load another chunk.
-        //                  This next chunk should be a complete match on the header + uuid.
-        // no match -> no match was found in the current chunk. Load the next HTTP_TRACING_ID_HEADER_SIZE chunk.
-        if (find_trace_id_header((char *)trace_buffer, trace_match)) {
-            log_debug("http_x_trace_id_header_in_response: trace_buffer=%s\n", trace_buffer);
-
-            bpf_memcpy(&http->tracing_id, trace_buffer, HTTP_BUFFER_SIZE);
+//
+//        // try to find the trace id header, result can be:
+//        // full match -> We have the header, set the connection tracing_id
+//        // partial match -> We have a partial match, increase the offset with trace_match->matches and load another chunk.
+//        //                  This next chunk should be a complete match on the header + uuid.
+//        // no match -> no match was found in the current chunk. Load the next HTTP_TRACING_ID_HEADER_SIZE chunk.
+        trace_header_match_t match_result = find_trace_id_header((char *)trace_buffer, &trace_match);
+        switch(match_result)
+        {
+            case FULL_MATCH:
+                log_debug("http_x_trace_id_header_in_response: trace_buffer=%s\n", trace_buffer);
+//
+//                bpf_memcpy(&http->tracing_id, trace_buffer, HTTP_BUFFER_SIZE);
+//
+                break;
+            case PARTIAL_MATCH:
+                // move the offset to the start of the match and load the next chunk. It should be a complete match on
+                // the header + uuid.
+                offset += (trace_match.position - trace_match.matches);
+                trace_match.matches = 0;
+                trace_match.position = 0;
+            case NO_MATCH:
+               // reset everything and increment the offset to load the next chunk.
+                trace_match.matches = 0;
+                trace_match.position = 0;
+                offset += HTTP_TRACING_ID_HEADER_SIZE;
         }
 
-        offset += HTTP_TRACING_ID_HEADER_SIZE;
     }
 
-    return;
+    return true;
 }
 
 static __always_inline void http_parse_data(char const *p, http_packet_t *packet_type, http_method_t *method) {
