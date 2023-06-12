@@ -124,6 +124,7 @@ static __always_inline trace_header_match_t find_trace_id_header(char *match_buf
             // move to the character after the new-line
             trace_match->position++;
             trace_match->matches = 0;
+            skip_current_header = 0;
             continue;
         }
 
