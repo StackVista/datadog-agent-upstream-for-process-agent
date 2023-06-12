@@ -60,52 +60,42 @@ static __always_inline int is_x_trace_id_header(char *match_buffer, trace_match_
     if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
     if (match_buffer[trace_match->position] == 'x') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    trace_match->position++;
 
     if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
     if (match_buffer[trace_match->position] == '-') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    trace_match->position++;
 
     if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
     if (match_buffer[trace_match->position] == 't') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    trace_match->position++;
 
     if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
     if (match_buffer[trace_match->position] == 'r') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    trace_match->position++;
 
     if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
     if (match_buffer[trace_match->position] == 'a') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    trace_match->position++;
 
     if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
     if (match_buffer[trace_match->position] == 'c') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    trace_match->position++;
 
     if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
     if (match_buffer[trace_match->position] == 'e') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    trace_match->position++;
 
     if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
     if (match_buffer[trace_match->position] == '-') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    trace_match->position++;
 
     if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
     if (match_buffer[trace_match->position] == 'i') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    trace_match->position++;
 
     if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
     if (match_buffer[trace_match->position] == 'd') { trace_match->matches++; trace_match->position++; }
     else { return 0; }
-    trace_match->position++;
 
     if (trace_match->position > HTTP_TRACING_ID_HEADER_SIZE) { return -1; }
     if (match_buffer[trace_match->position] == ':') { trace_match->matches++; trace_match->position++; }
