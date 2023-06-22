@@ -27,6 +27,7 @@ type telemetry struct {
 	rejected     *libtelemetry.Metric // this happens when an user-defined reject-filter matches a request
 	malformed    *libtelemetry.Metric // this happens when the request doesn't have the expected format
 	aggregations *libtelemetry.Metric
+	observations *libtelemetry.Metric
 }
 
 func newTelemetry() (*telemetry, error) {
@@ -44,6 +45,7 @@ func newTelemetry() (*telemetry, error) {
 		hits4XX:      metricGroup.NewMetric("hits4xx"),
 		hits5XX:      metricGroup.NewMetric("hits5xx"),
 		aggregations: metricGroup.NewMetric("aggregations"),
+		observations: metricGroup.NewMetric("observations"),
 
 		// these metrics are also exported as statsd metrics
 		totalHits: metricGroup.NewMetric("total_hits", libtelemetry.OptStatsd),
@@ -80,10 +82,11 @@ func (t *telemetry) log() {
 	rejected := t.rejected.Delta()
 	malformed := t.malformed.Delta()
 	aggregations := t.aggregations.Delta()
+	observations := t.observations.Delta()
 	elapsed := now - then
 
 	log.Debugf(
-		"http stats summary: requests_processed=%d(%.2f/s) requests_dropped=%d(%.2f/s) requests_rejected=%d(%.2f/s) requests_malformed=%d(%.2f/s) aggregations=%d",
+		"http stats summary: requests_processed=%d(%.2f/s) requests_dropped=%d(%.2f/s) requests_rejected=%d(%.2f/s) requests_malformed=%d(%.2f/s) aggregations=%d observations=%d",
 		totalRequests,
 		float64(totalRequests)/float64(elapsed),
 		dropped,
@@ -93,5 +96,6 @@ func (t *telemetry) log() {
 		malformed,
 		float64(malformed)/float64(elapsed),
 		aggregations,
+		observations,
 	)
 }

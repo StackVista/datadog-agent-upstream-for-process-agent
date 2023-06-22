@@ -34,7 +34,7 @@ int socket__http_filter(struct __sk_buff *skb) {
     http_transaction_t http;
     bpf_memset(&http, 0, sizeof(http));
 
-    if (!read_conn_tuple_skb(skb, &skb_info, &http.tup)) {
+    if (!read_conn_tuple_skb_tcp(skb, &skb_info, &http.tup)) {
         return 0;
     }
 
@@ -48,7 +48,7 @@ int socket__http_filter(struct __sk_buff *skb) {
     normalize_tuple(&http.tup);
 
     read_into_buffer_skb((char *)http.request_fragment, skb, &skb_info);
-    http_process(&http, &skb_info, NO_TAGS);
+    http_process(&http, &skb_info, skb, NO_TAGS);
 
     // check if we have a response status code, then attempt to read the response headers.
     if (http.response_status_code > 0)

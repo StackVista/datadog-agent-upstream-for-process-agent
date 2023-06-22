@@ -9,6 +9,7 @@
 package http
 
 import (
+	"errors"
 	"fmt"
 	"math"
 
@@ -175,6 +176,13 @@ func newEBPFProgram(c *config.Config, offsets []manager.ConstantEditor, sockFD *
 	return program, nil
 }
 
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 func (e *ebpfProgram) Init() error {
 	var undefinedProbes []manager.ProbeIdentificationPair
 
@@ -249,6 +257,16 @@ func (e *ebpfProgram) Init() error {
 		},
 		ConstantEditors:           e.offsets,
 		DefaultKprobeAttachMethod: kprobeAttachMethod,
+		VerifierOptions: ebpf.CollectionOptions{
+			Programs: ebpf.ProgramOptions{
+				LogLevel: ebpf.LogLevelStats | ebpf.LogLevelBranch,
+				// LogSize is the size of the log buffer given to the verifier. Give it a big enough (2 * 1024 * 1024)
+				// value so that all our programs fit. If the verifier ever outputs a `no space left on device` error,
+				// we'll need to increase this value.
+				LogSize:     16000000,
+				LogDisabled: false,
+			},
+		},
 	}
 
 	for _, s := range e.subprograms {
@@ -260,7 +278,25 @@ func (e *ebpfProgram) Init() error {
 
 	err := e.InitWithOptions(e.bytecode, options)
 	if err != nil {
+		var err2 *ebpf.VerifierError
+		if errors.As(err, &err2) {
+			_ = log.Error("Error verifying program: last 50 lines")
+			for _, l := range err2.Log[max(len(err2.Log)-50, 0):] {
+				_ = log.Error(l)
+			}
+		}
 		return err
+	}
+
+	programs, ok, _ := e.Manager.GetProgram(manager.ProbeIdentificationPair{
+		EBPFSection:  httpSocketFilter,
+		EBPFFuncName: "socket__http_filter",
+	})
+
+	if ok {
+		for _, p := range programs {
+			_ = log.Errorf("Statistics for http_filter ebpf probe %s", p.VerifierLog)
+		}
 	}
 
 	return nil

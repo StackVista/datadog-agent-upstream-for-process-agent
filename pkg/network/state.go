@@ -46,6 +46,7 @@ type State interface {
 		active []ConnectionStats,
 		dns dns.StatsByKeyByNameByType,
 		http map[http.Key]*http.RequestStats,
+		observations []http.TransactionObservation,
 	) Delta
 
 	// GetTelemetryDelta returns the telemetry delta since last time the given client requested telemetry data.
@@ -80,19 +81,21 @@ type State interface {
 // Delta represents a delta of network data compared to the last call to State.
 type Delta struct {
 	BufferedData
-	HTTP     map[http.Key]*http.RequestStats
-	DNSStats dns.StatsByKeyByNameByType
+	HTTP             map[http.Key]*http.RequestStats
+	HTTPObservations []http.TransactionObservation
+	DNSStats         dns.StatsByKeyByNameByType
 }
 
 type telemetry struct {
-	closedConnDropped     int64
-	connDropped           int64
-	statsUnderflows       int64
-	statsCookieCollisions int64
-	timeSyncCollisions    int64
-	dnsStatsDropped       int64
-	httpStatsDropped      int64
-	dnsPidCollisions      int64
+	closedConnDropped       int64
+	connDropped             int64
+	statsUnderflows         int64
+	statsCookieCollisions   int64
+	timeSyncCollisions      int64
+	dnsStatsDropped         int64
+	httpStatsDropped        int64
+	httpObservationsDropped int64
+	dnsPidCollisions        int64
 }
 
 const minClosedCapacity = 1024
@@ -105,9 +108,10 @@ type client struct {
 	closedConnections []ConnectionStats
 	stats             map[uint32]StatCounters
 	// maps by dns key the domain (string) to stats structure
-	dnsStats        dns.StatsByKeyByNameByType
-	httpStatsDelta  map[http.Key]*http.RequestStats
-	lastTelemetries map[ConnTelemetryType]int64
+	dnsStats              dns.StatsByKeyByNameByType
+	httpStatsDelta        map[http.Key]*http.RequestStats
+	httpObservationsDelta []http.TransactionObservation
+	lastTelemetries       map[ConnTelemetryType]int64
 }
 
 func (c *client) Reset(active map[uint32]*ConnectionStats) {
@@ -120,6 +124,7 @@ func (c *client) Reset(active map[uint32]*ConnectionStats) {
 	c.closedConnectionsKeys = make(map[uint32]int)
 	c.dnsStats = make(dns.StatsByKeyByNameByType)
 	c.httpStatsDelta = make(map[http.Key]*http.RequestStats)
+	c.httpObservationsDelta = make([]http.TransactionObservation, 0)
 
 	// XXX: we should change the way we clean this map once
 	// https://github.com/golang/go/issues/20135 is solved
@@ -144,23 +149,25 @@ type networkState struct {
 	latestTimeEpoch uint64
 
 	// Network state configuration
-	clientExpiry   time.Duration
-	maxClosedConns int
-	maxClientStats int
-	maxDNSStats    int
-	maxHTTPStats   int
+	clientExpiry        time.Duration
+	maxClosedConns      int
+	maxClientStats      int
+	maxDNSStats         int
+	maxHTTPStats        int
+	maxHTTPObservations int
 }
 
 // NewState creates a new network state
-func NewState(clientExpiry time.Duration, maxClosedConns, maxClientStats int, maxDNSStats int, maxHTTPStats int) State {
+func NewState(clientExpiry time.Duration, maxClosedConns, maxClientStats int, maxDNSStats int, maxHTTPStats int, maxHTTPObservations int) State {
 	return &networkState{
-		clients:        map[string]*client{},
-		telemetry:      telemetry{},
-		clientExpiry:   clientExpiry,
-		maxClosedConns: maxClosedConns,
-		maxClientStats: maxClientStats,
-		maxDNSStats:    maxDNSStats,
-		maxHTTPStats:   maxHTTPStats,
+		clients:             map[string]*client{},
+		telemetry:           telemetry{},
+		clientExpiry:        clientExpiry,
+		maxClosedConns:      maxClosedConns,
+		maxClientStats:      maxClientStats,
+		maxDNSStats:         maxDNSStats,
+		maxHTTPStats:        maxHTTPStats,
+		maxHTTPObservations: maxHTTPObservations,
 	}
 }
 
@@ -201,6 +208,7 @@ func (ns *networkState) GetDelta(
 	active []ConnectionStats,
 	dnsStats dns.StatsByKeyByNameByType,
 	httpStats map[http.Key]*http.RequestStats,
+	observations []http.TransactionObservation,
 ) Delta {
 	ns.Lock()
 	defer ns.Unlock()
@@ -224,14 +232,18 @@ func (ns *networkState) GetDelta(
 	if len(httpStats) > 0 {
 		ns.storeHTTPStats(httpStats)
 	}
+	if len(observations) > 0 {
+		ns.storeHTTPObservations(observations)
+	}
 
 	return Delta{
 		BufferedData: BufferedData{
 			Conns:  conns,
 			buffer: clientBuffer,
 		},
-		HTTP:     client.httpStatsDelta,
-		DNSStats: client.dnsStats,
+		HTTP:             client.httpStatsDelta,
+		HTTPObservations: client.httpObservationsDelta,
+		DNSStats:         client.dnsStats,
 	}
 }
 
@@ -276,19 +288,20 @@ func (ns *networkState) getTelemetryDelta(id string, telemetry map[ConnTelemetry
 
 func (ns *networkState) logTelemetry() {
 	delta := telemetry{
-		closedConnDropped:     ns.telemetry.closedConnDropped - ns.lastTelemetry.closedConnDropped,
-		connDropped:           ns.telemetry.connDropped - ns.lastTelemetry.connDropped,
-		statsUnderflows:       ns.telemetry.statsUnderflows - ns.lastTelemetry.statsUnderflows,
-		statsCookieCollisions: ns.telemetry.statsCookieCollisions - ns.lastTelemetry.statsCookieCollisions,
-		timeSyncCollisions:    ns.telemetry.timeSyncCollisions - ns.lastTelemetry.timeSyncCollisions,
-		dnsStatsDropped:       ns.telemetry.dnsStatsDropped - ns.lastTelemetry.dnsStatsDropped,
-		httpStatsDropped:      ns.telemetry.httpStatsDropped - ns.lastTelemetry.httpStatsDropped,
-		dnsPidCollisions:      ns.telemetry.dnsPidCollisions - ns.lastTelemetry.dnsPidCollisions,
+		closedConnDropped:       ns.telemetry.closedConnDropped - ns.lastTelemetry.closedConnDropped,
+		connDropped:             ns.telemetry.connDropped - ns.lastTelemetry.connDropped,
+		statsUnderflows:         ns.telemetry.statsUnderflows - ns.lastTelemetry.statsUnderflows,
+		statsCookieCollisions:   ns.telemetry.statsCookieCollisions - ns.lastTelemetry.statsCookieCollisions,
+		timeSyncCollisions:      ns.telemetry.timeSyncCollisions - ns.lastTelemetry.timeSyncCollisions,
+		dnsStatsDropped:         ns.telemetry.dnsStatsDropped - ns.lastTelemetry.dnsStatsDropped,
+		httpStatsDropped:        ns.telemetry.httpStatsDropped - ns.lastTelemetry.httpStatsDropped,
+		httpObservationsDropped: ns.telemetry.httpObservationsDropped - ns.lastTelemetry.httpObservationsDropped,
+		dnsPidCollisions:        ns.telemetry.dnsPidCollisions - ns.lastTelemetry.dnsPidCollisions,
 	}
 
 	// Flush log line if any metric is non-zero
 	if delta.statsUnderflows > 0 || delta.statsCookieCollisions > 0 || delta.closedConnDropped > 0 || delta.connDropped > 0 || delta.timeSyncCollisions > 0 ||
-		delta.dnsStatsDropped > 0 || delta.httpStatsDropped > 0 || delta.dnsPidCollisions > 0 {
+		delta.dnsStatsDropped > 0 || delta.httpStatsDropped > 0 || delta.httpObservationsDropped > 0 || delta.dnsPidCollisions > 0 {
 		s := "state telemetry: "
 		s += " [%d stats stats_underflows]"
 		s += " [%d stats cookie collisions]"
@@ -296,6 +309,7 @@ func (ns *networkState) logTelemetry() {
 		s += " [%d closed connections dropped]"
 		s += " [%d dns stats dropped]"
 		s += " [%d HTTP stats dropped]"
+		s += " [%d HTTP observations dropped]"
 		s += " [%d DNS pid collisions]"
 		s += " [%d time sync collisions]"
 		log.Warnf(s,
@@ -305,6 +319,7 @@ func (ns *networkState) logTelemetry() {
 			delta.closedConnDropped,
 			delta.dnsStatsDropped,
 			delta.httpStatsDropped,
+			delta.httpObservationsDropped,
 			delta.dnsPidCollisions,
 			delta.timeSyncCollisions)
 	}
@@ -474,6 +489,31 @@ func (ns *networkState) storeHTTPStats(allStats map[http.Key]*http.RequestStats)
 	}
 }
 
+// storeHTTPStats stores the latest HTTP stats for all clients
+func (ns *networkState) storeHTTPObservations(observations []http.TransactionObservation) {
+	if len(ns.clients) == 1 {
+		for _, client := range ns.clients {
+			if len(client.httpObservationsDelta) == 0 {
+				// optimization for the common case:
+				// if there is only one client and no previous state, no memory allocation is needed
+				client.httpObservationsDelta = observations
+				return
+			}
+		}
+	}
+
+	for _, observation := range observations {
+		for _, client := range ns.clients {
+			if len(client.httpObservationsDelta) >= ns.maxHTTPObservations {
+				ns.telemetry.httpObservationsDropped++
+				continue
+			}
+
+			client.httpObservationsDelta = append(client.httpObservationsDelta, observation)
+		}
+	}
+}
+
 func (ns *networkState) getClient(clientID string) *client {
 	if c, ok := ns.clients[clientID]; ok {
 		return c
@@ -626,14 +666,15 @@ func (ns *networkState) GetStats() map[string]interface{} {
 	return map[string]interface{}{
 		"clients": clientInfo,
 		"telemetry": map[string]int64{
-			"stats_underflows":        ns.telemetry.statsUnderflows,
-			"stats_cookie_collisions": ns.telemetry.statsCookieCollisions,
-			"closed_conn_dropped":     ns.telemetry.closedConnDropped,
-			"conn_dropped":            ns.telemetry.connDropped,
-			"time_sync_collisions":    ns.telemetry.timeSyncCollisions,
-			"dns_stats_dropped":       ns.telemetry.dnsStatsDropped,
-			"http_stats_dropped":      ns.telemetry.httpStatsDropped,
-			"dns_pid_collisions":      ns.telemetry.dnsPidCollisions,
+			"stats_underflows":          ns.telemetry.statsUnderflows,
+			"stats_cookie_collisions":   ns.telemetry.statsCookieCollisions,
+			"closed_conn_dropped":       ns.telemetry.closedConnDropped,
+			"conn_dropped":              ns.telemetry.connDropped,
+			"time_sync_collisions":      ns.telemetry.timeSyncCollisions,
+			"dns_stats_dropped":         ns.telemetry.dnsStatsDropped,
+			"http_stats_dropped":        ns.telemetry.httpStatsDropped,
+			"http_observations_dropped": ns.telemetry.httpObservationsDropped,
+			"dns_pid_collisions":        ns.telemetry.dnsPidCollisions,
 		},
 		"current_time":       time.Now().Unix(),
 		"latest_bpf_time_ns": ns.latestTimeEpoch,

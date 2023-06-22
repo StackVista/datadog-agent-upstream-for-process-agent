@@ -192,10 +192,12 @@ def test_flavor(
             continue
 
         with ctx.cd(module.full_path()):
+            command = cmd.format(
+                packages=' '.join(module.targets), **args
+            )
+            print(f"Running: {command}")
             res = ctx.run(
-                cmd.format(
-                    packages=' '.join(f"{t}/..." if not t.endswith("/...") else t for t in module.targets), **args
-                ),
+                command,
                 env=env,
                 out_stream=test_profiler,
                 warn=True,
@@ -327,6 +329,7 @@ def test(
     rerun_fails=None,
     go_mod="mod",
     junit_tar="",
+    run="",
 ):
     """
     Run all the tools and tests on the given module and targets.
@@ -427,7 +430,7 @@ def test(
         os.remove(save_result_json)
 
     cmd = 'gotestsum {junit_file_flag} {json_flag} --format pkgname {rerun_fails} --packages="{packages}" -- {verbose} -mod={go_mod} -vet=off -timeout {timeout}s -tags "{go_build_tags}" -gcflags="{gcflags}" '
-    cmd += '-ldflags="{ldflags}" {build_cpus} {race_opt} -short {covermode_opt} {coverprofile} {nocache}'
+    cmd += '-ldflags="{ldflags}" {build_cpus} {race_opt} -short {covermode_opt} {coverprofile} {nocache} {run}'
     args = {
         "go_mod": go_mod,
         "gcflags": gcflags,
@@ -442,6 +445,7 @@ def test(
         # Used to print failed tests at the end of the go test command
         "json_flag": f'--jsonfile "{GO_TEST_RESULT_TMP_JSON}" ',
         "rerun_fails": f"--rerun-fails={rerun_fails}" if rerun_fails else "",
+        "run": f"-run={run}" if run else '',
     }
 
     # Test

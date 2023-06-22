@@ -1,5 +1,7 @@
 #include "kconfig.h"
 
+#define DATA_BUFFER_TYPE_SKB 1
+
 #include "bpf_tracing.h"
 #include "tracer.h"
 #include "bpf_telemetry.h"
@@ -29,32 +31,29 @@ int socket__protocol_dispatcher(struct __sk_buff *skb) {
 SEC("socket/http_filter")
 int socket__http_filter(struct __sk_buff* skb) {
     skb_info_t skb_info;
-    http_transaction_t http;
-    bpf_memset(&http, 0, sizeof(http));
 
-    if (!read_conn_tuple_skb(skb, &skb_info, &http.tup)) {
+    // We should not use a per-cpu to overflow out of the stack: https://lore.kernel.org/bpf/CAMy7=ZWPc279vnKK6L1fssp5h7cb6cqS9_EuMNbfVBg_ixmTrQ@mail.gmail.com/T/
+    http_classification_t http_class;
+    bpf_memset(&http_class, 0, sizeof(http_classification_t));
+    char tracing_id[HTTP_TRACING_ID_SIZE];
+    bpf_memset(&tracing_id, 0, HTTP_TRACING_ID_SIZE);
+
+    if (!read_conn_tuple_skb_tcp(skb, &skb_info, &http_class.tup)) {
         return 0;
     }
 
-    if (!http_allow_packet(&http, skb, &skb_info)) {
+    if (!http_allow_packet(&http_class, skb, &skb_info)) {
         return 0;
     }
 
     // src_port represents the source port number *before* normalization
     // for more context please refer to http-types.h comment on `owned_by_src_port` field
-    http.owned_by_src_port = http.tup.sport;
-    normalize_tuple(&http.tup);
+    http_class.owned_by_src_port = http_class.tup.sport;
+    normalize_tuple(&http_class.tup);
 
-    read_into_buffer_skb((char *)http.request_fragment, skb, &skb_info);
-    http_process(&http, &skb_info, NO_TAGS);
+    http_classify_skb(&http_class, &skb_info, skb);
 
-    // check if we have a response status code, then attempt to read the response headers.
-    if (http.response_status_code > 0)
-    {
-        if (!http_read_response_headers(&http, skb, &skb_info)) {
-            return 0;
-        }
-    }
+    http_process(&http_class, &skb_info, NO_TAGS);
 
     return 0;
 }

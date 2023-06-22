@@ -286,3 +286,27 @@ func (r *RequestStats) HalfAllCounts() {
 		}
 	}
 }
+
+type TraceIdType uint8
+
+const (
+	TraceIdNone TraceIdType = iota
+	TraceIdRequest
+	TraceIdResponse
+	TraceIdBoth
+	TraceIdAmbiguous
+)
+
+type TransactionTraceId struct {
+	Type TraceIdType
+	Id   string
+}
+
+type TransactionObservation struct {
+	// This field holds the value (in nanoseconds) of the HTTP request.
+	Latency float64
+	Method  Method
+	Status  uint16
+	Key     Key
+	TraceId TransactionTraceId
+}
