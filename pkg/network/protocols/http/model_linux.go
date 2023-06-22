@@ -126,7 +126,7 @@ func (tx *ebpfHttpTx) String() string {
 	return output.String()
 }
 
-func parseRequestIdHeader(reqId [40]int8) string {
+func parseRequestIdHeader(reqId [40]byte) string {
 	var reqIdArr []byte = make([]byte, 40)
 	for i, v := range reqId {
 		reqIdArr[i] = byte(v)
