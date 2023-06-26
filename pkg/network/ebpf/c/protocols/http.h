@@ -126,6 +126,8 @@ done:
   }
 }
 
+static const __u8 matched_newline_position = 1;
+static const __u8 carriage_return = '\r';
 /*
 Parse the content of the current read buffer.
 */
@@ -160,9 +162,19 @@ static __always_inline void http_read_headers_user(char* data, __u64 length, cha
 
         Using quirky logic here, see below explanation why boolean logic is bad in loops. Also, by adding too many conditionals
         in the loop will cause the loop to not unroll.
+        Stopping conditions:
+        - We found the HEADER
+        - We are at the limit of what we want to read.
+        - We are at the end of the header section. This is determined by:
+            -- The match_position is 1, meaning we read a \n. And the current char is \r. This signifies the \r\n\r\n at the end of header section unambiguously.
       */
       __u8 match_done_unequal_boolean = __bpf_no_branch_cmp_unequal(match_position, HTTP_TRACING_ID_KEY_SIZE);
-      __u8 match_and_offset_unequal_boolean = match_done_unequal_boolean & offset_done_unequal_boolean;
+
+      __u8 match_position_one_unequal_boolean = __bpf_no_branch_cmp_unequal(match_position, matched_newline_position);
+      __u8 match_position_carriage_return_unequal_boolean = __bpf_no_branch_cmp_unequal(read_buffer[offset], carriage_return);
+      __u8 end_of_header_unequal_boolean = match_position_one_unequal_boolean | match_position_carriage_return_unequal_boolean;
+
+      __u8 match_and_offset_unequal_boolean = match_done_unequal_boolean & offset_done_unequal_boolean & end_of_header_unequal_boolean;
 
       if (__bpf_no_branch_neg(match_and_offset_unequal_boolean)) {
         goto done;
