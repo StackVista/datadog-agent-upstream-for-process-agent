@@ -127,11 +127,7 @@ func (tx *ebpfHttpTx) String() string {
 }
 
 func parseRequestIdHeader(reqId [40]byte) string {
-	var reqIdArr []byte = make([]byte, 40)
-	for i, v := range reqId {
-		reqIdArr[i] = byte(v)
-	}
-	reqIdString := string(reqIdArr)
+	reqIdString := string(reqId[:])
 	// Make sure we observed the newline of the request id
 	parts := strings.Split(reqIdString, "\r")
 	if len(parts) == 1 {
