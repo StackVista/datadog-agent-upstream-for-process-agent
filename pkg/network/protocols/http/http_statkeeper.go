@@ -173,8 +173,7 @@ func (h *httpStatKeeper) add(tx httpTX) {
 
 		h.telemetry.observations.Add(1)
 		h.observations = append(h.observations, TransactionObservation{
-			Latency: latency,
-			Method:  tx.Method(),
+			LatencyNs: latency,
 			Status:  tx.StatusCode(),
 			Key:     key,
 			TraceId: traceID,

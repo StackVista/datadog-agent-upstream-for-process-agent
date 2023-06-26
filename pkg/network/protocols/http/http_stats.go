@@ -304,9 +304,8 @@ type TransactionTraceId struct {
 
 type TransactionObservation struct {
 	// This field holds the value (in nanoseconds) of the HTTP request.
-	Latency float64
-	Method  Method
-	Status  uint16
-	Key     Key
-	TraceId TransactionTraceId
+	LatencyNs float64
+	Status    uint16
+	Key       Key
+	TraceId   TransactionTraceId
 }
