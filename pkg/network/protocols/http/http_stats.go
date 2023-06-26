@@ -309,3 +309,13 @@ type TransactionObservation struct {
 	Key       Key
 	TraceId   TransactionTraceId
 }
+
+type HeaderParseResult = uint8
+
+const (
+	HeaderNoParse HeaderParseResult = 0x0
+	HeaderParseFound HeaderParseResult = 0x1
+	HeaderParseNotFound HeaderParseResult = 0x2
+	HeaderParseLimitReached HeaderParseResult = 0x3
+	HeaderParsePacketEndReached HeaderParseResult = 0x4
+)

@@ -49,6 +49,14 @@ typedef enum
     HTTP_PATCH
 } http_method_t;
 
+typedef enum {
+  NO_HEADER_PARSE,
+  HEADER_PARSE_FOUND,
+  HEADER_PARSE_NOT_FOUND,
+  HEADER_PARSE_LIMIT_REACHED,
+  HEADER_PARSE_PACKET_END_REACHED
+} header_parse_result_t;
+
 // HTTP transaction information associated to a certain socket (tuple_t)
 typedef struct {
     conn_tuple_t tup;
@@ -71,8 +79,11 @@ typedef struct {
     __u64 tags;
 
     // used as a correlation id to correlate different observations of the same connection.
-    char request_tracing_id[HTTP_TRACING_ID_SIZE] __attribute__ ((aligned (8)));;
-    char response_tracing_id[HTTP_TRACING_ID_SIZE] __attribute__ ((aligned (8)));;
+    char request_tracing_id[HTTP_TRACING_ID_SIZE] __attribute__ ((aligned (8)));
+    char response_tracing_id[HTTP_TRACING_ID_SIZE] __attribute__ ((aligned (8)));
+
+    __u8 request_parse_result;
+    __u8 response_parse_result;
 } http_transaction_t;
 
 /**
@@ -88,7 +99,8 @@ typedef struct {
     http_packet_t packet_type;
     http_method_t method;
 
-    char tracing_id[HTTP_TRACING_ID_SIZE] __attribute__ ((aligned (8)));;
+    char tracing_id[HTTP_TRACING_ID_SIZE] __attribute__ ((aligned (8)));
+    header_parse_result_t parse_result;
 } http_classification_t;
 
 // OpenSSL types

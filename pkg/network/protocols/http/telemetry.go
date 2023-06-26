@@ -28,6 +28,9 @@ type telemetry struct {
 	malformed    *libtelemetry.Metric // this happens when the request doesn't have the expected format
 	aggregations *libtelemetry.Metric
 	observations *libtelemetry.Metric
+
+	requestFound, requestNotFound, requestLimitReached, requestPacketEnd     *libtelemetry.Metric
+	responseFound, responseNotFound, responseLimitReached, responsePacketEnd *libtelemetry.Metric
 }
 
 func newTelemetry() (*telemetry, error) {
@@ -52,6 +55,15 @@ func newTelemetry() (*telemetry, error) {
 		dropped:   metricGroup.NewMetric("dropped", libtelemetry.OptStatsd),
 		rejected:  metricGroup.NewMetric("rejected", libtelemetry.OptStatsd),
 		malformed: metricGroup.NewMetric("malformed", libtelemetry.OptStatsd),
+
+		requestFound:         metricGroup.NewMetric("requestFound"),
+		requestNotFound:      metricGroup.NewMetric("requestNotFound"),
+		requestLimitReached:  metricGroup.NewMetric("requestLimitReached"),
+		requestPacketEnd:     metricGroup.NewMetric("requestPacketEnd"),
+		responseFound:        metricGroup.NewMetric("responseFound"),
+		responseNotFound:     metricGroup.NewMetric("responseNotFound"),
+		responseLimitReached: metricGroup.NewMetric("responseLimitReached"),
+		responsePacketEnd:    metricGroup.NewMetric("responsePacketEnd"),
 	}
 
 	return t, nil
@@ -85,7 +97,7 @@ func (t *telemetry) log() {
 	observations := t.observations.Delta()
 	elapsed := now - then
 
-	log.Debugf(
+	log.Infof(
 		"http stats summary: requests_processed=%d(%.2f/s) requests_dropped=%d(%.2f/s) requests_rejected=%d(%.2f/s) requests_malformed=%d(%.2f/s) aggregations=%d observations=%d",
 		totalRequests,
 		float64(totalRequests)/float64(elapsed),
@@ -98,4 +110,11 @@ func (t *telemetry) log() {
 		aggregations,
 		observations,
 	)
+
+	if t.observations.Get() > 0 {
+		log.Infof("request observations summary: found=%d notFound=%d limitReached=%d packetEnd=%d",
+			t.requestFound.Delta(), t.requestNotFound.Delta(), t.requestLimitReached.Delta(), t.requestPacketEnd.Delta())
+		log.Infof("response observations summary: found=%d notFound=%d limitReached=%d packetEnd=%d",
+			t.responseFound.Delta(), t.responseNotFound.Delta(), t.responseLimitReached.Delta(), t.responsePacketEnd.Delta())
+	}
 }

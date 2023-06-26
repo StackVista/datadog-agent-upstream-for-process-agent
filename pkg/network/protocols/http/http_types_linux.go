@@ -36,6 +36,8 @@ type ebpfHttpTx struct {
 	Tags                 uint64
 	Request_tracing_id   [40]byte
 	Response_tracing_id  [40]byte
+	Request_parse_result uint8
+	Response_parse_result uint8
 }
 
 type libPath struct {

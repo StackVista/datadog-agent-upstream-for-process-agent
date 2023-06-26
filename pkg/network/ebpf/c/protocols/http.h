@@ -36,10 +36,13 @@ static __always_inline void http_begin_response(http_transaction_t *http, const 
     log_debug("http_begin_response: htx=%llx status=%d\n", http, status_code);
 }
 
+static const __u8 matched_newline_position = 1;
+static const __u8 carriage_return = '\r';
+
 /*
 Parse the content of the current read buffer.
 */
-static __always_inline void http_read_headers_skb(struct __sk_buff* skb, skb_info_t *skb_info, char *output_buffer) {
+static __always_inline void http_read_headers_skb(struct __sk_buff* skb, skb_info_t *skb_info, char *output_buffer, header_parse_result_t *parse_result) {
   // loading in chunks, because bpf_skb_load_bytes does a lot of checks, such that per-byte reading exceeds the 1m instruction limit.
   char read_buffer[HTTP_HEADER_READ_BUFFER_SIZE];
   bpf_memset((char*)read_buffer, 0, HTTP_HEADER_READ_BUFFER_SIZE);
@@ -70,9 +73,19 @@ static __always_inline void http_read_headers_skb(struct __sk_buff* skb, skb_inf
 
         Using quirky logic here, see below explanation why boolean logic is bad in loops. Also, by adding too many conditionals
         in the loop will cause the loop to not unroll.
+        Stopping conditions:
+        - We found the HEADER
+        - We are at the limit of what we want to read.
+        - We are at the end of the header section. This is determined by:
+            -- The match_position is 1, meaning we read a \n. And the current char is \r. This signifies the \r\n\r\n at the end of header section unambiguously.
       */
       __u8 match_done_unequal_boolean = __bpf_no_branch_cmp_unequal(match_position, HTTP_TRACING_ID_KEY_SIZE);
-      __u8 match_and_offset_unequal_boolean = match_done_unequal_boolean & offset_done_unequal_boolean;
+
+      __u8 match_position_one_unequal_boolean = __bpf_no_branch_cmp_unequal(match_position, matched_newline_position);
+      __u8 match_position_carriage_return_unequal_boolean = __bpf_no_branch_cmp_unequal(read_buffer[offset], carriage_return);
+      __u8 end_of_header_unequal_boolean = match_position_one_unequal_boolean | match_position_carriage_return_unequal_boolean;
+
+      __u8 match_and_offset_unequal_boolean = match_done_unequal_boolean & offset_done_unequal_boolean & end_of_header_unequal_boolean;
 
       if (__bpf_no_branch_neg(match_and_offset_unequal_boolean)) {
         goto done;
@@ -123,15 +136,28 @@ done:
     }
     bpf_skb_load_bytes(skb, skb_offset, output_buffer, HTTP_TRACING_ID_SIZE);
     output_buffer[HTTP_TRACING_ID_SIZE - 1] = '\0';
+
+    *parse_result = HEADER_PARSE_FOUND;
+  } else {
+    skb_offset -= skb_info->data_off;
+
+    if (skb_offset < skb_info->data_length) {
+      // Not parsed till the end?
+      if (skb_offset >= HTTP_HEADER_READ_LIMIT) {
+        *parse_result = HEADER_PARSE_LIMIT_REACHED;
+      } else {
+        *parse_result = HEADER_PARSE_NOT_FOUND;
+      }
+    } else {
+      *parse_result = HEADER_PARSE_PACKET_END_REACHED;
+    }
   }
 }
 
-static const __u8 matched_newline_position = 1;
-static const __u8 carriage_return = '\r';
 /*
 Parse the content of the current read buffer.
 */
-static __always_inline void http_read_headers_user(char* data, __u64 length, char *output_buffer) {
+static __always_inline void http_read_headers_user(char* data, __u64 length, char *output_buffer, header_parse_result_t *parse_result) {
   // loading in chunks, because bpf_skb_load_bytes does a lot of checks, such that per-byte reading exceeds the 1m instruction limit.
   char read_buffer[HTTP_HEADER_READ_BUFFER_SIZE];
   bpf_memset((char*)read_buffer, 0, HTTP_HEADER_READ_BUFFER_SIZE);
@@ -227,6 +253,19 @@ done:
     bpf_probe_read_user(output_buffer, HTTP_TRACING_ID_SIZE, &data[skb_offset]);
 
     output_buffer[HTTP_TRACING_ID_SIZE - 1] = '\0';
+
+    *parse_result = HEADER_PARSE_FOUND;
+  } else {
+    if (skb_offset < length) {
+      // Not parsed till the end?
+      if (skb_offset >= HTTP_HEADER_READ_LIMIT) {
+        *parse_result = HEADER_PARSE_LIMIT_REACHED;
+      } else {
+        *parse_result = HEADER_PARSE_NOT_FOUND;
+      }
+    } else {
+      *parse_result = HEADER_PARSE_PACKET_END_REACHED;
+    }
   }
 }
 
@@ -413,7 +452,7 @@ static __always_inline void http_classify_skb(http_classification_t *http_class,
 
   // We need an optimized version here to determine whether we have encountered a req or response.
   if (http_is_req_resp(buffer)) {
-    http_read_headers_skb(skb, skb_info, (char*)http_class->tracing_id);
+    http_read_headers_skb(skb, skb_info, (char*)http_class->tracing_id, &http_class->parse_result);
   }
 
   http_parse_data(buffer, &http_class->packet_type, &http_class->method);
@@ -425,7 +464,7 @@ static __always_inline void http_classify_user(http_classification_t *http_class
 
   // We need an optimized version here to determine whether we have encountered a req or response.
   if (http_is_req_resp(buffer)) {
-    http_read_headers_user(data, len, (char*)http_class->tracing_id);
+    http_read_headers_user(data, len, (char*)http_class->tracing_id, &http_class->parse_result);
   }
 
   http_parse_data(buffer, &http_class->packet_type, &http_class->method);
@@ -449,10 +488,12 @@ static __always_inline int http_process(http_classification_t *http_class, skb_i
         http_begin_request(http, http_class->method, buffer);
         http_update_seen_before(http, skb_info);
         bpf_memcpy(&http->request_tracing_id, &http_class->tracing_id, HTTP_TRACING_ID_SIZE);
+        http->request_parse_result = http_class->parse_result;
     } else if (http_class->packet_type == HTTP_RESPONSE) {
         http_begin_response(http, buffer);
         http_update_seen_before(http, skb_info);
         bpf_memcpy(&http->response_tracing_id, &http_class->tracing_id, HTTP_TRACING_ID_SIZE);
+        http->response_parse_result = http_class->parse_result;
     }
 
     http->tags |= tags;
