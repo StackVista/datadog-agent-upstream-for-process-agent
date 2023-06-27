@@ -259,7 +259,7 @@ func (e *ebpfProgram) Init() error {
 		DefaultKprobeAttachMethod: kprobeAttachMethod,
 		VerifierOptions: ebpf.CollectionOptions{
 			Programs: ebpf.ProgramOptions{
-				LogLevel: ebpf.LogLevelStats | ebpf.LogLevelBranch,
+				LogLevel: ebpf.LogLevelStats, // | ebpf.LogLevelBranch, Branch level logging will blow up the log size, best to only enabled when debugging.
 				// LogSize is the size of the log buffer given to the verifier. Give it a big enough (2 * 1024 * 1024)
 				// value so that all our programs fit. If the verifier ever outputs a `no space left on device` error,
 				// we'll need to increase this value.
