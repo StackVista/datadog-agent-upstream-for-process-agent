@@ -32,7 +32,6 @@ SEC("socket/http_filter")
 int socket__http_filter(struct __sk_buff* skb) {
     skb_info_t skb_info;
 
-    // We should not use a per-cpu to overflow out of the stack: https://lore.kernel.org/bpf/CAMy7=ZWPc279vnKK6L1fssp5h7cb6cqS9_EuMNbfVBg_ixmTrQ@mail.gmail.com/T/
     http_classification_t http_class;
     bpf_memset(&http_class, 0, sizeof(http_classification_t));
     char tracing_id[HTTP_TRACING_ID_SIZE];
