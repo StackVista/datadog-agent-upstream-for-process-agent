@@ -75,6 +75,7 @@ func NewTracer(config *config.Config) (*Tracer, error) {
 		config.MaxConnectionsStateBuffered,
 		config.MaxDNSStatsBuffered,
 		config.MaxHTTPStatsBuffered,
+		config.MaxHTTPObservationsBuffered,
 	)
 
 	reverseDNS := dns.NewNullReverseDNS()

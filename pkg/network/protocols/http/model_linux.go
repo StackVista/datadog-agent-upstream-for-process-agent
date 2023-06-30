@@ -120,8 +120,42 @@ func (tx *ebpfHttpTx) String() string {
 	output.WriteString("Method: '" + Method(tx.Request_method).String() + "', ")
 	output.WriteString("Tags: '0x" + strconv.FormatUint(tx.Tags, 16) + "', ")
 	output.WriteString("Fragment: '" + hex.EncodeToString(tx.Request_fragment[:]) + "', ")
+	output.WriteString("Request Tracing ID: '" + parseRequestIdHeader(tx.Request_tracing_id) + "', ")
+	output.WriteString("Response Tracing ID: '" + parseRequestIdHeader(tx.Response_tracing_id) + "', ")
 	output.WriteString("}")
 	return output.String()
+}
+
+func parseRequestIdHeader(reqId [40]byte) string {
+	reqIdString := string(reqId[:])
+	// Make sure we observed the newline of the request id
+	parts := strings.Split(reqIdString, "\r")
+	if len(parts) == 1 {
+		return ""
+	}
+
+	// Trim whitespace
+	return strings.TrimSpace(parts[0])
+}
+
+// RequestTracingID returns the request tracing id for this HTTP transaction
+// [sts]
+func (tx *ebpfHttpTx) RequestTracingID() string {
+	return parseRequestIdHeader(tx.Request_tracing_id)
+}
+
+// ResponseTracingID returns the request tracing id for this HTTP transaction
+// [sts]
+func (tx *ebpfHttpTx) ResponseTracingID() string {
+	return parseRequestIdHeader(tx.Response_tracing_id)
+}
+
+func (tx *ebpfHttpTx) RequestParseResult() HeaderParseResult {
+	return tx.Request_parse_result
+}
+
+func (tx *ebpfHttpTx) ResponseParseResult() HeaderParseResult {
+	return tx.Response_parse_result
 }
 
 // below is copied from pkg/trace/stats/statsraw.go

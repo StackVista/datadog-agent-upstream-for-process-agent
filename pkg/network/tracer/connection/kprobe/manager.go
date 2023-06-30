@@ -93,8 +93,9 @@ func newManager(closedHandler *ebpf.PerfHandler, runtimeTracer bool) *manager.Ma
 			{Name: string(probes.DoSendfileArgsMap)},
 			{Name: string(probes.TcpSendMsgArgsMap)},
 			{Name: string(probes.IpMakeSkbArgsMap)},
-			{Name: string(probes.MapErrTelemetryMap)},
-			{Name: string(probes.HelperErrTelemetryMap)},
+			// [STS] Disabling ebpf stats due to instruction count.
+			//{Name: string(probes.MapErrTelemetryMap)},
+			//{Name: string(probes.HelperErrTelemetryMap)},
 			{Name: string(probes.TcpRecvMsgArgsMap)},
 			{Name: string(probes.ClassificationProgsMap)},
 		},

@@ -11,6 +11,7 @@ package http
 import (
 	"bytes"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"math/rand"
 	"net"
@@ -29,6 +30,7 @@ import (
 	netlink "github.com/DataDog/datadog-agent/pkg/network/netlink/testutil"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http/testutil"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
+	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
 
 const (
@@ -76,7 +78,7 @@ func TestHTTPMonitorCaptureRequestMultipleTimes(t *testing.T) {
 
 	occurrences := 0
 	require.Eventually(t, func() bool {
-		stats := monitor.GetHTTPStats()
+		stats, _ := monitor.GetHTTPStats()
 		occurrences += countRequestOccurrences(stats, req)
 		return occurrences == expectedOccurrences
 	}, time.Second*3, time.Millisecond*100, "Expected to find a request %d times, instead captured %d", expectedOccurrences, occurrences)
@@ -102,7 +104,7 @@ func TestHTTPMonitorLoadWithIncompleteBuffers(t *testing.T) {
 	require.NoError(t, monitor.Start())
 	defer monitor.Stop()
 
-	abortedRequestFn := requestGenerator(t, fmt.Sprintf("%s/ignore", slowServerAddr), emptyBody)
+	abortedRequestFn := requestGenerator(t, fmt.Sprintf("%s/ignore", slowServerAddr), "", emptyBody)
 	wg := sync.WaitGroup{}
 	abortedRequests := make(chan *nethttp.Request, 100)
 	for i := 0; i < 100; i++ {
@@ -113,7 +115,7 @@ func TestHTTPMonitorLoadWithIncompleteBuffers(t *testing.T) {
 			abortedRequests <- req
 		}()
 	}
-	fastReq := requestGenerator(t, fastServerAddr, emptyBody)()
+	fastReq := requestGenerator(t, fastServerAddr, "", emptyBody)()
 	wg.Wait()
 	close(abortedRequests)
 	slowSrvDoneFn()
@@ -125,7 +127,7 @@ func TestHTTPMonitorLoadWithIncompleteBuffers(t *testing.T) {
 	// then we are using a variable to check if "we ever found it" among the iterations.
 	for i := 0; i < 10; i++ {
 		time.Sleep(10 * time.Millisecond)
-		stats := monitor.GetHTTPStats()
+		stats, _ := monitor.GetHTTPStats()
 		for req := range abortedRequests {
 			requestNotIncluded(t, stats, req)
 		}
@@ -187,13 +189,12 @@ func TestHTTPMonitorIntegrationWithResponseBody(t *testing.T) {
 			require.NoError(t, monitor.Start())
 			defer monitor.Stop()
 
-			requestFn := requestGenerator(t, targetAddr, bytes.Repeat([]byte("a"), tt.requestBodySize))
+			requestFn := requestGenerator(t, targetAddr, "", bytes.Repeat([]byte("a"), tt.requestBodySize))
 			var requests []*nethttp.Request
 			for i := 0; i < 100; i++ {
 				requests = append(requests, requestFn())
 			}
 			srvDoneFn()
-
 			assertAllRequestsExists(t, monitor, requests)
 		})
 	}
@@ -252,12 +253,12 @@ func TestHTTPMonitorIntegrationSlowResponse(t *testing.T) {
 			defer monitor.Stop()
 
 			// Perform a number of random requests
-			req := requestGenerator(t, targetAddr, emptyBody)()
+			req := requestGenerator(t, targetAddr, "", emptyBody)()
 			srvDoneFn()
 
 			// Ensure all captured transactions get sent to user-space
 			time.Sleep(10 * time.Millisecond)
-			stats := monitor.GetHTTPStats()
+			stats, _ := monitor.GetHTTPStats()
 
 			if tt.shouldCapture {
 				includesRequest(t, stats, req)
@@ -286,7 +287,102 @@ func TestHTTPMonitorIntegration(t *testing.T) {
 	})
 }
 
+func TestHTTPMonitorRequestId(t *testing.T) {
+	skipTestIfKernelNotSupported(t)
+
+	targetAddr := "localhost:8080"
+	serverAddr := "localhost:8080"
+
+	t.Run("with keep-alives", func(t *testing.T) {
+		testHTTPMonitor(t, targetAddr, serverAddr, 1, testutil.Options{
+			EnableHttpTracing: true,
+			RequestTraceId:    "random",
+			EnableKeepAlives:  true,
+		})
+	})
+	t.Run("without keep-alives", func(t *testing.T) {
+		testHTTPMonitor(t, targetAddr, serverAddr, 1, testutil.Options{
+			EnableHttpTracing: true,
+			RequestTraceId:    "random",
+			EnableKeepAlives:  false,
+		})
+	})
+}
+
+func TestHTTPMonitorResponseId(t *testing.T) {
+	skipTestIfKernelNotSupported(t)
+	targetAddr := "localhost:8080"
+	serverAddr := "localhost:8080"
+	traceId := "672aef67-566f-4206-8da1-d8c11c80585c"
+
+	monitor, _ := runHTTPMonitor(t, targetAddr, serverAddr, 1, testutil.Options{
+		EnableHttpTracing: true,
+		RequestTraceId:    "",
+		ResponseTraceId:   traceId,
+		EnableKeepAlives:  false,
+	})
+	defer monitor.Stop()
+
+	stats, observations := monitor.GetHTTPStats()
+	require.Equal(t, 0, len(stats))
+	require.Equal(t, 1, len(observations))
+
+	require.Equal(t, TransactionTraceId{
+		Type: TraceIdResponse,
+		Id:   traceId,
+	}, observations[0].TraceId)
+}
+
+func TestHTTPMonitorBothId(t *testing.T) {
+	skipTestIfKernelNotSupported(t)
+	targetAddr := "localhost:8080"
+	serverAddr := "localhost:8080"
+	traceId := "672aef67-566f-4206-8da1-d8c11c80585c"
+
+	monitor, _ := runHTTPMonitor(t, targetAddr, serverAddr, 1, testutil.Options{
+		EnableHttpTracing: true,
+		RequestTraceId:    traceId,
+		ResponseTraceId:   traceId,
+		EnableKeepAlives:  false,
+	})
+	defer monitor.Stop()
+
+	stats, observations := monitor.GetHTTPStats()
+	require.Equal(t, 0, len(stats))
+	require.Equal(t, 1, len(observations))
+
+	require.Equal(t, TransactionTraceId{
+		Type: TraceIdBoth,
+		Id:   traceId,
+	}, observations[0].TraceId)
+}
+
+func TestHTTPMonitorAmbiguousId(t *testing.T) {
+	skipTestIfKernelNotSupported(t)
+	targetAddr := "localhost:8080"
+	serverAddr := "localhost:8080"
+	traceId := "672aef67-566f-4206-8da1-d8c11c80585c"
+
+	monitor, _ := runHTTPMonitor(t, targetAddr, serverAddr, 1, testutil.Options{
+		EnableHttpTracing: true,
+		RequestTraceId:    "random",
+		ResponseTraceId:   traceId,
+		EnableKeepAlives:  false,
+	})
+	defer monitor.Stop()
+
+	stats, observations := monitor.GetHTTPStats()
+	require.Equal(t, 0, len(stats))
+	require.Equal(t, 1, len(observations))
+
+	require.Equal(t, TransactionTraceId{
+		Type: TraceIdAmbiguous,
+		Id:   "",
+	}, observations[0].TraceId)
+}
+
 func TestHTTPMonitorIntegrationWithNAT(t *testing.T) {
+	testutil2.SkipIfStackState(t, "Not running dnat test where iptables cannot be ran")
 	skipTestIfKernelNotSupported(t)
 
 	// SetupDNAT sets up a NAT translation from 2.2.2.2 to 1.1.1.1
@@ -307,6 +403,7 @@ func TestHTTPMonitorIntegrationWithNAT(t *testing.T) {
 }
 
 func TestUnknownMethodRegression(t *testing.T) {
+	testutil2.SkipIfStackState(t, "Not running dnat test where iptables cannot be ran")
 	skipTestIfKernelNotSupported(t)
 
 	// SetupDNAT sets up a NAT translation from 2.2.2.2 to 1.1.1.1
@@ -326,13 +423,13 @@ func TestUnknownMethodRegression(t *testing.T) {
 	require.NoError(t, err)
 	defer monitor.Stop()
 
-	requestFn := requestGenerator(t, targetAddr, emptyBody)
+	requestFn := requestGenerator(t, targetAddr, "", emptyBody)
 	for i := 0; i < 100; i++ {
 		requestFn()
 	}
 
 	time.Sleep(10 * time.Millisecond)
-	stats := monitor.GetHTTPStats()
+	stats, _ := monitor.GetHTTPStats()
 
 	for key := range stats {
 		if key.Method == MethodUnknown {
@@ -374,7 +471,7 @@ func TestRSTPacketRegression(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Assert that the HTTP request was correctly handled despite its forceful termination
-	stats := monitor.GetHTTPStats()
+	stats, _ := monitor.GetHTTPStats()
 	url, err := url.Parse("http://127.0.0.1:8080/200/foobar")
 	require.NoError(t, err)
 	includesRequest(t, stats, &nethttp.Request{URL: url})
@@ -442,7 +539,7 @@ func TestKeepAliveWithIncompleteResponseRegression(t *testing.T) {
 
 	// after this response, request, response cycle we should ensure that
 	// we got a full HTTP transaction
-	stats := monitor.GetHTTPStats()
+	stats, _ := monitor.GetHTTPStats()
 	url, err := url.Parse("http://127.0.0.1:8080/200/foobar")
 	require.NoError(t, err)
 	includesRequest(t, stats, &nethttp.Request{URL: url, Method: "GET"})
@@ -452,7 +549,8 @@ func assertAllRequestsExists(t *testing.T, monitor *Monitor, requests []*nethttp
 	requestsExist := make([]bool, len(requests))
 	for i := 0; i < 10; i++ {
 		time.Sleep(10 * time.Millisecond)
-		stats := monitor.GetHTTPStats()
+		stats, observations := monitor.GetHTTPStats()
+		require.Equal(t, 0, len(observations))
 		for reqIndex, req := range requests {
 			included, err := isRequestIncludedOnce(stats, req)
 			require.NoError(t, err)
@@ -465,25 +563,55 @@ func assertAllRequestsExists(t *testing.T, monitor *Monitor, requests []*nethttp
 	}
 }
 
+func assertAllObservationsExists(t *testing.T, monitor *Monitor, requests []*nethttp.Request) {
+	requestsExist := make([]bool, len(requests))
+	for i := 0; i < 10; i++ {
+		time.Sleep(10 * time.Millisecond)
+		stats, observations := monitor.GetHTTPStats()
+		require.Equal(t, 0, len(stats))
+		for reqIndex, req := range requests {
+			included, err := isObservationIncludedOnce(observations, req)
+			require.NoError(t, err)
+			requestsExist[reqIndex] = requestsExist[reqIndex] || included
+		}
+	}
+
+	for reqIndex, exists := range requestsExist {
+		require.Truef(t, exists, "request %d was not found (req %v)", reqIndex, requests[reqIndex])
+	}
+}
+
 func testHTTPMonitor(t *testing.T, targetAddr, serverAddr string, numReqs int, o testutil.Options) {
+	monitor, requests := runHTTPMonitor(t, targetAddr, serverAddr, numReqs, o)
+	defer monitor.Stop()
+
+	// Ensure all captured transactions get sent to user-space
+	if o.EnableHttpTracing {
+		assertAllObservationsExists(t, monitor, requests)
+	} else {
+		assertAllRequestsExists(t, monitor, requests)
+	}
+}
+
+func runHTTPMonitor(t *testing.T, targetAddr, serverAddr string, numReqs int, o testutil.Options) (*Monitor, []*nethttp.Request) {
 	srvDoneFn := testutil.HTTPServer(t, serverAddr, o)
 
-	monitor, err := NewMonitor(config.New(), nil, nil, nil)
+	c := config.New()
+	c.EnableHTTPTracing = o.EnableHttpTracing
+	monitor, err := NewMonitor(c, nil, nil, nil)
 	require.NoError(t, err)
 	err = monitor.Start()
 	require.NoError(t, err)
-	defer monitor.Stop()
 
 	// Perform a number of random requests
-	requestFn := requestGenerator(t, targetAddr, emptyBody)
+	requestFn := requestGenerator(t, targetAddr, o.RequestTraceId, emptyBody)
 	var requests []*nethttp.Request
 	for i := 0; i < numReqs; i++ {
 		requests = append(requests, requestFn())
 	}
 	srvDoneFn()
 
-	// Ensure all captured transactions get sent to user-space
-	assertAllRequestsExists(t, monitor, requests)
+	return monitor, requests
 }
 
 var (
@@ -492,7 +620,7 @@ var (
 	statusCodes         = []int{nethttp.StatusOK, nethttp.StatusMultipleChoices, nethttp.StatusBadRequest, nethttp.StatusInternalServerError}
 )
 
-func requestGenerator(t *testing.T, targetAddr string, reqBody []byte) func() *nethttp.Request {
+func requestGenerator(t *testing.T, targetAddr string, requestId string, reqBody []byte) func() *nethttp.Request {
 	var (
 		random  = rand.New(rand.NewSource(time.Now().Unix()))
 		idx     = 0
@@ -522,6 +650,13 @@ func requestGenerator(t *testing.T, targetAddr string, reqBody []byte) func() *n
 		status := statusCodes[random.Intn(len(statusCodes))]
 		url := fmt.Sprintf("http://%s/%d/request-%d", targetAddr, status, idx)
 		req, err := nethttp.NewRequest(method, url, body)
+		if requestId != "" {
+			if requestId == "random" {
+				req.Header.Set("x-request-id", uuid.New().String())
+			} else {
+				req.Header.Set("x-request-id", requestId)
+			}
+		}
 		require.NoError(t, err)
 
 		resp, err := client.Do(req)
@@ -590,6 +725,29 @@ func countRequestOccurrences(allStats map[Key]*RequestStats, req *nethttp.Reques
 	occurrences := 0
 	for key, stats := range allStats {
 		if key.Path.Content == req.URL.Path && stats.HasStats(expectedStatus) {
+			occurrences++
+		}
+	}
+
+	return occurrences
+}
+
+func isObservationIncludedOnce(allObservations []TransactionObservation, req *nethttp.Request) (bool, error) {
+	occurrences := countObservationOccurrences(allObservations, req)
+
+	if occurrences == 1 {
+		return true, nil
+	} else if occurrences == 0 {
+		return false, nil
+	}
+	return false, fmt.Errorf("expected to find 1 occurrence of %v, but found %d instead", req, occurrences)
+}
+
+func countObservationOccurrences(allObservations []TransactionObservation, req *nethttp.Request) int {
+	expectedStatus := testutil.StatusFromPath(req.URL.Path)
+	occurrences := 0
+	for _, observation := range allObservations {
+		if observation.Key.Path.Content == req.URL.Path && int(observation.Status) == expectedStatus && req.Header.Get("X-Request-ID") == observation.TraceId.Id && observation.TraceId.Type == TraceIdRequest {
 			occurrences++
 		}
 	}

@@ -49,6 +49,7 @@ int socket__http_filter(struct __sk_buff *skb) {
 
     read_into_buffer_skb((char *)http.request_fragment, skb, &skb_info);
     http_process(&http, &skb_info, NO_TAGS);
+
     return 0;
 }
 

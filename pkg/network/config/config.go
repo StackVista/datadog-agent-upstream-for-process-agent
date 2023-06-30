@@ -135,6 +135,13 @@ type Config struct {
 	// get flushed on every client request (default 30s check interval)
 	MaxHTTPStatsBuffered int
 
+	// MaxHTTPObservationsBuffered represents the maximum number of HTTP observations we'll buffer in memory. These stats
+	// get flushed on every client request (default 30s check interval)
+	MaxHTTPObservationsBuffered int
+
+	// EnableHTTPTracing enables distributed tracing by reading the X-Request-Id header and reporting that for distributed tracing
+	EnableHTTPTracing bool
+
 	// MaxConnectionsStateBuffered represents the maximum number of state objects that we'll store in memory. These state objects store
 	// the stats for a connection so we can accurately determine traffic change between client requests.
 	MaxConnectionsStateBuffered int
@@ -250,9 +257,11 @@ func New() *Config {
 
 		ProtocolClassificationEnabled: cfg.GetBool(join(netNS, "enable_protocol_classification")),
 
-		EnableHTTPMonitoring:  cfg.GetBool(join(netNS, "enable_http_monitoring")),
-		EnableHTTPSMonitoring: cfg.GetBool(join(netNS, "enable_https_monitoring")),
-		MaxHTTPStatsBuffered:  cfg.GetInt(join(netNS, "max_http_stats_buffered")),
+		EnableHTTPMonitoring:        cfg.GetBool(join(netNS, "enable_http_monitoring")),
+		EnableHTTPSMonitoring:       cfg.GetBool(join(netNS, "enable_https_monitoring")),
+		EnableHTTPTracing:           cfg.GetBool(join(netNS, "enable_http_tracing")),
+		MaxHTTPStatsBuffered:        cfg.GetInt(join(netNS, "max_http_stats_buffered")),
+		MaxHTTPObservationsBuffered: cfg.GetInt(join(netNS, "max_http_observations_buffered")),
 
 		MaxTrackedHTTPConnections: cfg.GetInt64(join(netNS, "max_tracked_http_connections")),
 		HTTPNotificationThreshold: cfg.GetInt64(join(netNS, "http_notification_threshold")),

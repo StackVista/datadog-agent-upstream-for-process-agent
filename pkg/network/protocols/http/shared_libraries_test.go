@@ -10,6 +10,7 @@ package http
 
 import (
 	"fmt"
+	"github.com/DataDog/datadog-agent/pkg/util/testutil"
 	"math"
 	"os"
 	"os/exec"
@@ -32,6 +33,8 @@ import (
 )
 
 func TestSharedLibraryDetection(t *testing.T) {
+	testutil.SkipIfStackState(t, "This does not run within StackState context (yet)")
+
 	perfHandler, doneFn := initEBPFProgram(t)
 	t.Cleanup(doneFn)
 	fpath := filepath.Join(t.TempDir(), "foo.so")
@@ -132,6 +135,8 @@ func TestSharedLibraryDetectionWithPIDandRootNameSpace(t *testing.T) {
 }
 
 func TestSameInodeRegression(t *testing.T) {
+	testutil.SkipIfStackState(t, "This does not run within StackState context (yet)")
+
 	perfHandler, doneFn := initEBPFProgram(t)
 	t.Cleanup(doneFn)
 	fpath1 := filepath.Join(t.TempDir(), "a-foo.so")

@@ -52,38 +52,44 @@ static __always_inline void read_into_buffer_skb(char *buffer, struct __sk_buff 
     // Basically, we should get a register from the code block above containing an fp relative address. As
     // we are doing `buffer[0]` here, there is not dynamic computation on that said register after this,
     // and thus the verifier is able to ensure that we are in-bound.
-    void *buf = &buffer[i * BLK_SIZE];
-    if (offset + 14 < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 15);
-    } else if (offset + 13 < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 14);
-    } else if (offset + 12 < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 13);
-    } else if (offset + 11 < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 12);
-    } else if (offset + 10 < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 11);
-    } else if (offset + 9 < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 10);
-    } else if (offset + 8 < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 9);
-    } else if (offset + 7 < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 8);
-    } else if (offset + 6 < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 7);
-    } else if (offset + 5 < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 6);
-    } else if (offset + 4 < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 5);
-    } else if (offset + 3 < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 4);
-    } else if (offset + 2 < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 3);
-    } else if (offset + 1 < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 2);
-    } else if (offset < len) {
-        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 1);
-    }
+
+    // [STS] Edit: The below code makes for a huge instruction count. Because of this we disabled it. The consequence is not bad:
+    // in case the tcp packet has less than HTTP_BUFFER_SIZE bytes, we will miss the last bytes. This is not a problem
+    // because the path should be in there, unless there were absolutely no http headers, which is very unlikely and not
+    // interesting for analysis.
+
+//    void *buf = &buffer[i * BLK_SIZE];
+//    if (offset + 14 < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 15);
+//    } else if (offset + 13 < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 14);
+//    } else if (offset + 12 < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 13);
+//    } else if (offset + 11 < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 12);
+//    } else if (offset + 10 < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 11);
+//    } else if (offset + 9 < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 10);
+//    } else if (offset + 8 < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 9);
+//    } else if (offset + 7 < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 8);
+//    } else if (offset + 6 < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 7);
+//    } else if (offset + 5 < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 6);
+//    } else if (offset + 4 < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 5);
+//    } else if (offset + 3 < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 4);
+//    } else if (offset + 2 < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 3);
+//    } else if (offset + 1 < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 2);
+//    } else if (offset < len) {
+//        bpf_skb_load_bytes_with_telemetry(skb, offset, buf, 1);
+//    }
 }
 
 #endif
