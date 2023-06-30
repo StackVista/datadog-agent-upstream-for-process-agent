@@ -47,7 +47,7 @@ func TestProcessHTTPTransactions(t *testing.T) {
 		}
 	}
 
-	stats := sk.GetAndResetAllStats()
+	stats, _ := sk.GetAndResetAllStats()
 	assert.Equal(t, 0, len(sk.stats))
 	assert.Equal(t, numPaths, len(stats))
 	for key, stats := range stats {
@@ -126,7 +126,7 @@ func TestPathProcessing(t *testing.T) {
 		for _, tx := range transactions {
 			sk.Process(tx)
 		}
-		stats := sk.GetAndResetAllStats()
+		stats, _ := sk.GetAndResetAllStats()
 
 		require.Len(t, stats, 1)
 		for key := range stats {
@@ -151,7 +151,7 @@ func TestPathProcessing(t *testing.T) {
 		for _, tx := range transactions {
 			sk.Process(tx)
 		}
-		stats := sk.GetAndResetAllStats()
+		stats, _ := sk.GetAndResetAllStats()
 
 		require.Len(t, stats, 1)
 		for key, metrics := range stats {
@@ -182,7 +182,7 @@ func TestPathProcessing(t *testing.T) {
 		for _, tx := range transactions {
 			sk.Process(tx)
 		}
-		stats := sk.GetAndResetAllStats()
+		stats, _ := sk.GetAndResetAllStats()
 
 		require.Len(t, stats, 1)
 		for key, metrics := range stats {
@@ -216,7 +216,7 @@ func TestHTTPCorrectness(t *testing.T) {
 		tel.log()
 		require.Equal(t, int64(1), tel.malformed.Get())
 
-		stats := sk.GetAndResetAllStats()
+		stats, _ := sk.GetAndResetAllStats()
 		require.Len(t, stats, 0)
 	})
 
@@ -242,7 +242,7 @@ func TestHTTPCorrectness(t *testing.T) {
 		tel.log()
 		require.Equal(t, int64(1), tel.malformed.Get())
 
-		stats := sk.GetAndResetAllStats()
+		stats, _ := sk.GetAndResetAllStats()
 		require.Len(t, stats, 0)
 	})
 
@@ -267,7 +267,7 @@ func TestHTTPCorrectness(t *testing.T) {
 		tel.log()
 		require.Equal(t, int64(1), tel.malformed.Get())
 
-		stats := sk.GetAndResetAllStats()
+		stats, _ := sk.GetAndResetAllStats()
 		require.Len(t, stats, 0)
 	})
 }

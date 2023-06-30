@@ -9,6 +9,7 @@
 package network
 
 import (
+	"github.com/DataDog/datadog-agent/pkg/util/testutil"
 	"net"
 	"net/url"
 	"os"
@@ -51,6 +52,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestReadInitialTCPState(t *testing.T) {
+	testutil.SkipIfStackState(t, "In a docker container we cannot setup network namespaces")
 	nsName := netlinktestutil.AddNS(t)
 	t.Cleanup(func() {
 		err := exec.Command("testdata/teardown_netns.sh").Run()
@@ -112,6 +114,7 @@ func TestReadInitialTCPState(t *testing.T) {
 }
 
 func TestReadInitialUDPState(t *testing.T) {
+	testutil.SkipIfStackState(t, "In a docker container we cannot setup network namespaces")
 	nsName := netlinktestutil.AddNS(t)
 	t.Cleanup(func() {
 		err := exec.Command("testdata/teardown_netns.sh").Run()

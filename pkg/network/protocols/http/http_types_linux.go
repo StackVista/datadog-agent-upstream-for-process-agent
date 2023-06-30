@@ -34,6 +34,10 @@ type ebpfHttpTx struct {
 	Owned_by_src_port    uint16
 	Tcp_seq              uint32
 	Tags                 uint64
+	Request_tracing_id   [40]byte
+	Response_tracing_id  [40]byte
+	Request_parse_result uint8
+	Response_parse_result uint8
 }
 
 type libPath struct {
@@ -53,7 +57,7 @@ const (
 	ProtocolPostgres ProtocolType = 0x7
 	ProtocolAMQP     ProtocolType = 0x8
 	ProtocolRedis    ProtocolType = 0x9
-	ProtocolMax      ProtocolType = 0xa
+	ProtocolMax      ProtocolType = 0x8
 )
 
 const (

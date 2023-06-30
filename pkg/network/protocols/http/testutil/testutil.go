@@ -23,11 +23,14 @@ import (
 
 // Options wraps all configurable params for the HTTPServer
 type Options struct {
-	EnableTLS        bool
-	EnableKeepAlives bool
-	ReadTimeout      time.Duration
-	WriteTimeout     time.Duration
-	SlowResponse     time.Duration
+	EnableTLS         bool
+	EnableKeepAlives  bool
+	EnableHttpTracing bool
+	RequestTraceId    string
+	ResponseTraceId   string
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	SlowResponse      time.Duration
 }
 
 // HTTPServer spins up a HTTP test server that returns the status code included in the URL
@@ -42,6 +45,9 @@ func HTTPServer(t *testing.T, addr string, options Options) func() {
 			time.Sleep(options.SlowResponse)
 		}
 		statusCode := StatusFromPath(req.URL.Path)
+		if options.ResponseTraceId != "" {
+			w.Header().Add("x-request-id", options.ResponseTraceId)
+		}
 		w.WriteHeader(statusCode)
 
 		defer req.Body.Close()

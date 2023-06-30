@@ -21,30 +21,32 @@
 #define HTTPS_PORT 443
 
 static __always_inline int read_conn_tuple(conn_tuple_t* t, struct sock* skp, u64 pid_tgid, metadata_mask_t type);
-static __always_inline int http_process(http_transaction_t *http_stack, skb_info_t *skb_info, __u64 tags);
+static __always_inline int http_process(http_classification_t *http_class, skb_info_t *skb_info, __u64 tags);
+static __always_inline void http_classify_user(http_classification_t *http_class, char *data, size_t len);
 
 static __always_inline void https_process(conn_tuple_t *t, void *buffer, size_t len, __u64 tags) {
-    http_transaction_t http;
-    bpf_memset(&http, 0, sizeof(http));
-    bpf_memcpy(&http.tup, t, sizeof(conn_tuple_t));
-    read_into_buffer(http.request_fragment, buffer, len);
-    http.owned_by_src_port = http.tup.sport;
-    log_debug("https_process: htx=%llx sport=%d\n", &http, http.owned_by_src_port);
+    http_classification_t http_class;
+    bpf_memset(&http_class, 0, sizeof(http_class));
+    bpf_memcpy(&http_class.tup, t, sizeof(conn_tuple_t));
+    http_class.owned_by_src_port = http_class.tup.sport;
+    http_classify_user(&http_class, buffer, len);
 
-    protocol_t *cur_fragment_protocol_ptr = bpf_map_lookup_elem(&dispatcher_connection_protocol, &http.tup);
+    log_debug("https_process: htx=%llx sport=%d\n", &http_class, http_class.owned_by_src_port);
+
+    protocol_t *cur_fragment_protocol_ptr = bpf_map_lookup_elem(&dispatcher_connection_protocol, &http_class.tup);
     if (cur_fragment_protocol_ptr == NULL) {
         protocol_t cur_fragment_protocol = PROTOCOL_UNKNOWN;
-        conn_tuple_t inverse_conn_tup = http.tup;
+        conn_tuple_t inverse_conn_tup = http_class.tup;
         flip_tuple(&inverse_conn_tup);
 
         cur_fragment_protocol_ptr = bpf_map_lookup_elem(&dispatcher_connection_protocol, &inverse_conn_tup);
 
         // try classifying the protocol if no prior identification exists
         if (cur_fragment_protocol_ptr == NULL) {
-            classify_protocol_for_dispatcher(&cur_fragment_protocol, &http.tup, http.request_fragment, len);
+            classify_protocol_for_dispatcher(&cur_fragment_protocol, &http_class.tup, http_class.request_fragment, len);
             // If there has been a change in the classification, save the new protocol.
             if (cur_fragment_protocol != PROTOCOL_UNKNOWN) {
-                bpf_map_update_with_telemetry(dispatcher_connection_protocol, &http.tup, &cur_fragment_protocol, BPF_NOEXIST);
+                bpf_map_update_with_telemetry(dispatcher_connection_protocol, &http_class.tup, &cur_fragment_protocol, BPF_NOEXIST);
                 bpf_map_update_with_telemetry(dispatcher_connection_protocol, &inverse_conn_tup, &cur_fragment_protocol, BPF_NOEXIST);
             }
         }
@@ -53,18 +55,18 @@ static __always_inline void https_process(conn_tuple_t *t, void *buffer, size_t 
     // STS Addition: We need to add the length of data here to make sure the http_process advances the response time
     skb_info_t skb_info = {0};
     skb_info.data_length = (__u32)len;
-    http_process(&http, &skb_info, tags);
+    http_process(&http_class, &skb_info, tags);
 }
 
 static __always_inline void https_finish(conn_tuple_t *t) {
-    http_transaction_t http;
-    bpf_memset(&http, 0, sizeof(http));
-    bpf_memcpy(&http.tup, t, sizeof(conn_tuple_t));
-    http.owned_by_src_port = http.tup.sport;
+    http_classification_t http_class;
+    bpf_memset(&http_class, 0, sizeof(http_class));
+    bpf_memcpy(&http_class.tup, t, sizeof(conn_tuple_t));
+    http_class.owned_by_src_port = http_class.tup.sport;
 
     skb_info_t skb_info = {0};
     skb_info.tcp_flags |= TCPHDR_FIN;
-    http_process(&http, &skb_info, NO_TAGS);
+    http_process(&http_class, &skb_info, NO_TAGS);
 }
 
 static __always_inline conn_tuple_t* tup_from_ssl_ctx(void *ssl_ctx, u64 pid_tgid) {

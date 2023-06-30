@@ -9,6 +9,7 @@
 package http
 
 import (
+	"github.com/DataDog/datadog-agent/pkg/util/testutil"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,7 @@ import (
 )
 
 func TestHttpCompile(t *testing.T) {
+	testutil.SkipIfStackState(t, "Skipping when we run the StackState suite, because we do not get in the kernel headers (yet)")
 	if !rtcHTTPSupported(t) {
 		t.Skip("HTTP Runtime compilation not supported on this kernel version")
 	}

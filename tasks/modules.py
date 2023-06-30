@@ -14,8 +14,9 @@ class GoModule:
     If True, a check will run to ensure this is true.
     """
 
-    def __init__(self, path, targets=None, condition=lambda: True, should_tag=True, independent=False):
+    def __init__(self, path, targets=None, condition=lambda: True, should_tag=True, independent=False, target_file=None):
         self.path = path
+        self.target_file = target_file
         self.targets = targets if targets else ["."]
         self.condition = condition
         self.should_tag = should_tag

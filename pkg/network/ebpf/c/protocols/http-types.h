@@ -6,11 +6,25 @@
 // This determines the size of the payload fragment that is captured for each HTTP request
 #define HTTP_BUFFER_SIZE (8 * 20)
 // This controls the number of HTTP transactions read from userspace at a time
-#define HTTP_BATCH_SIZE 15
+#define HTTP_BATCH_SIZE 10
 
 // HTTP/1.1 XXX
 // _________^
 #define HTTP_STATUS_OFFSET 9
+
+// The key of the http-tracing-id header, including leading newline: \nx-trace-id:
+#define HTTP_TRACING_ID_KEY_SIZE 14
+// These arrays are made 256 big, to always have the situation that indexing into it can be done. In practice we'll never index
+// beyond the values, but ebpf can't prove it.
+static char http_tracing_header_key_lower[256] = { '\n', 'x', '-', 'r', 'e', 'q', 'u', 'e', 's', 't', '-', 'i', 'd', ':' };
+static char http_tracing_header_key_upper[256] = { '\n', 'X', '-', 'R', 'E', 'Q', 'U', 'E', 'S', 'T', '-', 'I', 'D', ':' };
+
+// Full uuid+ newline and a bit.
+#define HTTP_TRACING_ID_SIZE 40
+
+#define HTTP_HEADER_READ_BUFFER_SIZE 10 // This number is picked such that we do not loose too much data when the last batch does not exactly match.
+#define HTTP_HEADER_READ_LIMIT 1500 // This should be a multiple of HTTP_HEADER_READ_BUFFER_SIZE
+#define HTTP_BATCH_COUNT 150 //
 
 // This is needed to reduce code size on multiple copy opitmizations that were made in
 // the http eBPF program.
@@ -35,6 +49,14 @@ typedef enum
     HTTP_PATCH
 } http_method_t;
 
+typedef enum {
+  NO_HEADER_PARSE,
+  HEADER_PARSE_FOUND,
+  HEADER_PARSE_NOT_FOUND,
+  HEADER_PARSE_LIMIT_REACHED,
+  HEADER_PARSE_PACKET_END_REACHED
+} header_parse_result_t;
+
 // HTTP transaction information associated to a certain socket (tuple_t)
 typedef struct {
     conn_tuple_t tup;
@@ -55,7 +77,31 @@ typedef struct {
     __u32 tcp_seq;
 
     __u64 tags;
+
+    // used as a correlation id to correlate different observations of the same connection.
+    char request_tracing_id[HTTP_TRACING_ID_SIZE] __attribute__ ((aligned (8)));
+    char response_tracing_id[HTTP_TRACING_ID_SIZE] __attribute__ ((aligned (8)));
+
+    __u8 request_parse_result;
+    __u8 response_parse_result;
 } http_transaction_t;
+
+/**
+  Struct used while classifying http traffic. This is a reduced structure compared to the full http_transaction_t to save stack space.
+*/
+typedef struct {
+    conn_tuple_t tup;
+    // This needs to be kept because the src port will be lost after tuple normalization.
+    __u16 owned_by_src_port;
+
+    char request_fragment[HTTP_BUFFER_SIZE] __attribute__ ((aligned (8)));
+
+    http_packet_t packet_type;
+    http_method_t method;
+
+    char tracing_id[HTTP_TRACING_ID_SIZE] __attribute__ ((aligned (8)));
+    header_parse_result_t parse_result;
+} http_classification_t;
 
 // OpenSSL types
 typedef struct {
@@ -92,5 +138,20 @@ typedef struct {
     __u32 len;
     char buf[LIB_PATH_MAX_SIZE];
 } lib_path_t;
+
+typedef struct {
+    // The position in the header at which we should next find a match. Start at 0 to match the leading '\n' of a header.
+    __u8 match_position;
+} trace_match_t;
+
+/*
+Return codes to use while parsing.
+*/
+typedef enum
+{
+    COMPLETE_MATCH,
+    CONTINUE_MATCH,
+} trace_header_match_t;
+
 
 #endif
