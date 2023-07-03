@@ -36,7 +36,13 @@ int socket__http_filter(struct __sk_buff* skb) {
         return 0;
     }
 
+<<<<<<< Updated upstream
     if (!http_allow_packet(&http, skb, &skb_info)) {
+=======
+    http_class.tup.netns = net_ns_for_tailcall();
+
+    if (!http_allow_packet(&http_class, skb, &skb_info)) {
+>>>>>>> Stashed changes
         return 0;
     }
 

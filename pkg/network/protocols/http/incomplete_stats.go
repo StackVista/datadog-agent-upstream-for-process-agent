@@ -134,6 +134,8 @@ func (b *incompleteBuffer) Flush(now time.Time) []httpTX {
 			// Merge response into request
 			request.SetStatusCode(response.StatusCode())
 			request.SetResponseLastSeen(response.ResponseLastSeen())
+			request.SetResponseParseResult(response.ResponseParseResult())
+			request.SetResponseTracingID(response.RawResponseTracingID())
 			joined = append(joined, request)
 			i++
 			j++

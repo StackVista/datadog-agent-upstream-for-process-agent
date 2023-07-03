@@ -24,4 +24,14 @@ type httpTX interface {
 	ResponseLastSeen() uint64
 	SetResponseLastSeen(ls uint64)
 	RequestStarted() uint64
+<<<<<<< Updated upstream
+=======
+	RequestTracingID() string                     // [sts]
+	ResponseTracingID() string                    // [sts]
+	RawResponseTracingID() [40]byte               // [sts]
+	SetResponseTracingID(id [40]byte)             // [sts]
+	RequestParseResult() HeaderParseResult        // [sts]
+	ResponseParseResult() HeaderParseResult       // [sts]
+	SetResponseParseResult(res HeaderParseResult) // [sts]
+>>>>>>> Stashed changes
 }

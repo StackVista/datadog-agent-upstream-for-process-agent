@@ -107,6 +107,7 @@ func (h *httpStatKeeper) add(tx httpTX) {
 	}
 
 	key := h.newKey(tx, path, fullPath)
+<<<<<<< Updated upstream
 	stats, ok := h.stats[key]
 	if !ok {
 		if len(h.stats) >= h.maxEntries {
@@ -116,6 +117,60 @@ func (h *httpStatKeeper) add(tx httpTX) {
 		h.telemetry.aggregations.Add(1)
 		stats = new(RequestStats)
 		h.stats[key] = stats
+=======
+
+	traceID := parseTraceId(tx)
+	if h.enableTracing {
+		switch tx.RequestParseResult() {
+		case HeaderParseFound:
+			h.telemetry.requestFound.Add(1)
+		case HeaderParseNotFound:
+			h.telemetry.requestNotFound.Add(1)
+		case HeaderParseLimitReached:
+			h.telemetry.requestLimitReached.Add(1)
+		case HeaderParsePacketEndReached:
+			h.telemetry.requestPacketEnd.Add(1)
+		}
+
+		switch tx.ResponseParseResult() {
+		case HeaderParseFound:
+			h.telemetry.responseFound.Add(1)
+		case HeaderParseNotFound:
+			h.telemetry.responseNotFound.Add(1)
+		case HeaderParseLimitReached:
+			h.telemetry.responseLimitReached.Add(1)
+		case HeaderParsePacketEndReached:
+			h.telemetry.responsePacketEnd.Add(1)
+		}
+	}
+
+	if traceID.Type == TraceIdNone || !h.enableTracing {
+		stats, ok := h.stats[key]
+		if !ok {
+			if len(h.stats) >= h.maxEntries {
+				h.telemetry.dropped.Add(1)
+				return
+			}
+			h.telemetry.aggregations.Add(1)
+			stats = new(RequestStats)
+			h.stats[key] = stats
+		}
+
+		stats.AddRequest(tx.StatusClass(), latency, tx.StaticTags(), tx.DynamicTags())
+	} else {
+		if len(h.observations) >= h.maxObservationEntries {
+			h.telemetry.dropped.Add(1)
+		}
+
+		h.telemetry.observations.Add(1)
+
+		h.observations = append(h.observations, TransactionObservation{
+			LatencyNs: latency,
+			Status:    tx.StatusCode(),
+			Key:       key,
+			TraceId:   traceID,
+		})
+>>>>>>> Stashed changes
 	}
 
 	stats.AddRequest(tx.StatusClass(), latency, tx.StaticTags(), tx.DynamicTags())

@@ -94,4 +94,14 @@ func (t *telemetry) log() {
 		float64(malformed)/float64(elapsed),
 		aggregations,
 	)
+<<<<<<< Updated upstream
+=======
+
+	if t.requestFound.Get() > 0 || t.requestNotFound.Get() > 0 || t.requestLimitReached.Get() > 0 || t.requestPacketEnd.Get() > 0 {
+		log.Infof("request observations summary: found=%d notFound=%d limitReached=%d packetEnd=%d",
+			t.requestFound.Delta(), t.requestNotFound.Delta(), t.requestLimitReached.Delta(), t.requestPacketEnd.Delta())
+		log.Infof("response observations summary: found=%d notFound=%d limitReached=%d packetEnd=%d",
+			t.responseFound.Delta(), t.responseNotFound.Delta(), t.responseLimitReached.Delta(), t.responsePacketEnd.Delta())
+	}
+>>>>>>> Stashed changes
 }

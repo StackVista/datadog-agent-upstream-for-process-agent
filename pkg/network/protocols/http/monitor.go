@@ -10,6 +10,11 @@ package http
 
 import (
 	"fmt"
+	"github.com/DataDog/datadog-agent/pkg/process/util"
+	"github.com/DataDog/datadog-agent/pkg/util/log"
+	"github.com/vishvananda/netns"
+	"strconv"
+	"sync"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -33,9 +38,25 @@ type Monitor struct {
 	telemetry      *telemetry
 	statkeeper     *httpStatKeeper
 	processMonitor *monitor.ProcessMonitor
+	netNsMonitor   *NetNsMonitor
+	config         *config.Config
 
-	// termination
-	closeFilterFn func()
+	nsProbesM sync.Mutex
+	nsProbes  map[NetNs]*NsProbe
+}
+
+type NsProbe struct {
+	probe     *manager.Probe
+	packetSrc *filterpkg.AFPacketSource
+}
+
+func (n *NsProbe) Close() {
+	err := n.probe.Detach()
+	if err != nil {
+		log.Warnf("Error detaching probe: %w", err)
+	}
+
+	n.packetSrc.Close()
 }
 
 // NewMonitor returns a new Monitor instance
@@ -49,32 +70,29 @@ func NewMonitor(c *config.Config, offsets []manager.ConstantEditor, sockFD *ebpf
 		return nil, fmt.Errorf("error initializing http ebpf program: %s", err)
 	}
 
-	filter, _ := mgr.GetProbe(manager.ProbeIdentificationPair{EBPFSection: protocolDispatcherSocketFilterSection, EBPFFuncName: protocolDispatcherSocketFilterFunction, UID: probeUID})
-	if filter == nil {
-		return nil, fmt.Errorf("error retrieving socket filter")
-	}
-
-	closeFilterFn, err := filterpkg.HeadlessSocketFilter(c, filter)
-	if err != nil {
-		return nil, fmt.Errorf("error enabling HTTP traffic inspection: %s", err)
-	}
-
 	telemetry, err := newTelemetry()
 	if err != nil {
-		closeFilterFn()
 		return nil, err
 	}
 
 	statkeeper := newHTTPStatkeeper(c, telemetry)
 	processMonitor := monitor.GetProcessMonitor()
 
-	return &Monitor{
+	m := &Monitor{
 		ebpfProgram:    mgr,
 		telemetry:      telemetry,
-		closeFilterFn:  closeFilterFn,
 		statkeeper:     statkeeper,
 		processMonitor: processMonitor,
-	}, nil
+		config:         c,
+		nsProbes:       map[NetNs]*NsProbe{},
+	}
+
+	m.netNsMonitor, err = MakeNetNsMonitor(m.config, m.processMonitor, m.nsAddedCallback, m.nsDroppedCallback)
+	if err != nil {
+		return nil, err
+	}
+
+	return m, nil
 }
 
 // Start consuming HTTP events
@@ -95,6 +113,18 @@ func (m *Monitor) Start() error {
 	m.consumer.Start()
 
 	if err := m.ebpfProgram.Start(); err != nil {
+		m.consumer.Stop()
+		return err
+	}
+
+	// Starting with updateAllNsProbes.
+	// We run this synchronously here instead of waiting for the NsNetMonitor to be sure all probes are started after this function
+	// returns
+	err = m.updateAllNsProbes()
+
+	if err != nil {
+		m.consumer.Stop()
+		m.ebpfProgram.Close()
 		return err
 	}
 
@@ -113,6 +143,122 @@ func (m *Monitor) GetHTTPStats() map[Key]*RequestStats {
 	return m.statkeeper.GetAndResetAllStats()
 }
 
+/** Update the active namespaces in one go. Only used for initialization. */
+func (m *Monitor) updateAllNsProbes() error {
+	m.nsProbesM.Lock()
+	defer m.nsProbesM.Unlock()
+
+	var noActiveNs map[NetNs]bool = make(map[NetNs]bool)
+
+	for netNS, _ := range m.nsProbes {
+		noActiveNs[netNS] = true
+	}
+
+	err := util.ForAllNS(m.config.ProcRoot, func(handle netns.NsHandle) error {
+		ino, err := util.GetInoForNs(handle)
+		if err != nil {
+			return err
+		}
+		netNs := NetNs(ino)
+
+		delete(noActiveNs, netNs)
+
+		if _, ok := m.nsProbes[netNs]; !ok {
+			nsM, err := m.loadProbeForNamespace(handle, netNs)
+			if err != nil {
+				return err
+			}
+			m.nsProbes[netNs] = nsM
+		}
+
+		return nil
+	})
+
+	// Close the namespaces that were not observed.
+	for notActive, _ := range noActiveNs {
+		if probe, ok := m.nsProbes[notActive]; ok {
+			probe.Close()
+			delete(m.nsProbes, notActive)
+		}
+	}
+
+	return err
+}
+
+func (m *Monitor) nsAddedCallback(netNs NetNs, nsHandle netns.NsHandle) {
+	m.nsProbesM.Lock()
+	defer m.nsProbesM.Unlock()
+
+	if _, ok := m.nsProbes[netNs]; !ok {
+		nsM, err := m.loadProbeForNamespace(nsHandle, netNs)
+		if err != nil {
+			log.Errorf("Error registering network namespace: %d, %w", netNs, err)
+			return
+		}
+		m.nsProbes[netNs] = nsM
+		log.Debugf("Successfully registered probe for: %d", netNs)
+	}
+}
+
+func (m *Monitor) nsDroppedCallback(netNs NetNs) {
+	m.nsProbesM.Lock()
+	defer m.nsProbesM.Unlock()
+
+	if nsProbe, ok := m.nsProbes[netNs]; ok {
+		log.Debugf("Successfully unregistered probe for: %d", netNs)
+		nsProbe.Close()
+		delete(m.nsProbes, netNs)
+	} else {
+		log.Errorf("Got drop namespace for non-existing namespace: %d", netNs)
+	}
+}
+
+func (m *Monitor) loadProbeForNamespace(ns netns.NsHandle, netNs NetNs) (*NsProbe, error) {
+	log.Debugf("Attaching probe to namespace: %d", netNs)
+
+	probeTemplate, _ := m.ebpfProgram.GetProbe(manager.ProbeIdentificationPair{EBPFSection: protocolDispatcherSocketFilterSection, EBPFFuncName: protocolDispatcherSocketFilterFunction, UID: probeUID})
+	if probeTemplate == nil {
+		return nil, fmt.Errorf("error retrieving socket filter")
+	}
+
+	newProbe := probeTemplate.Copy()
+	newProbe.CopyProgram = true
+	newProbe.UID = probeUID + "_" + strconv.Itoa(int(netNs))
+	newProbe.KeepProgramSpec = false
+
+	var packetSrc *filterpkg.AFPacketSource
+
+	err := util.WithNS(ns, func() error {
+		var srcErr error
+		packetSrc, srcErr = filterpkg.NewPacketSource(newProbe, nil)
+		return srcErr
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	netnsEditor := []manager.ConstantEditor{
+		{
+			Name:          "netns",
+			Value:         uint64(netNs),
+			FailOnMissing: true,
+		},
+	}
+
+	if err := m.ebpfProgram.CloneProgram(probeUID, newProbe, netnsEditor, nil); err != nil {
+		if packetSrc != nil {
+			packetSrc.Close()
+		}
+		return nil, fmt.Errorf("couldn't clone %s: %w", probeUID, err)
+	}
+
+	return &NsProbe{
+		probe:     newProbe,
+		packetSrc: packetSrc,
+	}, nil
+}
+
 // Stop HTTP monitoring
 func (m *Monitor) Stop() {
 	if m == nil {
@@ -120,9 +266,15 @@ func (m *Monitor) Stop() {
 	}
 
 	m.processMonitor.Stop()
+	m.netNsMonitor.Close()
+
+	m.nsProbesM.Lock()
+	defer m.nsProbesM.Unlock()
+	for _, n := range m.nsProbes {
+		n.Close()
+	}
 	m.ebpfProgram.Close()
 	m.consumer.Stop()
-	m.closeFilterFn()
 }
 
 func (m *Monitor) process(data []byte) {

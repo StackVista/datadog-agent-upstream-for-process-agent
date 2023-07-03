@@ -37,6 +37,7 @@ const (
 	protocolDispatcherProgramsMap          = "protocols_progs"
 	dispatcherConnectionProtocolMap        = "dispatcher_connection_protocol"
 	connectionStatesMap                    = "connection_states"
+	skbInfoMap                             = "skb_classification_info"
 
 	httpSocketFilter = "socket/http_filter"
 
@@ -141,6 +142,7 @@ func newEBPFProgram(c *config.Config, offsets []manager.ConstantEditor, sockFD *
 					EBPFFuncName: protocolDispatcherSocketFilterFunction,
 					UID:          probeUID,
 				},
+				KeepProgramSpec: true,
 			},
 		},
 	}
@@ -222,16 +224,14 @@ func (e *ebpfProgram) Init() error {
 				MaxEntries: uint32(e.cfg.MaxTrackedConnections),
 				EditorFlag: manager.EditMaxEntries,
 			},
+			skbInfoMap: {
+				Type:       ebpf.PerCPUArray,
+				MaxEntries: uint32(e.cfg.MaxTrackedConnections),
+				EditorFlag: manager.EditMaxEntries,
+			},
 		},
 		TailCallRouter: tailCalls,
 		ActivatedProbes: []manager.ProbesSelector{
-			&manager.ProbeSelector{
-				ProbeIdentificationPair: manager.ProbeIdentificationPair{
-					EBPFSection:  protocolDispatcherSocketFilterSection,
-					EBPFFuncName: protocolDispatcherSocketFilterFunction,
-					UID:          probeUID,
-				},
-			},
 			&manager.ProbeSelector{
 				ProbeIdentificationPair: manager.ProbeIdentificationPair{
 					EBPFSection:  string(probes.TCPSendMsg),
@@ -249,6 +249,19 @@ func (e *ebpfProgram) Init() error {
 		},
 		ConstantEditors:           e.offsets,
 		DefaultKprobeAttachMethod: kprobeAttachMethod,
+<<<<<<< Updated upstream
+=======
+		VerifierOptions: ebpf.CollectionOptions{
+			Programs: ebpf.ProgramOptions{
+				LogLevel: ebpf.LogLevelStats, // | ebpf.LogLevelBranch, // Branch level logging will blow up the log size, best to only enabled when debugging.
+				// LogSize is the size of the log buffer given to the verifier. Give it a big enough (2 * 1024 * 1024)
+				// value so that all our programs fit. If the verifier ever outputs a `no space left on device` error,
+				// we'll need to increase this value.
+				LogSize:     16000000,
+				LogDisabled: false,
+			},
+		},
+>>>>>>> Stashed changes
 	}
 
 	for _, s := range e.subprograms {

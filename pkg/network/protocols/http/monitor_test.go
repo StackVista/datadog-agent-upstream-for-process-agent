@@ -11,6 +11,11 @@ package http
 import (
 	"bytes"
 	"fmt"
+<<<<<<< Updated upstream
+=======
+	"github.com/DataDog/datadog-agent/pkg/process/util"
+	"github.com/google/uuid"
+>>>>>>> Stashed changes
 	"io"
 	"math/rand"
 	"net"
@@ -596,3 +601,34 @@ func countRequestOccurrences(allStats map[Key]*RequestStats, req *nethttp.Reques
 
 	return occurrences
 }
+<<<<<<< Updated upstream
+=======
+
+func isObservationIncludedOnce(allObservations []TransactionObservation, req *nethttp.Request) (bool, error) {
+	occurrences := countObservationOccurrences(allObservations, req)
+
+	if occurrences == 1 {
+		return true, nil
+	} else if occurrences == 0 {
+		return false, nil
+	}
+	return false, fmt.Errorf("expected to find 1 occurrence of %v, but found %d instead", req, occurrences)
+}
+
+func countObservationOccurrences(allObservations []TransactionObservation, req *nethttp.Request) int {
+	expectedStatus := testutil.StatusFromPath(req.URL.Path)
+	occurrences := 0
+	netNs, err := util.GetCurrentIno()
+	if err != nil {
+		return 0
+	}
+
+	for _, observation := range allObservations {
+		if observation.Key.NetNs == netNs && observation.Key.Path.Content == req.URL.Path && int(observation.Status) == expectedStatus && req.Header.Get("X-Request-ID") == observation.TraceId.Id && observation.TraceId.Type == TraceIdRequest {
+			occurrences++
+		}
+	}
+
+	return occurrences
+}
+>>>>>>> Stashed changes
