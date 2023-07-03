@@ -73,6 +73,7 @@ func (tx *ebpfHttpTx) ConnTuple() KeyTuple {
 		DstIPLow:  tx.Tup.Daddr_l,
 		SrcPort:   tx.Tup.Sport,
 		DstPort:   tx.Tup.Dport,
+		NetNs:     tx.Tup.Netns,
 	}
 }
 
@@ -120,6 +121,7 @@ func (tx *ebpfHttpTx) String() string {
 	output.WriteString("Method: '" + Method(tx.Request_method).String() + "', ")
 	output.WriteString("Tags: '0x" + strconv.FormatUint(tx.Tags, 16) + "', ")
 	output.WriteString("Fragment: '" + hex.EncodeToString(tx.Request_fragment[:]) + "', ")
+	output.WriteString("Response: '" + string(tx.Response_status_code) + "', ")
 	output.WriteString("Request Tracing ID: '" + parseRequestIdHeader(tx.Request_tracing_id) + "', ")
 	output.WriteString("Response Tracing ID: '" + parseRequestIdHeader(tx.Response_tracing_id) + "', ")
 	output.WriteString("}")
@@ -150,12 +152,24 @@ func (tx *ebpfHttpTx) ResponseTracingID() string {
 	return parseRequestIdHeader(tx.Response_tracing_id)
 }
 
+func (tx *ebpfHttpTx) RawResponseTracingID() [40]byte {
+	return tx.Response_tracing_id
+}
+
+func (tx *ebpfHttpTx) SetResponseTracingID(id [40]byte) {
+	tx.Response_tracing_id = id
+}
+
 func (tx *ebpfHttpTx) RequestParseResult() HeaderParseResult {
 	return tx.Request_parse_result
 }
 
 func (tx *ebpfHttpTx) ResponseParseResult() HeaderParseResult {
 	return tx.Response_parse_result
+}
+
+func (tx *ebpfHttpTx) SetResponseParseResult(res HeaderParseResult) {
+	tx.Response_parse_result = res
 }
 
 // below is copied from pkg/trace/stats/statsraw.go

@@ -34,4 +34,10 @@ typedef enum {
     __MAX_UINT8 = 255,
 } __attribute__ ((packed)) protocol_t;
 
+// Struct to store additional data after classifying an skb, passed form the dispatcher to tail-call.
+typedef struct {
+  __u32 netns;
+  __u32 dummy; // Dummy value for padding
+} classification_dispatch_context_t;
+
 #endif

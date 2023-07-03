@@ -57,6 +57,23 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
     log_debug("[protocol_dispatcher_classifier]: Classified protocol as %d %d; %s\n", *protocol, size, buf);
 }
 
+static __attribute__((always_inline)) u32 net_ns_for_tailcall() {
+    const u32 zero = 0;
+    classification_dispatch_context_t *ctx = bpf_map_lookup_elem(&skb_classification_info, &zero);
+    if (ctx == NULL) {
+      return 0;
+    } else {
+      return ctx->netns;
+    }
+}
+
+static __attribute__((always_inline)) u32 get_netns() {
+    u64 netns;
+    LOAD_CONSTANT("netns", netns);
+    return (u32) netns;
+}
+
+
 // A shared implementation for the runtime & prebuilt socket filter that classifies & dispatches the protocols of the connections.
 static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb) {
     skb_info_t skb_info = {0};
@@ -66,6 +83,9 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
     if (!read_conn_tuple_skb(skb, &skb_info, &skb_tup)) {
         return;
     }
+
+    // Add netns to separate localhost traffic
+    skb_tup.netns = get_netns();
 
     // We don't process non tcp packets, nor empty tcp packets which are not tcp termination packets, nor ACK only packets.
     if (!is_tcp(&skb_tup) || is_tcp_ack(&skb_info) || (is_payload_empty(skb, &skb_info) && !is_tcp_termination(&skb_info))) {
@@ -102,6 +122,16 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
     }
 
     if (cur_fragment_protocol != PROTOCOL_UNKNOWN) {
+        // Okey, here it goes: We would like to use a LRU_HASHMAP here based on the skb pointer, to communicate additional arguments
+        // to the tail call. However, earlier kernel versions (<5.19) do not allow bringing in kernel pointers as map keys.
+        // So we go with the old PER_CPU_MAP approach, which is actually problematic due to  https://lore.kernel.org/bpf/CAMy7=ZWPc279vnKK6L1fssp5h7cb6cqS9_EuMNbfVBg_ixmTrQ@mail.gmail.com/T/,
+        // but there is not other option:
+        const u32 zero = 0;
+        classification_dispatch_context_t *ctx = bpf_map_lookup_elem(&skb_classification_info, &zero);
+        if (ctx != NULL) {
+          ctx->netns = get_netns();
+        }
+
         // dispatch if possible
         bpf_tail_call_compat(skb, &protocols_progs, cur_fragment_protocol);
     }

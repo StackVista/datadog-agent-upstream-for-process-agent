@@ -153,25 +153,7 @@ func (h *httpStatKeeper) add(tx httpTX) {
 	key := h.newKey(tx, path, fullPath)
 
 	traceID := parseTraceId(tx)
-	if traceID.Type == TraceIdNone || !h.enableTracing {
-		stats, ok := h.stats[key]
-		if !ok {
-			if len(h.stats) >= h.maxEntries {
-				h.telemetry.dropped.Add(1)
-				return
-			}
-			h.telemetry.aggregations.Add(1)
-			stats = new(RequestStats)
-			h.stats[key] = stats
-		}
-
-		stats.AddRequest(tx.StatusClass(), latency, tx.StaticTags(), tx.DynamicTags())
-	} else {
-		if len(h.observations) >= h.maxObservationEntries {
-			h.telemetry.dropped.Add(1)
-		}
-
-		h.telemetry.observations.Add(1)
+	if h.enableTracing {
 		switch tx.RequestParseResult() {
 		case HeaderParseFound:
 			h.telemetry.requestFound.Add(1)
@@ -193,6 +175,27 @@ func (h *httpStatKeeper) add(tx httpTX) {
 		case HeaderParsePacketEndReached:
 			h.telemetry.responsePacketEnd.Add(1)
 		}
+	}
+
+	if traceID.Type == TraceIdNone || !h.enableTracing {
+		stats, ok := h.stats[key]
+		if !ok {
+			if len(h.stats) >= h.maxEntries {
+				h.telemetry.dropped.Add(1)
+				return
+			}
+			h.telemetry.aggregations.Add(1)
+			stats = new(RequestStats)
+			h.stats[key] = stats
+		}
+
+		stats.AddRequest(tx.StatusClass(), latency, tx.StaticTags(), tx.DynamicTags())
+	} else {
+		if len(h.observations) >= h.maxObservationEntries {
+			h.telemetry.dropped.Add(1)
+		}
+
+		h.telemetry.observations.Add(1)
 
 		h.observations = append(h.observations, TransactionObservation{
 			LatencyNs: latency,
