@@ -152,6 +152,28 @@ func (h *httpStatKeeper) add(tx httpTX) {
 
 	key := h.newKey(tx, path, fullPath)
 
+	switch tx.RequestParseResult() {
+	case HeaderParseFound:
+		h.telemetry.requestFound.Add(1)
+	case HeaderParseNotFound:
+		h.telemetry.requestNotFound.Add(1)
+	case HeaderParseLimitReached:
+		h.telemetry.requestLimitReached.Add(1)
+	case HeaderParsePacketEndReached:
+		h.telemetry.requestPacketEnd.Add(1)
+	}
+
+	switch tx.ResponseParseResult() {
+	case HeaderParseFound:
+		h.telemetry.responseFound.Add(1)
+	case HeaderParseNotFound:
+		h.telemetry.responseNotFound.Add(1)
+	case HeaderParseLimitReached:
+		h.telemetry.responseLimitReached.Add(1)
+	case HeaderParsePacketEndReached:
+		h.telemetry.responsePacketEnd.Add(1)
+	}
+	
 	traceID := parseTraceId(tx)
 	if traceID.Type == TraceIdNone || !h.enableTracing {
 		stats, ok := h.stats[key]
@@ -172,27 +194,6 @@ func (h *httpStatKeeper) add(tx httpTX) {
 		}
 
 		h.telemetry.observations.Add(1)
-		switch tx.RequestParseResult() {
-		case HeaderParseFound:
-			h.telemetry.requestFound.Add(1)
-		case HeaderParseNotFound:
-			h.telemetry.requestNotFound.Add(1)
-		case HeaderParseLimitReached:
-			h.telemetry.requestLimitReached.Add(1)
-		case HeaderParsePacketEndReached:
-			h.telemetry.requestPacketEnd.Add(1)
-		}
-
-		switch tx.ResponseParseResult() {
-		case HeaderParseFound:
-			h.telemetry.responseFound.Add(1)
-		case HeaderParseNotFound:
-			h.telemetry.responseNotFound.Add(1)
-		case HeaderParseLimitReached:
-			h.telemetry.responseLimitReached.Add(1)
-		case HeaderParsePacketEndReached:
-			h.telemetry.responsePacketEnd.Add(1)
-		}
 
 		h.observations = append(h.observations, TransactionObservation{
 			LatencyNs: latency,

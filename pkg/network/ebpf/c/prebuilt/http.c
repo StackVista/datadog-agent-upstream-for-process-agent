@@ -41,6 +41,8 @@ int socket__http_filter(struct __sk_buff* skb) {
         return 0;
     }
 
+    http_class.tup.netns = net_ns_for_tailcall();
+
     if (!http_allow_packet(&http_class, skb, &skb_info)) {
         return 0;
     }

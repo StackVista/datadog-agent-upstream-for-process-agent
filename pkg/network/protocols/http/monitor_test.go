@@ -11,6 +11,7 @@ package http
 import (
 	"bytes"
 	"fmt"
+	"github.com/DataDog/datadog-agent/pkg/process/util"
 	"github.com/google/uuid"
 	"io"
 	"math/rand"
@@ -746,8 +747,13 @@ func isObservationIncludedOnce(allObservations []TransactionObservation, req *ne
 func countObservationOccurrences(allObservations []TransactionObservation, req *nethttp.Request) int {
 	expectedStatus := testutil.StatusFromPath(req.URL.Path)
 	occurrences := 0
+	netNs, err := util.GetCurrentIno()
+	if err != nil {
+		return 0
+	}
+
 	for _, observation := range allObservations {
-		if observation.Key.Path.Content == req.URL.Path && int(observation.Status) == expectedStatus && req.Header.Get("X-Request-ID") == observation.TraceId.Id && observation.TraceId.Type == TraceIdRequest {
+		if observation.Key.NetNs == netNs && observation.Key.Path.Content == req.URL.Path && int(observation.Status) == expectedStatus && req.Header.Get("X-Request-ID") == observation.TraceId.Id && observation.TraceId.Type == TraceIdRequest {
 			occurrences++
 		}
 	}
