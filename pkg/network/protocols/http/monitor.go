@@ -46,14 +46,22 @@ type Monitor struct {
 }
 
 type NsProbe struct {
-	probe     *manager.Probe
-	packetSrc *filterpkg.AFPacketSource
+	ebpfProgram *ebpfProgram
+	probe       *manager.Probe
+	packetSrc   *filterpkg.AFPacketSource
 }
 
 func (n *NsProbe) Close() {
-	err := n.probe.Detach()
+	program := n.probe.Program()
+	err := n.ebpfProgram.DetachHook(n.probe.ProbeIdentificationPair)
 	if err != nil {
-		log.Warnf("Error detaching probe: %w", err)
+		log.Errorf("Error detaching hook %v : %s", n.probe.ProbeIdentificationPair, err)
+	}
+	if program != nil {
+		err = program.Close()
+		if err != nil {
+			log.Errorf("Error closing program %v : %s", n.probe.ProbeIdentificationPair, err)
+		}
 	}
 
 	n.packetSrc.Close()
@@ -254,8 +262,9 @@ func (m *Monitor) loadProbeForNamespace(ns netns.NsHandle, netNs NetNs) (*NsProb
 	}
 
 	return &NsProbe{
-		probe:     newProbe,
-		packetSrc: packetSrc,
+		probe:       newProbe,
+		packetSrc:   packetSrc,
+		ebpfProgram: m.ebpfProgram,
 	}, nil
 }
 

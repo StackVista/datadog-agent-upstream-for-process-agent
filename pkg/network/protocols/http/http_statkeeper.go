@@ -173,7 +173,7 @@ func (h *httpStatKeeper) add(tx httpTX) {
 	case HeaderParsePacketEndReached:
 		h.telemetry.responsePacketEnd.Add(1)
 	}
-	
+
 	traceID := parseTraceId(tx)
 	if traceID.Type == TraceIdNone || !h.enableTracing {
 		stats, ok := h.stats[key]
