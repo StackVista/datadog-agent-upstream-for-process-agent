@@ -18,4 +18,7 @@ BPF_LRU_MAP(dispatcher_connection_protocol, conn_tuple_t, protocol_t, 0)
 // See: https://datadoghq.atlassian.net/wiki/spaces/NET/pages/2326855913/HTTP#Program-size-limit-for-socket-filters
 BPF_PROG_ARRAY(protocols_progs, MAX_PROTOCOLS)
 
+// Map to add additional data to skb classification
+BPF_PERCPU_ARRAY_MAP(skb_classification_info, __u32, classification_dispatch_context_t, 1)
+
 #endif

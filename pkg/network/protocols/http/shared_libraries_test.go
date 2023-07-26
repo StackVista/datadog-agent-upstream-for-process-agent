@@ -256,6 +256,11 @@ func initEBPFProgram(t *testing.T) (*ddebpf.PerfHandler, func()) {
 				MaxEntries: 1,
 				EditorFlag: manager.EditMaxEntries,
 			},
+			skbInfoMap: {
+				Type:       ebpf.Hash,
+				MaxEntries: 1,
+				EditorFlag: manager.EditMaxEntries,
+			},
 		},
 		ActivatedProbes: []manager.ProbesSelector{
 			&manager.ProbeSelector{

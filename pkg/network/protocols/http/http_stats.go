@@ -78,6 +78,8 @@ type KeyTuple struct {
 	// ports separated for alignment/size optimization
 	SrcPort uint16
 	DstPort uint16
+
+	NetNs uint32
 }
 
 // Key is an identifier for a group of HTTP transactions
@@ -313,9 +315,9 @@ type TransactionObservation struct {
 type HeaderParseResult = uint8
 
 const (
-	HeaderNoParse HeaderParseResult = 0x0
-	HeaderParseFound HeaderParseResult = 0x1
-	HeaderParseNotFound HeaderParseResult = 0x2
-	HeaderParseLimitReached HeaderParseResult = 0x3
+	HeaderNoParse               HeaderParseResult = 0x0
+	HeaderParseFound            HeaderParseResult = 0x1
+	HeaderParseNotFound         HeaderParseResult = 0x2
+	HeaderParseLimitReached     HeaderParseResult = 0x3
 	HeaderParsePacketEndReached HeaderParseResult = 0x4
 )
