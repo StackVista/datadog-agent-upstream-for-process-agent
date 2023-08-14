@@ -18,6 +18,10 @@ import (
 	"sync"
 )
 
+const (
+	nsMonitorMaxEvents = 2048
+)
+
 type NetNs uint32
 
 // NetNsMonitor will subscribe to a processMonitor to track changes to net namespaces being created/destroyed.
@@ -37,6 +41,10 @@ type NetNsMonitor struct {
 	pidsForNs       map[NetNs]map[pid]bool
 	UnSubscribeExit func()
 	UnSubscribeExec func()
+
+	// We run callbacks async, to avoid blocking upstream events.
+	callbackRunner chan func()
+	done           sync.WaitGroup
 }
 
 type AddNsCallback func(netNs NetNs, handle netns.NsHandle)
@@ -55,6 +63,20 @@ func MakeNetNsMonitor(c *config.Config, mon *monitor.ProcessMonitor, addCallback
 		pidToNs:        map[pid]NetNs{},
 		pidsForNs:      map[NetNs]map[pid]bool{},
 	}
+
+	// Running callbacks
+	m.callbackRunner = make(chan func(), nsMonitorMaxEvents)
+	m.done.Add(1)
+	go func() {
+		defer m.done.Done()
+		for call := range m.callbackRunner {
+			if call != nil {
+				call()
+			} else {
+				return
+			}
+		}
+	}()
 
 	m.UnSubscribeExit, err = mon.Subscribe(&monitor.ProcessCallback{
 		Event:    monitor.EXIT,
@@ -101,7 +123,9 @@ func (n *NetNsMonitor) callbackExit(p pid) {
 	delete(n.pidToNs, p)
 
 	if len(pids) == 0 {
-		n.dropNsCallback(netNs)
+		n.callbackRunner <- func() {
+			n.dropNsCallback(netNs)
+		}
 		delete(n.pidsForNs, netNs)
 	}
 }
@@ -127,14 +151,24 @@ func (n *NetNsMonitor) callbackExec(p pid) {
 
 	if existing, ok := n.pidsForNs[netNs]; ok {
 		existing[p] = true
+
+		err = nsHandle.Close()
+
+		if err != nil {
+			log.Warnf("Error closing namespace handle: %d, %w. Possible resource leak.", netNs, nsHandle)
+		}
 	} else {
 		n.pidsForNs[netNs] = map[pid]bool{p: true}
-		n.addNsCallback(netNs, nsHandle)
-	}
 
-	err = nsHandle.Close()
-	if err != nil {
-		log.Warnf("Error closing namespace handle: %d, %w. Possible resource leak.", netNs, nsHandle)
+		// Scheduling a callback, transferring ownership of nsHandle
+		n.callbackRunner <- func() {
+			n.addNsCallback(netNs, nsHandle)
+			err = nsHandle.Close()
+
+			if err != nil {
+				log.Warnf("Error closing namespace handle: %d, %w. Possible resource leak.", netNs, nsHandle)
+			}
+		}
 	}
 
 	n.pidToNs[p] = netNs
@@ -142,8 +176,10 @@ func (n *NetNsMonitor) callbackExec(p pid) {
 
 func (n *NetNsMonitor) Close() {
 	n.m.Lock()
-	defer n.m.Unlock()
-
 	n.UnSubscribeExit()
 	n.UnSubscribeExec()
+	n.m.Unlock()
+
+	close(n.callbackRunner)
+	n.done.Wait()
 }
