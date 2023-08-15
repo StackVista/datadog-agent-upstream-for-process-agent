@@ -156,7 +156,7 @@ func (m *Monitor) updateAllNsProbes() error {
 	m.nsProbesM.Lock()
 	defer m.nsProbesM.Unlock()
 
-	var noActiveNs map[NetNs]bool = make(map[NetNs]bool)
+	var noActiveNs = make(map[NetNs]bool)
 
 	for netNS, _ := range m.nsProbes {
 		noActiveNs[netNS] = true

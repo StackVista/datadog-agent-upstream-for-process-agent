@@ -59,6 +59,34 @@ func TestProcessMonitorBasics(t *testing.T) {
 	require.NotPanics(t, unsubscribe2)
 }
 
+func TestProcessMonitorRestartNetlink(t *testing.T) {
+	// Making sure we get the same process monitor if we call it twice.
+	pm := GetProcessMonitor()
+
+	// Sanity subscribing a callback.
+	callback := &ProcessCallback{
+		Event:    EXEC,
+		Metadata: ANY,
+		Callback: func(pid uint32) {},
+	}
+	unsubscribe, err := pm.Subscribe(callback)
+	require.NoError(t, err)
+
+	// duplicated subscription should fail.
+	_, err = pm.Subscribe(callback)
+	require.Error(t, err)
+
+	require.NoError(t, pm.Initialize())
+	defer pm.Stop()
+
+	// Make sure we can restart netlink
+	require.NoError(t, pm.RestartNetLink())
+
+	// making sure unsubscribe works and does not panic for the second unsubscription.
+	unsubscribe()
+	require.NotPanics(t, unsubscribe)
+}
+
 func TestProcessMonitorCallbacks(t *testing.T) {
 	pm := GetProcessMonitor()
 
@@ -114,6 +142,109 @@ func TestProcessMonitorCallbacks(t *testing.T) {
 		return numberOfExecs == 2 && numberOfExits == 1
 	}, time.Second, time.Millisecond*200, fmt.Sprintf("didn't capture exec %d and exit %d", numberOfExecs, numberOfExits))
 
+}
+
+func TestProcessRestartNoDoublePid(t *testing.T) {
+	pm := GetProcessMonitor()
+
+	numberOfExecs := 0
+	numberOfExits := 0
+
+	tmpFile, err := ioutil.TempFile("", "sleep")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+	err = util.CopyFile("/bin/sleep", tmpFile.Name())
+	require.NoError(t, err)
+
+	require.NoError(t, os.Chmod(tmpFile.Name(), 0500))
+
+	require.NoError(t, pm.Initialize())
+	defer pm.Stop()
+	callbackExec := &ProcessCallback{
+		Event:    EXEC,
+		Metadata: NAME,
+		Regex:    regexp.MustCompile(path.Base(tmpFile.Name())),
+		Callback: func(pid uint32) {
+			numberOfExecs++
+		},
+	}
+	callbackExit := &ProcessCallback{
+		Event:    EXIT,
+		Metadata: NAME, // we want only the captured Exec process
+		Regex:    regexp.MustCompile(path.Base(tmpFile.Name())),
+		Callback: func(pid uint32) {
+			numberOfExits++
+		},
+	}
+
+	unsubscribeExec, err := pm.Subscribe(callbackExec)
+	require.NoError(t, err)
+	unsubscribeExit, err := pm.Subscribe(callbackExit)
+	require.NoError(t, err)
+
+	cmd := exec.Command(tmpFile.Name(), "10")
+	require.NoError(t, cmd.Start())
+
+	require.Eventuallyf(t, func() bool {
+		return numberOfExecs == 1 && numberOfExits == 0
+	}, time.Second, time.Millisecond*200, fmt.Sprintf("didn't capture exec %d == 1 and exit %d == 0", numberOfExecs, numberOfExits))
+
+	require.NoError(t, pm.RestartNetLink())
+	require.NoError(t, cmd.Process.Kill())
+	require.Equal(t, "signal: killed", cmd.Wait().Error())
+
+	require.Eventuallyf(t, func() bool {
+		return numberOfExecs == 1 && numberOfExits == 1
+	}, time.Second, time.Millisecond*200, fmt.Sprintf("didn't capture exec %d == 1 and exit %d == 1", numberOfExecs, numberOfExits))
+
+	unsubscribeExit()
+	unsubscribeExec()
+}
+
+func TestProcessMultipleCallbacks(t *testing.T) {
+	pm := GetProcessMonitor()
+
+	numberOfExecs := 0
+
+	tmpFile, err := ioutil.TempFile("", "echo")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+	err = util.CopyFile("/bin/echo", tmpFile.Name())
+	require.NoError(t, err)
+
+	require.NoError(t, os.Chmod(tmpFile.Name(), 0500))
+
+	require.NoError(t, pm.Initialize())
+	defer pm.Stop()
+	callbackExec := &ProcessCallback{
+		Event:    EXEC,
+		Metadata: NAME,
+		Regex:    regexp.MustCompile(path.Base(tmpFile.Name())),
+		Callback: func(pid uint32) {
+			numberOfExecs++
+		},
+	}
+	callbackExec2 := &ProcessCallback{
+		Event:    EXEC,
+		Metadata: ANY,
+		Callback: func(pid uint32) {
+			numberOfExecs++
+		},
+	}
+
+	unsubscribeExec, err := pm.Subscribe(callbackExec)
+	require.NoError(t, err)
+	unsubscribeExec2, err := pm.Subscribe(callbackExec2)
+	require.NoError(t, err)
+
+	require.NoError(t, exec.Command(tmpFile.Name(), "test").Run())
+
+	require.Eventuallyf(t, func() bool {
+		return numberOfExecs == 2
+	}, time.Second, time.Millisecond*200, fmt.Sprintf("didn't capture exec %d == 2", numberOfExecs))
+
+	unsubscribeExec()
+	unsubscribeExec2()
 }
 
 func TestProcessMonitorRefcount(t *testing.T) {
