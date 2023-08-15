@@ -106,6 +106,10 @@ func (n *NetNsMonitor) callbackExit(p pid) {
 	n.m.Lock()
 	defer n.m.Unlock()
 
+	n.removePid(p)
+}
+
+func (n *NetNsMonitor) removePid(p pid) {
 	var netNs NetNs
 	netNs, ok := n.pidToNs[p]
 	if !ok {
@@ -148,6 +152,12 @@ func (n *NetNsMonitor) callbackExec(p pid) {
 	}
 
 	netNs := NetNs(ino)
+
+	if currentNS, ok := n.pidToNs[p]; ok {
+		if currentNS != netNs {
+			n.removePid(p)
+		}
+	}
 
 	if existing, ok := n.pidsForNs[netNs]; ok {
 		existing[p] = true

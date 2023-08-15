@@ -11,6 +11,7 @@ package monitor
 import (
 	"errors"
 	"fmt"
+	"github.com/DataDog/datadog-agent/pkg/process/util"
 	"regexp"
 	"runtime"
 	"sync"
@@ -19,7 +20,6 @@ import (
 	"github.com/DataDog/gopsutil/process"
 	"github.com/vishvananda/netlink"
 
-	"github.com/DataDog/datadog-agent/pkg/process/util"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
 
@@ -46,20 +46,21 @@ var (
 // ProcessMonitor require root or CAP_NET_ADMIN capabilities
 type ProcessMonitor struct {
 	m        sync.Mutex
-	wg       sync.WaitGroup
 	refcount int
 
 	isInitialized bool
 
 	// chan push done by vishvananda/netlink library
-	events chan netlink.ProcEvent
-	done   chan struct{}
-	errors chan error
+	events    chan netlink.ProcEvent
+	errors    chan error
+	done      chan struct{}
+	wgNetLink sync.WaitGroup
 
 	// callback registration and parallel execution management
 	procEventCallbacks map[ProcessEventType][]*ProcessCallback
-	runningPids        map[uint32]interface{}
+	runningPids        map[uint32]metadataName
 	callbackRunner     chan func()
+	wgCBRunners        sync.WaitGroup
 }
 
 type ProcessEventType int
@@ -118,27 +119,90 @@ func GetProcessMonitor() *ProcessMonitor {
 		processMonitor = &ProcessMonitor{
 			isInitialized:      false,
 			procEventCallbacks: make(map[ProcessEventType][]*ProcessCallback),
-			runningPids:        make(map[uint32]interface{}),
+			runningPids:        make(map[uint32]metadataName),
 		}
 	})
 
 	return processMonitor
 }
 
-func (pm *ProcessMonitor) enqueueCallback(callback *ProcessCallback, pid uint32, metadata interface{}) {
-	if callback.Event == EXEC && callback.Metadata != ANY {
-		switch callback.Metadata {
-		case NAME:
-			pm.runningPids[pid] = metadata
-		}
+// enqueueMatchingCallback is a best effort and would not return errors, but report them
+func (p *ProcessMonitor) enqueueMatchingCallback(c *ProcessCallback, pid uint32, name metadataName) {
+	if c.Metadata != NAME || c.Regex.MatchString(name.Name) {
+		p.callbackRunner <- func() { c.Callback(pid) }
 	}
-	pm.callbackRunner <- func() { callback.Callback(pid) }
 }
 
-// evalEXECCallback is a best effort and would not return errors, but report them
-func (p *ProcessMonitor) evalEXECCallback(c *ProcessCallback, pid uint32) {
-	if c.Metadata == ANY {
-		p.enqueueCallback(c, pid, nil)
+// Initialize will scan all running processes and execute matching callbacks
+// Once it's done all new events from netlink socket will be processed by the main async loop
+func (pm *ProcessMonitor) Initialize() error {
+	pm.m.Lock()
+	defer pm.m.Unlock()
+
+	pm.refcount++
+	if pm.isInitialized {
+		return nil
+	}
+
+	pm.callbackRunner = make(chan func(), runtime.NumCPU())
+
+	for i := 0; i < runtime.NumCPU(); i++ {
+		pm.wgCBRunners.Add(1)
+		go func() {
+			defer pm.wgCBRunners.Done()
+			for call := range pm.callbackRunner {
+				if call != nil {
+					call()
+				}
+			}
+		}()
+	}
+
+	err := pm.startNetlink()
+	if err != nil {
+		return err
+	}
+
+	// enable events to be processed
+	pm.isInitialized = true
+	return nil
+}
+
+func drainErrorsAndClose(errors chan error) {
+	// Drain errors before quitting
+	errorCount := len(errors)
+	for i := 1; i <= errorCount; i++ {
+		err := <-errors
+		log.Errorf("process monitor error while shutting down: %v", err)
+	}
+	close(errors)
+	// Only return after events channel is closed, to be sure the netlink monitor is done.
+	return
+}
+
+func waitForEventsCloseAndCloseErrors(eventChan chan netlink.ProcEvent, errorChan chan error) {
+	// Make sure to close the errors channel after the events channel is closed.
+	go func() {
+		for {
+			_, ok := <-eventChan
+			if !ok {
+				drainErrorsAndClose(errorChan)
+				return
+			}
+		}
+	}()
+}
+
+func (pm *ProcessMonitor) RestartNetLink() error {
+	pm.stopNetLink()
+
+	pm.m.Lock()
+	defer pm.m.Unlock()
+	return pm.startNetlink()
+}
+
+func (pm *ProcessMonitor) callExecCallbacks(pid uint32) {
+	if _, exists := pm.runningPids[pid]; exists {
 		return
 	}
 
@@ -161,130 +225,111 @@ func (p *ProcessMonitor) evalEXECCallback(c *ProcessCallback, pid uint32) {
 		return
 	}
 
-	switch c.Metadata {
-	case NAME:
-		pname, err := proc.Name()
-		if err != nil {
-			log.Debugf("process %d name parsing failed %s", pid, err)
-			return
-		}
-		if c.Regex.MatchString(pname) {
-			p.enqueueCallback(c, pid, metadataName{Name: pname})
-		}
+	pname, err := proc.Name()
+	if err != nil {
+		log.Debugf("process %d name parsing failed %s", pid, err)
+		return
+	}
+	metadata := metadataName{Name: pname}
+	pm.runningPids[pid] = metadata
+
+	for _, c := range pm.procEventCallbacks[EXEC] {
+		pm.enqueueMatchingCallback(c, pid, metadata)
 	}
 }
 
-// evalEXITCallback will evaluate the metadata saved by the Exec callback and the callback accordingly
-// please refer to GetProcessMonitor documentation
-func (p *ProcessMonitor) evalEXITCallback(c *ProcessCallback, pid uint32) {
-	switch c.Metadata {
-	case NAME:
-		metadata, found := p.runningPids[pid]
-		if !found {
-			// we can hit here if a process started before the Exec callback has been registred
-			// and the process Exit, so we don't find his metadata
-			return
-		}
-		pname := metadata.(metadataName).Name
-		if c.Regex.MatchString(pname) {
-			p.enqueueCallback(c, pid, metadata)
-		}
-	case ANY:
-		p.enqueueCallback(c, pid, nil)
+func (pm *ProcessMonitor) callExitCallbacks(pid uint32) {
+	metadata, exists := pm.runningPids[pid]
+	if !exists {
+		return
 	}
+
+	for _, c := range pm.procEventCallbacks[EXIT] {
+		pm.enqueueMatchingCallback(c, pid, metadata)
+	}
+
+	delete(pm.runningPids, pid)
 }
 
-// Initialize will scan all running processes and execute matching callbacks
-// Once it's done all new events from netlink socket will be processed by the main async loop
-func (pm *ProcessMonitor) Initialize() error {
-	pm.m.Lock()
-	defer pm.m.Unlock()
-
-	pm.refcount++
-	if pm.isInitialized {
-		return nil
-	}
-
+func (pm *ProcessMonitor) startNetlink() error {
 	pm.events = make(chan netlink.ProcEvent, processMonitorMaxEvents)
 	pm.done = make(chan struct{})
 	pm.errors = make(chan error, 10)
 
-	if err := netlink.ProcEventMonitor(pm.events, pm.done, pm.errors); err != nil {
-		return fmt.Errorf("couldn't initialize process monitor: %s", err)
-	}
+	err := util.WithRootNS(util.GetProcRoot(), func() error {
+		return netlink.ProcEventMonitor(pm.events, pm.done, pm.errors)
+	})
 
-	pm.callbackRunner = make(chan func(), runtime.NumCPU())
-	for i := 0; i < runtime.NumCPU(); i++ {
-		pm.wg.Add(1)
-		go func() {
-			defer pm.wg.Done()
-			for call := range pm.callbackRunner {
-				if call != nil {
-					call()
-				}
-			}
-		}()
+	if err != nil {
+		return fmt.Errorf("couldn't initialize process monitor: %s", err)
 	}
 
 	// This is the main async loop, where we process processes events from netlink socket
 	// events are dropped until
-	pm.wg.Add(1)
+	pm.wgNetLink.Add(1)
 	go func() {
 		defer func() {
 			log.Info("netlink process monitor ended")
-			pm.wg.Done()
-			close(pm.callbackRunner)
+			pm.wgNetLink.Done()
 		}()
 		for {
 			select {
 			case <-pm.done:
+				waitForEventsCloseAndCloseErrors(pm.events, pm.errors)
 				return
 			case event, ok := <-pm.events:
 				if !ok {
+					drainErrorsAndClose(pm.errors)
 					return
 				}
+
 				pm.m.Lock()
-				if !pm.isInitialized {
-					pm.m.Unlock()
-					continue
-				}
 
 				switch ev := event.Msg.(type) {
 				case *netlink.ExecProcEvent:
-					for _, c := range pm.procEventCallbacks[EXEC] {
-						pm.evalEXECCallback(c, ev.ProcessPid)
-					}
+					pm.callExecCallbacks(ev.ProcessPid)
 				case *netlink.ExitProcEvent:
-					for _, c := range pm.procEventCallbacks[EXIT] {
-						pm.evalEXITCallback(c, ev.ProcessPid)
-					}
-					delete(pm.runningPids, ev.ProcessPid)
+					pm.callExitCallbacks(ev.ProcessPid)
 				}
 				pm.m.Unlock()
-
 			case err, ok := <-pm.errors:
 				if !ok {
+					waitForEventsCloseAndCloseErrors(pm.events, pm.errors)
 					return
 				}
-				log.Errorf("process monitor error: %s", err)
-				pm.Stop()
+				log.Warnf("process monitor error: %v. Restarting process monitor", err)
+				go func() {
+					errStart := pm.RestartNetLink()
+					if errStart != nil {
+						log.Errorf("process monitor error, unable to start netlink: %v", errStart)
+					}
+				}()
 				return
 			}
 		}
 	}()
 
+	var notRunningPids = make(map[uint32]bool)
+
+	for pid, _ := range pm.runningPids {
+		notRunningPids[pid] = true
+	}
+
 	fn := func(pid int) error {
-		for _, c := range pm.procEventCallbacks[EXEC] {
-			pm.evalEXECCallback(c, uint32(pid))
-		}
+		delete(notRunningPids, uint32(pid))
+		pm.callExecCallbacks(uint32(pid))
 		return nil
 	}
 
 	if err := util.WithAllProcs(util.HostProc(), fn); err != nil {
 		return fmt.Errorf("process monitor init, scanning all process failed %s", err)
 	}
-	// enable events to be processed
-	pm.isInitialized = true
+
+	// Remove the pids that were not observed.
+	for notActive, _ := range notRunningPids {
+		pm.callExitCallbacks(notActive)
+	}
+
 	return nil
 }
 
@@ -341,6 +386,11 @@ func (pm *ProcessMonitor) Subscribe(callback *ProcessCallback) (UnSubscribe func
 	}, nil
 }
 
+func (pm *ProcessMonitor) stopNetLink() {
+	close(pm.done)
+	pm.wgNetLink.Wait()
+}
+
 func (pm *ProcessMonitor) Stop() {
 	pm.m.Lock()
 	if pm.refcount == 0 {
@@ -356,6 +406,9 @@ func (pm *ProcessMonitor) Stop() {
 
 	pm.isInitialized = false
 	pm.m.Unlock()
-	close(pm.done)
-	pm.wg.Wait()
+
+	close(pm.callbackRunner)
+	pm.wgCBRunners.Wait()
+
+	pm.stopNetLink()
 }
