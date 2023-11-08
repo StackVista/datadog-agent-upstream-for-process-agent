@@ -28,7 +28,6 @@ type measuredListener struct {
 	exit     chan struct{}  // exit signal channel (on Close call)
 	sem      chan struct{}  // Used to limit active connections
 	stop     sync.Once
-	statsd   statsd.ClientInterface
 }
 
 // NewMeasuredListener wraps ln and emits metrics every 10 seconds. The metric name is
