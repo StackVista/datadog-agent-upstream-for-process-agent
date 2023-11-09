@@ -4,6 +4,7 @@
 // Copyright 2016-present Datadog, Inc.
 
 //go:build unix
+// +build unix
 
 // Package model holds model related files
 package model

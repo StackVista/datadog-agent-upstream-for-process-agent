@@ -217,7 +217,7 @@ type Process struct {
 	IsExecChild     bool `field:"-"`         // Indicates whether the process is an exec child of its parent
 	IsParentMissing bool `field:"-"`         // Indicates the direct parent is missing
 
-	Source uint64 `field:"-"`
+	Source uint64 `field:"-" json:"-"`
 
 	// lineage
 	hasValidLineage *bool `field:"-"`
