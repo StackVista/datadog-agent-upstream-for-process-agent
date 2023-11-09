@@ -31,6 +31,7 @@ type AgentContext struct {
 type RuleActionContext struct {
 	Name   string `json:"name"`
 	Signal string `json:"signal"`
+	Arch   string `json:"arch,omitempty"`
 }
 
 // Signal - Rule event wrapper used to send an event to the backend

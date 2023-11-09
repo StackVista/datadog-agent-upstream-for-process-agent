@@ -261,6 +261,17 @@ func (a *APIServer) GetConfig(_ context.Context, _ *api.GetConfigParams) (*api.S
 	return &api.SecurityConfigMessage{}, nil
 }
 
+func runtimeArch() string {
+	switch runtime.GOARCH {
+	case "amd64":
+		return "x64"
+	case "arm64":
+		return "arm64"
+	default:
+		return runtime.GOARCH
+	}
+}
+
 // SendEvent forwards events sent by the runtime security module to Datadog
 func (a *APIServer) SendEvent(rule *rules.Rule, e events.Event, extTagsCb func() []string, service string) {
 	var ruleActions []events.RuleActionContext
