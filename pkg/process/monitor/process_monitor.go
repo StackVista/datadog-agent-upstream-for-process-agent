@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/DataDog/datadog-agent/pkg/process/util"
+	"go.uber.org/atomic"
 	"regexp"
 	"runtime"
 	"sync"
@@ -54,6 +55,7 @@ type ProcessMonitor struct {
 	events    chan netlink.ProcEvent
 	errors    chan error
 	done      chan struct{}
+	isClosing *atomic.Bool
 	wgNetLink sync.WaitGroup
 
 	// callback registration and parallel execution management
@@ -168,32 +170,28 @@ func (pm *ProcessMonitor) Initialize() error {
 	return nil
 }
 
-func drainErrorsAndClose(errors chan error) {
+func drainErrorsAndClose(errors chan error, unexpected bool) {
 	// Drain errors before quitting
+	time.Sleep(3 * time.Second)
+
 	errorCount := len(errors)
 	for i := 1; i <= errorCount; i++ {
 		err := <-errors
-		log.Errorf("process monitor error while shutting down: %v", err)
+		if unexpected {
+			log.Errorf("process monitor unexpected error while shutting down: %v", err)
+		} else {
+			log.Debugf("process monitor expected error while shutting down: %v", err)
+		}
 	}
+
 	close(errors)
 	// Only return after events channel is closed, to be sure the netlink monitor is done.
 	return
 }
 
-func waitForEventsCloseAndCloseErrors(eventChan chan netlink.ProcEvent, errorChan chan error) {
-	// Make sure to close the errors channel after the events channel is closed.
-	go func() {
-		for {
-			_, ok := <-eventChan
-			if !ok {
-				drainErrorsAndClose(errorChan)
-				return
-			}
-		}
-	}()
-}
-
 func (pm *ProcessMonitor) RestartNetLink() error {
+	pm.isClosing.Store(true)
+
 	pm.stopNetLink()
 
 	pm.m.Lock()
@@ -252,9 +250,16 @@ func (pm *ProcessMonitor) callExitCallbacks(pid uint32) {
 }
 
 func (pm *ProcessMonitor) startNetlink() error {
+	// Three channels, with different lifecycles, here it goes:
+
+	// The event channel gets written by ProcEventMonitor and closed by ProcEventMonitor
 	pm.events = make(chan netlink.ProcEvent, processMonitorMaxEvents)
+	// The done channel is consumer by ProcEventMonitor and written/closed by ProcessMonitor
 	pm.done = make(chan struct{})
+	// The errors channel is written (at most once) by ProcEventMonitor and closed by ProcessMonitor (this is not nice, but we don't change ProcEventMonitor right now).
 	pm.errors = make(chan error, 10)
+	// Is this class doing a scheduled stop/shutdown?
+	pm.isClosing = atomic.NewBool(false)
 
 	err := util.WithRootNS(util.GetProcRoot(), func() error {
 		return netlink.ProcEventMonitor(pm.events, pm.done, pm.errors)
@@ -264,6 +269,7 @@ func (pm *ProcessMonitor) startNetlink() error {
 		return fmt.Errorf("couldn't initialize process monitor: %s", err)
 	}
 
+	log.Infof("Starting netlink process")
 	// This is the main async loop, where we process processes events from netlink socket
 	// events are dropped until
 	pm.wgNetLink.Add(1)
@@ -273,39 +279,38 @@ func (pm *ProcessMonitor) startNetlink() error {
 			pm.wgNetLink.Done()
 		}()
 		for {
-			select {
-			case <-pm.done:
-				waitForEventsCloseAndCloseErrors(pm.events, pm.errors)
-				return
-			case event, ok := <-pm.events:
-				if !ok {
-					drainErrorsAndClose(pm.errors)
-					return
+			// Okay, here it goes: We read both events and error from ProcEventMonitor. Shutdown or errors are tricky because
+			// the event channel gets closed and the errors produced to in the case of shutdown or error (in both cases)
+			// We wait for the event channel, reading from the error channel afterwards with some delay, to avoid missing the error message.
+			event, ok := <-pm.events
+			if !ok {
+				log.Infof("Netlink event channel closed. Draining errors.")
+				if pm.isClosing.Load() {
+					// Scheduled shutdown, no restart
+					log.Infof("Netlink event channel closed. Netlink is shutting down.")
+					go drainErrorsAndClose(pm.errors, false)
+				} else {
+					log.Warnf("Netlink event channel closed unexpectedly, restarting.")
+					go drainErrorsAndClose(pm.errors, true)
+					go func() {
+						errStart := pm.RestartNetLink()
+						if errStart != nil {
+							log.Errorf("process monitor error, unable to start netlink: %v", errStart)
+						}
+					}()
 				}
-
-				pm.m.Lock()
-
-				switch ev := event.Msg.(type) {
-				case *netlink.ExecProcEvent:
-					pm.callExecCallbacks(ev.ProcessPid)
-				case *netlink.ExitProcEvent:
-					pm.callExitCallbacks(ev.ProcessPid)
-				}
-				pm.m.Unlock()
-			case err, ok := <-pm.errors:
-				if !ok {
-					waitForEventsCloseAndCloseErrors(pm.events, pm.errors)
-					return
-				}
-				log.Warnf("process monitor error: %v. Restarting process monitor", err)
-				go func() {
-					errStart := pm.RestartNetLink()
-					if errStart != nil {
-						log.Errorf("process monitor error, unable to start netlink: %v", errStart)
-					}
-				}()
 				return
 			}
+
+			pm.m.Lock()
+
+			switch ev := event.Msg.(type) {
+			case *netlink.ExecProcEvent:
+				pm.callExecCallbacks(ev.ProcessPid)
+			case *netlink.ExitProcEvent:
+				pm.callExitCallbacks(ev.ProcessPid)
+			}
+			pm.m.Unlock()
 		}
 	}()
 
@@ -409,6 +414,8 @@ func (pm *ProcessMonitor) Stop() {
 
 	close(pm.callbackRunner)
 	pm.wgCBRunners.Wait()
+
+	pm.isClosing.Store(true)
 
 	pm.stopNetLink()
 }
