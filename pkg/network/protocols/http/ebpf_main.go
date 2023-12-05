@@ -213,11 +213,13 @@ func (e *ebpfProgram) Init() error {
 
 	probeLogLevel := ebpf.LogLevelStats
 	if e.cfg.ProbeDebugLog {
-		probeLogLevel = probeLogLevel | ebpf.LogLevelBranch
+		log.Warn("Running EBPF probe with debug output")
+		probeLogLevel = ebpf.LogLevelInstruction
 	}
 
 	probeLogSize := 16000000
 	if e.cfg.ProbeLogBufferSizeBytes != 0 {
+		log.Warnf("Running EBPF probe with log size: %d", e.cfg.ProbeLogBufferSizeBytes)
 		probeLogSize = e.cfg.ProbeLogBufferSizeBytes
 	}
 
@@ -290,9 +292,9 @@ func (e *ebpfProgram) Init() error {
 	if err != nil {
 		var err2 *ebpf.VerifierError
 		if errors.As(err, &err2) {
-			_ = log.Error("Error verifying program: last 50 lines")
-			for _, l := range err2.Log[max(len(err2.Log)-50, 0):] {
-				_ = log.Error(l)
+			_ = log.Errorf("Error verifying program: last 500 lines")
+			for _, l := range err2.Log[max(len(err2.Log)-500, 0):] {
+				_ = log.Errorf(l)
 			}
 		}
 		return err
@@ -305,7 +307,7 @@ func (e *ebpfProgram) Init() error {
 
 	if ok {
 		for _, p := range programs {
-			_ = log.Errorf("Statistics for http_filter ebpf probe %s", p.VerifierLog)
+			_ = log.Warnf("Statistics for http_filter ebpf probe %s", p.VerifierLog)
 		}
 	}
 
