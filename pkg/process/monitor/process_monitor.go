@@ -172,15 +172,17 @@ func (pm *ProcessMonitor) Initialize() error {
 
 func drainErrorsAndClose(errors chan error, unexpected bool) {
 	// Drain errors before quitting
-	time.Sleep(3 * time.Second)
-
-	errorCount := len(errors)
-	for i := 1; i <= errorCount; i++ {
-		err := <-errors
-		if unexpected {
-			log.Errorf("process monitor unexpected error while shutting down: %v", err)
-		} else {
-			log.Debugf("process monitor expected error while shutting down: %v", err)
+	for {
+		select {
+			case err := <-errors:
+				if unexpected {
+					log.Errorf("process monitor unexpected error while shutting down: %v", err)
+				} else {
+					log.Debugf("process monitor expected error while shutting down: %v", err)
+				}
+			case <-time.After(3 * time.Second):
+				close(errors)
+				return
 		}
 	}
 
