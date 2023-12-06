@@ -306,8 +306,13 @@ func (e *ebpfProgram) Init() error {
 	})
 
 	if ok {
-		for _, p := range programs {
-			_ = log.Warnf("Statistics for http_filter ebpf probe %s", p.VerifierLog)
+		if e.cfg.ProbeDebugLog {
+			_ = log.Warnf("Successfully loaded probes")
+		} else {
+			// When there is no debug logging all that is logged is branch statistics, which we show for reference.
+			for _, p := range programs {
+				_ = log.Warnf("Statistics for loading http_filter ebpf probe: \n%s", p.VerifierLog)
+			}
 		}
 	}
 
