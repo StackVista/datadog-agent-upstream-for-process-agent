@@ -248,6 +248,7 @@ var _ subprogram = &sslProgram{}
 
 func newSSLProgram(c *config.Config, sockFDMap *ebpf.Map) *sslProgram {
 	if !c.EnableHTTPSMonitoring || !HTTPSSupported(c) {
+		log.Warnf("Skipping https")
 		return nil
 	}
 

@@ -211,6 +211,18 @@ func (e *ebpfProgram) Init() error {
 		kprobeAttachMethod = manager.AttachKprobeWithPerfEventOpen
 	}
 
+	probeLogLevel := ebpf.LogLevelStats
+	if e.cfg.ProbeDebugLog {
+		log.Warn("Running EBPF probe with debug output")
+		probeLogLevel = ebpf.LogLevelInstruction
+	}
+
+	probeLogSize := 16000000
+	if e.cfg.ProbeLogBufferSizeBytes != 0 {
+		log.Warnf("Running EBPF probe with log size: %d", e.cfg.ProbeLogBufferSizeBytes)
+		probeLogSize = e.cfg.ProbeLogBufferSizeBytes
+	}
+
 	options := manager.Options{
 		RLimit: &unix.Rlimit{
 			Cur: math.MaxUint64,
@@ -259,11 +271,11 @@ func (e *ebpfProgram) Init() error {
 		DefaultKprobeAttachMethod: kprobeAttachMethod,
 		VerifierOptions: ebpf.CollectionOptions{
 			Programs: ebpf.ProgramOptions{
-				LogLevel: ebpf.LogLevelStats, // | ebpf.LogLevelBranch, // Branch level logging will blow up the log size, best to only enabled when debugging.
+				LogLevel: probeLogLevel, // Branch level logging will blow up the log size, best to only enabled when debugging.
 				// LogSize is the size of the log buffer given to the verifier. Give it a big enough (2 * 1024 * 1024)
 				// value so that all our programs fit. If the verifier ever outputs a `no space left on device` error,
 				// we'll need to increase this value.
-				LogSize:     16000000,
+				LogSize:     probeLogSize,
 				LogDisabled: false,
 			},
 		},
@@ -280,9 +292,9 @@ func (e *ebpfProgram) Init() error {
 	if err != nil {
 		var err2 *ebpf.VerifierError
 		if errors.As(err, &err2) {
-			_ = log.Error("Error verifying program: last 50 lines")
-			for _, l := range err2.Log[max(len(err2.Log)-50, 0):] {
-				_ = log.Error(l)
+			_ = log.Errorf("Error verifying program: last 500 lines")
+			for _, l := range err2.Log[max(len(err2.Log)-500, 0):] {
+				_ = log.Errorf(l)
 			}
 		}
 		return err
@@ -294,8 +306,13 @@ func (e *ebpfProgram) Init() error {
 	})
 
 	if ok {
-		for _, p := range programs {
-			_ = log.Errorf("Statistics for http_filter ebpf probe %s", p.VerifierLog)
+		if e.cfg.ProbeDebugLog {
+			_ = log.Warnf("Successfully loaded probes")
+		} else {
+			// When there is no debug logging all that is logged is branch statistics, which we show for reference.
+			for _, p := range programs {
+				_ = log.Warnf("Statistics for loading http_filter ebpf probe: \n%s", p.VerifierLog)
+			}
 		}
 	}
 
