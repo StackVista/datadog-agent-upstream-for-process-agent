@@ -174,15 +174,15 @@ func drainErrorsAndClose(errors chan error, unexpected bool) {
 	// Drain errors before quitting
 	for {
 		select {
-			case err := <-errors:
-				if unexpected {
-					log.Errorf("process monitor unexpected error while shutting down: %v", err)
-				} else {
-					log.Debugf("process monitor expected error while shutting down: %v", err)
-				}
-			case <-time.After(3 * time.Second):
-				close(errors)
-				return
+		case err := <-errors:
+			if unexpected {
+				log.Errorf("process monitor unexpected error while shutting down: %v", err)
+			} else {
+				log.Debugf("process monitor expected error while shutting down: %v", err)
+			}
+		case <-time.After(3 * time.Second):
+			close(errors)
+			return
 		}
 	}
 
@@ -414,10 +414,10 @@ func (pm *ProcessMonitor) Stop() {
 	pm.isInitialized = false
 	pm.m.Unlock()
 
-	close(pm.callbackRunner)
-	pm.wgCBRunners.Wait()
-
 	pm.isClosing.Store(true)
 
 	pm.stopNetLink()
+
+	close(pm.callbackRunner)
+	pm.wgCBRunners.Wait()
 }
