@@ -122,6 +122,7 @@ func GetProcessMonitor() *ProcessMonitor {
 			isInitialized:      false,
 			procEventCallbacks: make(map[ProcessEventType][]*ProcessCallback),
 			runningPids:        make(map[uint32]metadataName),
+			errors:             make(chan error, 10),
 		}
 	})
 
@@ -172,6 +173,8 @@ func (pm *ProcessMonitor) Initialize() error {
 
 func drainErrorsAndClose(errors chan error, unexpected bool) {
 	// Drain errors before quitting
+	// If we do not see an error for three seconds, we quit
+	// This function used to close the errors channel, but no longer does
 	for {
 		select {
 		case err := <-errors:
@@ -181,14 +184,9 @@ func drainErrorsAndClose(errors chan error, unexpected bool) {
 				log.Debugf("process monitor expected error while shutting down: %v", err)
 			}
 		case <-time.After(3 * time.Second):
-			close(errors)
 			return
 		}
 	}
-
-	close(errors)
-	// Only return after events channel is closed, to be sure the netlink monitor is done.
-	return
 }
 
 func (pm *ProcessMonitor) RestartNetLink() error {
@@ -258,8 +256,6 @@ func (pm *ProcessMonitor) startNetlink() error {
 	pm.events = make(chan netlink.ProcEvent, processMonitorMaxEvents)
 	// The done channel is consumer by ProcEventMonitor and written/closed by ProcessMonitor
 	pm.done = make(chan struct{})
-	// The errors channel is written (at most once) by ProcEventMonitor and closed by ProcessMonitor (this is not nice, but we don't change ProcEventMonitor right now).
-	pm.errors = make(chan error, 10)
 	// Is this class doing a scheduled stop/shutdown?
 	pm.isClosing = atomic.NewBool(false)
 
