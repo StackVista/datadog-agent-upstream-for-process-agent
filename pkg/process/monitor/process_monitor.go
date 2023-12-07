@@ -170,10 +170,14 @@ func (pm *ProcessMonitor) Initialize() error {
 	return nil
 }
 
-func drainErrors(errors chan error) {
+func drainErrors(errors chan error, isClosing *atomic.Bool) {
 	// Reads from the errors channel, logging any errors
 	for err := range errors {
-		log.Errorf("Netlink process event monitor error: %v", err)
+		if isClosing.Load() {
+			log.Debugf("Process event monitor error during closing: %v", err)
+		} else {
+			log.Errorf("Unexpected netlink process event monitor error: %v", err)
+		}
 	}
 }
 
@@ -249,7 +253,7 @@ func (pm *ProcessMonitor) startNetlink() error {
 
 	// A separate error channel for this event monitor.
 	errors := make(chan error, 10)
-	go drainErrors(errors)
+	go drainErrors(errors, pm.isClosing)
 
 	err := util.WithRootNS(util.GetProcRoot(), func() error {
 		return netlink.ProcEventMonitor(pm.events, pm.done, errors)
