@@ -3,14 +3,10 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
 // Copyright 2016-present Datadog, Inc.
 
-//go:build linux_bpf
-// +build linux_bpf
-
 package monitor
 
 import (
 	"fmt"
-	"go.uber.org/atomic"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -217,7 +213,8 @@ func TestProcessRestartNoDoublePid(t *testing.T) {
 func TestProcessMultipleCallbacks(t *testing.T) {
 	pm := GetProcessMonitor()
 
-	numberOfExecs := atomic.NewInt32(0)
+	firstCallbackCalled := false
+	secondCallbackCalled := false
 
 	tmpFile, err := ioutil.TempFile("", "sleep")
 	require.NoError(t, err)
@@ -234,14 +231,14 @@ func TestProcessMultipleCallbacks(t *testing.T) {
 		Metadata: NAME,
 		Regex:    regexp.MustCompile(path.Base(tmpFile.Name())),
 		Callback: func(pid uint32) {
-			numberOfExecs.Inc()
+			firstCallbackCalled = true
 		},
 	}
 	callbackExec2 := &ProcessCallback{
 		Event:    EXEC,
 		Metadata: ANY,
 		Callback: func(pid uint32) {
-			numberOfExecs.Inc()
+			secondCallbackCalled = true
 		},
 	}
 
@@ -253,8 +250,8 @@ func TestProcessMultipleCallbacks(t *testing.T) {
 	cmd := exec.Command(tmpFile.Name(), "10")
 	require.NoError(t, cmd.Start())
 	require.Eventuallyf(t, func() bool {
-		return numberOfExecs.Load() == 2
-	}, 5*time.Second, time.Millisecond*200, fmt.Sprintf("didn't capture exec %d == 2", numberOfExecs))
+		return firstCallbackCalled && secondCallbackCalled
+	}, 5*time.Second, time.Millisecond*200, fmt.Sprintf("didn't capture exec. First: %t, second: %t", firstCallbackCalled, secondCallbackCalled))
 	require.NoError(t, cmd.Process.Kill())
 	require.Equal(t, "signal: killed", cmd.Wait().Error())
 
