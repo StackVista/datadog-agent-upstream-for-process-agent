@@ -150,8 +150,6 @@ github.com/DataDog/gostackparse v0.7.0 h1:i7dLkXHvYzHV308hnkvVGDL3BR4FWl7IsXNPz/
 github.com/DataDog/gostackparse v0.7.0/go.mod h1:lTfqcJKqS9KnXQGnyQMCugq3u1FP6UZMfWR0aitKFMM=
 github.com/DataDog/mmh3 v0.0.0-20210722141835-012dc69a9e49 h1:EbzDX8HPk5uE2FsJYxD74QmMw0/3CqSKhEr6teh0ncQ=
 github.com/DataDog/mmh3 v0.0.0-20210722141835-012dc69a9e49/go.mod h1:SvsjzyJlSg0rKsqYgdcFxeEVflx3ZNAyFfkUHP0TxXg=
-github.com/DataDog/netlink v1.0.1-0.20230703150631-f11d5ab05838 h1:GNfmQQwU/MJmw/EzKOG6Ap2zHn+psQ/WeDakcPeLC+U=
-github.com/DataDog/netlink v1.0.1-0.20230703150631-f11d5ab05838/go.mod h1:twkDnbuQxJYemMlGd4JFIcuhgX83tXhKS2B/PRMpOho=
 github.com/DataDog/nikos v1.12.1 h1:3RukyUKkgWBqVRLLxS85rJ0N1f2dPcr+fJmJWkjIkwI=
 github.com/DataDog/nikos v1.12.1/go.mod h1:GTitIq5weMRdnRZEpCaAS+fgufN1Bm38iq0tVNDT3Ns=
 github.com/DataDog/opentelemetry-mapping-go/pkg/internal/sketchtest v0.8.0 h1:+SG7GraRkuMV/1btvAjEhlivLVAbVTwIUDudn7w2EpA=
@@ -216,6 +214,8 @@ github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578/go.mod h1:uGdko
 github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
 github.com/StackExchange/wmi v1.2.1 h1:VIkavFPXSjcnS+O8yTq7NI32k0R5Aj+v39y29VYDOSA=
 github.com/StackExchange/wmi v1.2.1/go.mod h1:rcmrprowKIVzvc+NUiLncP2uuArMWLCbu9SBzvHz7e8=
+github.com/StackVista/netlink v0.0.0-20231207101142-91d41874606b h1:9UZEx5+IBk26JfiMnUrNwE7J5bcC5zYtWwI4O8Q540I=
+github.com/StackVista/netlink v0.0.0-20231207101142-91d41874606b/go.mod h1:twkDnbuQxJYemMlGd4JFIcuhgX83tXhKS2B/PRMpOho=
 github.com/acobaugh/osrelease v0.1.0 h1:Yb59HQDGGNhCj4suHaFQQfBps5wyoKLSSX/J/+UifRE=
 github.com/acobaugh/osrelease v0.1.0/go.mod h1:4bFEs0MtgHNHBrmHCt67gNisnabCRAlzdVasCEGHTWY=
 github.com/acomagu/bufpipe v1.0.3/go.mod h1:mxdxdup/WdsKVreO5GpW4+M/1CE2sMG4jeGJ2sYmHc4=

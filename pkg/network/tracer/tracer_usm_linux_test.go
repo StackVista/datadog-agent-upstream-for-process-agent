@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
 	"io"
 	"math/rand"
 	"net"
@@ -380,6 +381,129 @@ func testHTTPSLibrary(t *testing.T, fetchCmd []string, prefetchLibs []string) {
 			}
 		}
 	}
+}
+
+func TestHTTPSObservationViaLibraryIntegration(t *testing.T) {
+	if !httpSupported() {
+		t.Skip("HTTPS feature not available on pre 4.14.0 kernels")
+	}
+	if !httpsSupported() {
+		t.Skip("HTTPS feature not available/supported for this setup")
+	}
+
+	tlsLibs := []*regexp.Regexp{
+		regexp.MustCompile(`/[^\ ]+libssl.so[^\ ]*`),
+		regexp.MustCompile(`/[^\ ]+libgnutls.so[^\ ]*`),
+	}
+	tests := []struct {
+		name     string
+		fetchCmd []string
+	}{
+		{name: "curl", fetchCmd: []string{"curl", "--http1.1", "-k", "-H", "X-Request-Id: 8cda17a5-eb41-4ced-9843-acc826f95c8c", "-o/dev/null"}},
+	}
+
+	// [STS] Disable because gnutls does not work from them main testing container it seems.
+	if !testutil2.TestingStackState() {
+		tests = append(tests, struct {
+			name     string
+			fetchCmd []string
+		}{
+			name: "wget", fetchCmd: []string{"wget", "--no-check-certificate", "-O/dev/null"},
+		})
+	}
+
+	for _, keepAlives := range []struct {
+		name  string
+		value bool
+	}{
+		{name: "without keep-alives", value: false},
+		{name: "with keep-alives", value: true},
+	} {
+		t.Run(keepAlives.name, func(t *testing.T) {
+			// Spin-up HTTPS server
+			serverDoneFn := testutil.HTTPServer(t, "127.0.0.1:443", testutil.Options{
+				EnableTLS:       true,
+				EnableKeepAlive: keepAlives.value,
+			})
+			t.Cleanup(serverDoneFn)
+
+			for _, test := range tests {
+				t.Run(test.name, func(t *testing.T) {
+					fetch, err := exec.LookPath(test.fetchCmd[0])
+					if err != nil {
+						t.Skipf("%s not found; skipping test.", test.fetchCmd)
+					}
+					ldd, err := exec.LookPath("ldd")
+					if err != nil {
+						t.Skip("ldd not found; skipping test.")
+					}
+					linked, _ := exec.Command(ldd, fetch).Output()
+
+					var prefechLibs []string
+					for _, lib := range tlsLibs {
+						libSSLPath := lib.FindString(string(linked))
+						if _, err := os.Stat(libSSLPath); err == nil {
+							prefechLibs = append(prefechLibs, libSSLPath)
+						}
+					}
+					if len(prefechLibs) == 0 {
+						t.Fatalf("%s not linked with any of these libs %v", test.name, tlsLibs)
+					}
+
+					testHTTPSObservationLibrary(t, test.fetchCmd, prefechLibs)
+
+				})
+			}
+		})
+	}
+}
+
+func testHTTPSObservationLibrary(t *testing.T, fetchCmd []string, prefechLibs []string) {
+	// Start tracer with HTTPS support
+	cfg := testConfig()
+	cfg.EnableHTTPMonitoring = true
+	cfg.EnableNativeTLSMonitoring = true
+
+	cfg.EnableHTTPTracing = true
+	tr, err := NewTracer(cfg)
+	require.NoError(t, err)
+	defer tr.Stop()
+	err = tr.RegisterClient("1")
+	require.NoError(t, err)
+
+	// not ideal but, short process are hard to catch
+	for _, lib := range prefechLibs {
+		f, _ := os.Open(lib)
+		defer f.Close()
+	}
+	time.Sleep(time.Second)
+
+	// Issue request using fetchCmd (wget, curl, ...)
+	// This is necessary (as opposed to using net/http) because we want to
+	// test a HTTP client linked to OpenSSL or GnuTLS
+	const targetURL = "https://127.0.0.1:443/200/foobar"
+	cmd := append(fetchCmd, targetURL)
+	requestCmd := exec.Command(cmd[0], cmd[1:]...)
+	var out []byte
+	out, err = requestCmd.CombinedOutput()
+	require.NoErrorf(t, err, "failed to issue request via %s: %s\n%s", fetchCmd, err, string(out))
+
+	// [STS] Adapted test to test observations instead of stats
+	require.Eventuallyf(t, func() bool {
+		payload, err := tr.GetActiveConnections("1")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Logf("Observing: %+v", payload.HTTPObservations)
+
+		return len(payload.HTTPObservations) == 1 &&
+			payload.HTTPObservations[0].Status == 200 &&
+			payload.HTTPObservations[0].TraceId == http.TransactionTraceId{
+				Type: http.TraceIdRequest,
+				Id:   "8cda17a5-eb41-4ced-9843-acc826f95c8c",
+			}
+	}, 10*time.Second, 1*time.Second, "couldn't find HTTPS stats")
 }
 
 const (

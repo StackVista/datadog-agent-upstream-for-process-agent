@@ -63,7 +63,7 @@ func NewEBPFTelemetry() *EBPFTelemetry {
 
 // RegisterEBPFTelemetry initializes the maps for holding telemetry info
 func (b *EBPFTelemetry) RegisterEBPFTelemetry(m *manager.Manager) error {
-	if b == nil {
+	if b == nil || b.MapErrMap == nil || b.HelperErrMap == nil {
 		return nil
 	}
 

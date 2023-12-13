@@ -29,15 +29,15 @@ func ConnectionKeysFromConnectionStats(connectionStats ConnectionStats) []types.
 	// USM data is always indexed as (client, server), but we don't know which is the remote
 	// and which is the local address. To account for this, we'll construct 2 possible
 	// connection keys and check for both of them in the aggregations map.
-	connectionKeys[0] = types.NewConnectionKey(connectionStats.Source, connectionStats.Dest, connectionStats.SPort, connectionStats.DPort)
-	connectionKeys[1] = types.NewConnectionKey(connectionStats.Dest, connectionStats.Source, connectionStats.DPort, connectionStats.SPort)
+	connectionKeys[0] = types.NewConnectionKey(connectionStats.Source, connectionStats.Dest, connectionStats.SPort, connectionStats.DPort, connectionStats.NetNS)
+	connectionKeys[1] = types.NewConnectionKey(connectionStats.Dest, connectionStats.Source, connectionStats.DPort, connectionStats.SPort, connectionStats.NetNS)
 
 	// if IPTranslation is not nil, at least one of the sides has a translation, thus we need to add translated addresses.
 	if hasTranslation {
 		localAddress, localPort := GetNATLocalAddress(connectionStats)
 		remoteAddress, remotePort := GetNATRemoteAddress(connectionStats)
-		connectionKeys[2] = types.NewConnectionKey(localAddress, remoteAddress, localPort, remotePort)
-		connectionKeys[3] = types.NewConnectionKey(remoteAddress, localAddress, remotePort, localPort)
+		connectionKeys[2] = types.NewConnectionKey(localAddress, remoteAddress, localPort, remotePort, connectionStats.NetNS)
+		connectionKeys[3] = types.NewConnectionKey(remoteAddress, localAddress, remotePort, localPort, connectionStats.NetNS)
 	}
 
 	return connectionKeys
@@ -76,20 +76,20 @@ func WithKey(connectionStats ConnectionStats, f func(key types.ConnectionKey) (s
 	}
 
 	// Callback 1: NATed (client, server)
-	if hasNAT && f(types.NewConnectionKey(clientIPNAT, serverIPNAT, clientPortNAT, serverPortNAT)) {
+	if hasNAT && f(types.NewConnectionKey(clientIPNAT, serverIPNAT, clientPortNAT, serverPortNAT, connectionStats.NetNS)) {
 		return
 	}
 
 	// Callback 2: (client, server)
-	if f(types.NewConnectionKey(clientIP, serverIP, clientPort, serverPort)) {
+	if f(types.NewConnectionKey(clientIP, serverIP, clientPort, serverPort, connectionStats.NetNS)) {
 		return
 	}
 
 	// Callback 3: NATed (server, client)
-	if hasNAT && f(types.NewConnectionKey(serverIPNAT, clientIPNAT, serverPortNAT, clientPortNAT)) {
+	if hasNAT && f(types.NewConnectionKey(serverIPNAT, clientIPNAT, serverPortNAT, clientPortNAT, connectionStats.NetNS)) {
 		return
 	}
 
 	// Callback 4: (server, client)
-	f(types.NewConnectionKey(serverIP, clientIP, serverPort, clientPort))
+	f(types.NewConnectionKey(serverIP, clientIP, serverPort, clientPort, connectionStats.NetNS))
 }

@@ -32,8 +32,6 @@
 
 #define HTTPS_PORT 443
 
-static __always_inline void http_process(http_event_t *event, skb_info_t *skb_info, __u64 tags);
-
 /* this function is called by all TLS hookpoints (OpenSSL, GnuTLS and GoTLS, JavaTLS) and */
 /* it's used for classify the subset of protocols that is supported by `classify_protocol_for_dispatcher` */
 static __always_inline void classify_decrypted_payload(protocol_stack_t *stack, conn_tuple_t *t, void *buffer, size_t len) {
@@ -89,6 +87,7 @@ static __always_inline void tls_process(struct pt_regs *ctx, conn_tuple_t *t, vo
     bpf_memset(args, 0, sizeof(tls_dispatcher_arguments_t));
     bpf_memcpy(&args->tup, t, sizeof(conn_tuple_t));
     args->buffer_ptr = buffer_ptr;
+    args->len = len;
     args->tags = tags;
     bpf_tail_call_compat(ctx, &tls_process_progs, prog);
 }

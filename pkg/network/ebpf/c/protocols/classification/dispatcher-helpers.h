@@ -86,6 +86,12 @@ static __always_inline void dispatcher_delete_protocol_stack(conn_tuple_t *tuple
     }
 }
 
+static __attribute__((always_inline)) u32 get_netns() {
+    u64 netns;
+    LOAD_CONSTANT("netns", netns);
+    return (u32) netns;
+}
+
 // A shared implementation for the runtime & prebuilt socket filter that classifies & dispatches the protocols of the connections.
 static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb) {
     skb_info_t skb_info = {0};
@@ -95,6 +101,9 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
     if (!read_conn_tuple_skb(skb, &skb_info, &skb_tup)) {
         return;
     }
+
+    // Add netns to separate localhost traffic
+    skb_tup.netns = get_netns();
 
     bool tcp_termination = is_tcp_termination(&skb_info);
     // We don't process non tcp packets, nor empty tcp packets which are not tcp termination packets.
@@ -150,6 +159,12 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
 
     if (cur_fragment_protocol != PROTOCOL_UNKNOWN) {
         // dispatch if possible
+
+        // [STS] Comment added by stackstate, why this approach is ok.
+        // Okey, here it goes: We would like to use a LRU_HASHMAP here based on the skb pointer, to communicate additional arguments
+        // to the tail call. However, earlier kernel versions (<5.19) do not allow bringing in kernel pointers as map keys.
+        // So we go with the old PER_CPU_MAP approach, which is actually problematic due to  https://lore.kernel.org/bpf/CAMy7=ZWPc279vnKK6L1fssp5h7cb6cqS9_EuMNbfVBg_ixmTrQ@mail.gmail.com/T/,
+        // but there is not other option:
         const u32 zero = 0;
         dispatcher_arguments_t *args = bpf_map_lookup_elem(&dispatcher_arguments, &zero);
         if (args == NULL) {
@@ -173,6 +188,9 @@ static __always_inline void dispatch_kafka(struct __sk_buff *skb) {
         return;
     }
 
+    // Add netns to separate localhost traffic
+    skb_tup.netns = get_netns();
+
     char request_fragment[CLASSIFICATION_MAX_BUFFER];
     bpf_memset(request_fragment, 0, sizeof(request_fragment));
     read_into_buffer_for_classification((char *)request_fragment, skb, skb_info.data_off);
@@ -186,6 +204,12 @@ static __always_inline void dispatch_kafka(struct __sk_buff *skb) {
 
     if (cur_fragment_protocol != PROTOCOL_UNKNOWN) {
         // dispatch if possible
+
+        // [STS] Comment added by stackstate, why this approach is ok.
+        // Okey, here it goes: We would like to use a LRU_HASHMAP here based on the skb pointer, to communicate additional arguments
+        // to the tail call. However, earlier kernel versions (<5.19) do not allow bringing in kernel pointers as map keys.
+        // So we go with the old PER_CPU_MAP approach, which is actually problematic due to  https://lore.kernel.org/bpf/CAMy7=ZWPc279vnKK6L1fssp5h7cb6cqS9_EuMNbfVBg_ixmTrQ@mail.gmail.com/T/,
+        // but there is not other option:
         const u32 zero = 0;
         dispatcher_arguments_t *args = bpf_map_lookup_elem(&dispatcher_arguments, &zero);
         if (args == NULL) {
