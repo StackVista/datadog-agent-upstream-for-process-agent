@@ -508,7 +508,6 @@ func newKafkaMonitor(t *testing.T, cfg *config.Config) *Monitor {
 
 // This test will help us identify if there is any verifier problems while loading the Kafka binary in the CI environment
 func TestLoadKafkaBinary(t *testing.T) {
-	testutil2.SkipIfStackState(t, "Runtime compilation not supported")
 	skipTestIfKernelNotSupported(t)
 
 	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt, ebpftest.RuntimeCompiled, ebpftest.CORE}, "", func(t *testing.T) {
