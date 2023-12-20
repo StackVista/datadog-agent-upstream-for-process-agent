@@ -8,7 +8,6 @@
 package usm
 
 import (
-	"github.com/DataDog/datadog-agent/pkg/util/testutil"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,7 +19,6 @@ import (
 )
 
 func TestHttpCompile(t *testing.T) {
-	testutil.SkipIfStackState(t, "Runtime compilation not supported yet")
 	ebpftest.TestBuildMode(t, ebpftest.RuntimeCompiled, "", func(t *testing.T) {
 		currKernelVersion, err := kernel.HostVersion()
 		require.NoError(t, err)
