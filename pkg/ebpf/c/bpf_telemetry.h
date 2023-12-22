@@ -13,11 +13,9 @@
 // #define ENABLE_BPF_TELEMETRY
 
 #define PATCH_TARGET_TELEMETRY -1
-
-#ifdef ENABLE_BPF_TELEMETRY
-
 static void *(*bpf_telemetry_update_patch)(unsigned long, ...) = (void *)PATCH_TARGET_TELEMETRY;
 
+#ifdef ENABLE_BPF_TELEMETRY
 #define map_update_with_telemetry(fn, map, args...)                                \
     ({                                                                             \
         long errno_ret, errno_slot;                                                \
