@@ -94,6 +94,7 @@ func (a *asset) Compile(config *ebpf.Config, additionalFlags []string, client st
 	}
 
 	out, result, err := compileToObjectFile(protectedFile.Name(), outputDir, a.filename, a.hash, additionalFlags, kernelHeaders)
+	log.Warnf("compileToObjectFile (from %s to %s/%s) result: %v", protectedFile.Name(), outputDir, a.filename, result)
 	a.tm.compilationResult = result
 
 	return out, err
