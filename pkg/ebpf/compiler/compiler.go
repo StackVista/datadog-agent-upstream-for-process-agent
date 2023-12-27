@@ -73,11 +73,11 @@ func CompileToObjectFile(inFile, outputFile string, cflags []string, headerDirs 
 		return err
 	}
 	defer os.RemoveAll(tmpIncludeDir)
-	cflags = append(cflags, fmt.Sprintf("-isystem %s", tmpIncludeDir))
+	cflags = append(cflags, fmt.Sprintf("-isystem%s", tmpIncludeDir))
 
 	kps := kernelHeaderPaths(headerDirs)
 	for _, p := range kps {
-		cflags = append(cflags, fmt.Sprintf("-isystem %s", p))
+		cflags = append(cflags, fmt.Sprintf("-isystem%s", p))
 	}
 
 	cflags = append(cflags, "-c", "-x", "c", "-o", "-", inFile)
