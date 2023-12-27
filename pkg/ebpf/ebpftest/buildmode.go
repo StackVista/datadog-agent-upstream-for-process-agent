@@ -56,6 +56,7 @@ func (r runtimeCompiled) Env() map[string]string {
 	return map[string]string{
 		"NETWORK_TRACER_FENTRY_TESTS":        "false",
 		"DD_ENABLE_RUNTIME_COMPILER":         "true",
+		"DD_ENABLE_KERNEL_HEADER_DOWNLOAD":   "true",
 		"DD_ENABLE_CO_RE":                    "false",
 		"DD_ALLOW_RUNTIME_COMPILED_FALLBACK": "false",
 		"DD_ALLOW_PRECOMPILED_FALLBACK":      "false",

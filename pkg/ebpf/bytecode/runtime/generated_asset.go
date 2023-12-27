@@ -61,7 +61,7 @@ func (a *generatedAsset) Compile(config *ebpf.Config, inputCode string, addition
 	kernelHeaders := kernel.GetKernelHeaders(opts, client)
 	if len(kernelHeaders) == 0 {
 		a.tm.compilationResult = headerFetchErr
-		return nil, fmt.Errorf("unable to find kernel headers")
+		return nil, fmt.Errorf("unable to find kernel headers while generating assets")
 	}
 
 	outputDir := config.RuntimeCompilerOutputDir
