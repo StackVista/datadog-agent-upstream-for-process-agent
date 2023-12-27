@@ -98,7 +98,7 @@ type HTTPTestSuite struct {
 }
 
 func TestHTTP(t *testing.T) {
-	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt /* STS edit:, ebpftest.RuntimeCompiled, ebpftest.CORE */}, "", func(t *testing.T) {
+	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt, ebpftest.RuntimeCompiled /* STS edit:, ebpftest.CORE */}, "", func(t *testing.T) {
 		suite.Run(t, new(HTTPTestSuite))
 	})
 }
