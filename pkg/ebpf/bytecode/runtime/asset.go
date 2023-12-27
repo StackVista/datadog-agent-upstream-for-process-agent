@@ -62,7 +62,7 @@ func (a *asset) Compile(config *ebpf.Config, additionalFlags []string, client st
 	kernelHeaders := kernel.GetKernelHeaders(opts, client)
 	if len(kernelHeaders) == 0 {
 		a.tm.compilationResult = headerFetchErr
-		return nil, fmt.Errorf("unable to find kernel headers")
+		return nil, fmt.Errorf("unable to find kernel headers when trying to fetch headers with options: %v. Header provider result: %v", opts, kernel.HeaderProvider.GetResult())
 	}
 
 	outputDir := config.RuntimeCompilerOutputDir
