@@ -19,6 +19,7 @@ import (
 	"net"
 	nethttp "net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -197,6 +198,73 @@ func (s *HTTPTestSuite) TestHTTPMonitorLoadWithIncompleteBuffers() {
 	}
 
 	require.True(t, foundFastReq)
+}
+
+// TestHTTPMonitorInstructionCounts puts a cap on the amount of instructions for the ebpf probe
+// We want to be aware of the amount of instructions we add to the verifier with our changes to
+// not hit the limit too quickly.
+func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
+	t := s.T()
+
+	monitor := newHTTPMonitor(t, testutil.Options{})
+
+	programs, err := monitor.ebpfProgram.GetPrograms()
+	require.NoError(t, err)
+
+	maxCounts := map[string]int{
+		"uprobe__SSL_write":                     15,
+		"uprobe__SSL_set_bio":                   34,
+		"uprobe__crypto_tls_Conn_Close":         1767,
+		"uretprobe__gnutls_record_recv":         1485,
+		"uretprobe__SSL_write_ex":               1503,
+		"socket__http_filter":                   250000,
+		"uprobe__SSL_set_fd":                    21,
+		"uprobe__SSL_do_handshake":              14,
+		"uretprobe__gnutls_handshake":           8,
+		"uprobe__http_process":                  104448,
+		"uprobe__crypto_tls_Conn_Read":          628,
+		"uretprobe__SSL_connect":                8,
+		"uprobe__gnutls_transport_set_ptr2":     21,
+		"uprobe__crypto_tls_Conn_Write":         765,
+		"uprobe__gnutls_handshake":              14,
+		"uprobe__BIO_new_socket":                14,
+		"uprobe__http_termination":              460,
+		"uprobe__SSL_read":                      15,
+		"uprobe__SSL_shutdown":                  1189,
+		"kprobe__tcp_sendmsg":                   1027,
+		"uretprobe__SSL_write":                  1489,
+		"uprobe__SSL_read_ex":                   17,
+		"uprobe__gnutls_deinit":                 1189,
+		"uprobe__SSL_write_ex":                  17,
+		"uprobe__gnutls_transport_set_ptr":      21,
+		"uprobe__crypto_tls_Conn_Write__return": 2072,
+		"uprobe__gnutls_bye":                    1189,
+		"uretprobe__gnutls_record_send":         1485,
+		"tracepoint__net__netif_receive_skb":    255,
+		"uretprobe__SSL_do_handshake":           8,
+		"uretprobe__SSL_read":                   1489,
+		"socket__protocol_dispatcher":           2267,
+		"socket__http2_frames_parser":           92402,
+		"uprobe__gnutls_record_recv":            15,
+		"uprobe__gnutls_record_send":            15,
+		"uprobe__SSL_connect":                   14,
+		"uprobe__crypto_tls_Conn_Read__return":  1982,
+		"uretprobe__SSL_read_ex":                1503,
+		"uprobe__gnutls_transport_set_int2":     21,
+		"socket__http2_filter":                  698269,
+		"uretprobe__BIO_new_socket":             29,
+	}
+
+	for name, p := range programs {
+		limit, ok := maxCounts[name]
+		require.True(t, ok, fmt.Sprintf("Max instruction entry for %s is missing", name))
+		r, err := regexp.Compile("processed ([0-9]+) insns")
+		require.NoError(t, err)
+		match := r.FindStringSubmatch(p.VerifierLog)
+		insns, err := strconv.Atoi(match[1])
+		require.NoError(t, err)
+		require.LessOrEqual(t, insns, limit, name)
+	}
 }
 
 func (s *HTTPTestSuite) TestHTTPMonitorIntegrationWithResponseBody() {
