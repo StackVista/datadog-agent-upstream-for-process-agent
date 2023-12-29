@@ -255,9 +255,12 @@ int socket__http_filter(struct __sk_buff* skb) {
     if (!http_allow_packet(&http_class.tuple, skb, &skb_info)) {
         return 0;
     }
-    normalize_tuple(&http_class.tuple);
 
     http_classify_skb(&http_class, &skb_info, skb);
+
+    // STS: Putting normalize after classify, because any branching in front of trace parsing may double the instruction count
+    normalize_tuple(&http_class.tuple);
+
     http_process(&http_class, &skb_info, NO_TAGS);
     return 0;
 }

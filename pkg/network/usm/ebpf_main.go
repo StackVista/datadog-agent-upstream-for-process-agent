@@ -440,7 +440,7 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 
 	if e.cfg.ProbeDebugLog {
 		log.Warn("Running EBPF probe with debug output")
-		options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelInstruction
+		options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelInstruction | ebpf.LogLevelStats
 
 	}
 
@@ -487,21 +487,21 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 				_ = log.Errorf(l)
 			}
 		}
+		err2.Log = []string{}
+		return err2
+	}
+
+	programs, err := e.Manager.GetPrograms()
+	if err != nil {
 		return err
 	}
 
-	programs, ok, _ := e.Manager.GetProgram(manager.ProbeIdentificationPair{
-		EBPFFuncName: "socket__http_filter",
-	})
-
-	if ok {
+	for name, p := range programs {
 		if e.cfg.ProbeDebugLog {
-			_ = log.Warnf("Successfully loaded probes")
+			log.Infof("Program '%s': successfully loaded probe", name)
 		} else {
 			// When there is no debug logging all that is logged is branch statistics, which we show for reference.
-			for _, p := range programs {
-				_ = log.Warnf("Statistics for loading http_filter ebpf probe: \n%s", p.VerifierLog)
-			}
+			log.Infof("Program '%s': statistics for loading ebpf probe: %s", name, strings.Replace(p.VerifierLog, "\n", " -- ", -1))
 		}
 	}
 
