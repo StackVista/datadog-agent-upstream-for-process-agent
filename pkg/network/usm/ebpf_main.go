@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"path"
 	"strings"
 	"time"
 	"unsafe"
@@ -384,7 +386,10 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 		}
 	}
 
-	err := e.InitWithOptions(buf, options)
+	err := withoutHardenedBpfJit(func() error {
+		return e.InitWithOptions(buf, options)
+	})
+
 	if err != nil {
 		var err2 *ebpf.VerifierError
 		if errors.As(err, &err2) {
@@ -412,6 +417,39 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 	}
 
 	return nil
+}
+
+// withoutHardenedBpfJit disables hardening of the bpf jit. this is required to load the http probes, which are big and trip up the jit.
+func withoutHardenedBpfJit(f func() error) error {
+	var proc = "/proc"
+	if value := os.Getenv("HOST_PROC"); value != "" {
+		proc = value
+	}
+
+	hardenPath := path.Join(proc, "sys", "net", "core", "bpf_jit_harden")
+
+	curValue, err := os.ReadFile(hardenPath)
+	if err != nil {
+		return fmt.Errorf("could not read bpf_jit_harden setting: %w", err)
+	}
+
+	if strings.TrimSpace(string(curValue)) != "0" {
+		log.Infof("Encountered bpf_jit_harden = %s, going to set to 0", strings.TrimSpace(string(curValue)))
+	}
+
+	err = os.WriteFile(hardenPath, []byte("0"), 0644)
+	if err != nil {
+		return fmt.Errorf("could not write to %s to set bpf_jit_harden to 0: %w", hardenPath, err)
+	}
+
+	execErr := f()
+
+	err = os.WriteFile(hardenPath, curValue, 0644)
+	if err != nil {
+		return fmt.Errorf("could not reset bpf_jit_harden to %s: %w", string(curValue), err)
+	}
+
+	return execErr
 }
 
 const connProtoTTL = 3 * time.Minute
