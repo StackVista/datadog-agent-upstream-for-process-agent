@@ -27,8 +27,16 @@ static char http_tracing_header_key_upper[256] = { '\n', 'X', '-', 'R', 'E', 'Q'
 #define HTTP_TRACING_ID_SIZE 40
 
 #define HTTP_HEADER_READ_BUFFER_SIZE 10 // This number is picked such that we do not loose too much data when the last batch does not exactly match.
-#define HTTP_HEADER_READ_LIMIT 1500 // This should be a multiple of HTTP_HEADER_READ_BUFFER_SIZE
-#define HTTP_BATCH_COUNT 150 //
+/**
+Why this limit? We would like to have this at 4k (the max header size). However, various other limitations come into play:
+- The ebpf instruction limit
+- The 1500 mtu of a packet. We do not do http trace recognition across multiple packets
+- The most obscure one:
+  * if /proc/sys/net/core/bpj_jit_harden is enabled, a bigger probe size will trip up the bpf jit and give 'operation not supported' result.
+  * disabling the bpf_jit_harden is an option, but will alarm the user, so we choose to lower the instruction count such that the bug does not surface.
+*/
+#define HTTP_HEADER_READ_LIMIT 1350 // This should be a multiple of HTTP_HEADER_READ_BUFFER_SIZE
+#define HTTP_BATCH_COUNT 135 //
 
 // This is needed to reduce code size on multiple copy opitmizations that were made in
 // the http eBPF program.

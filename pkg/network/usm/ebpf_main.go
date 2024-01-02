@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"path"
 	"strings"
 	"time"
 	"unsafe"
@@ -346,7 +348,7 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 
 	if e.cfg.ProbeDebugLog {
 		log.Warn("Running EBPF probe with debug output")
-		options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelInstruction
+		options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelInstruction | ebpf.LogLevelStats
 
 	}
 
@@ -384,7 +386,10 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 		}
 	}
 
-	err := e.InitWithOptions(buf, options)
+	err := withoutHardenedBpfJit(func() error {
+		return e.InitWithOptions(buf, options)
+	})
+
 	if err != nil {
 		var err2 *ebpf.VerifierError
 		if errors.As(err, &err2) {
@@ -392,26 +397,64 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 			for _, l := range err2.Log[max(len(err2.Log)-500, 0):] {
 				_ = log.Errorf(l)
 			}
+			err2.Log = []string{}
 		}
 		return err
 	}
 
-	programs, ok, _ := e.Manager.GetProgram(manager.ProbeIdentificationPair{
-		EBPFFuncName: "socket__http_filter",
-	})
+	programs, err := e.Manager.GetPrograms()
+	if err != nil {
+		return err
+	}
 
-	if ok {
+	for name, p := range programs {
 		if e.cfg.ProbeDebugLog {
-			_ = log.Warnf("Successfully loaded probes")
+			log.Infof("Program '%s': successfully loaded probe", name)
 		} else {
 			// When there is no debug logging all that is logged is branch statistics, which we show for reference.
-			for _, p := range programs {
-				_ = log.Warnf("Statistics for loading http_filter ebpf probe: \n%s", p.VerifierLog)
-			}
+			log.Infof("Program '%s': statistics for loading ebpf probe: %s", name, strings.Replace(p.VerifierLog, "\n", " -- ", -1))
 		}
 	}
 
 	return nil
+}
+
+// withoutHardenedBpfJit disables hardening of the bpf jit. this is required to load the http probes, which are big and trip up the jit.
+func withoutHardenedBpfJit(f func() error) error {
+	if value := os.Getenv("STS_DISABLE_BPF_JIT_HARDEN"); value != "true" {
+		return f()
+	}
+
+	var proc = "/proc"
+	if value := os.Getenv("HOST_PROC"); value != "" {
+		proc = value
+	}
+
+	hardenPath := path.Join(proc, "sys", "net", "core", "bpf_jit_harden")
+
+	curValue, err := os.ReadFile(hardenPath)
+	if err != nil {
+		return fmt.Errorf("could not read bpf_jit_harden setting: %w", err)
+	}
+
+	if strings.TrimSpace(string(curValue)) != "0" {
+		log.Infof("Encountered bpf_jit_harden = %s, going to set to 0", strings.TrimSpace(string(curValue)))
+	}
+
+	err = os.WriteFile(hardenPath, []byte("0"), 0644)
+	if err != nil {
+		return fmt.Errorf("could not write to %s to set bpf_jit_harden to 0: %w", hardenPath, err)
+	}
+
+	execErr := f()
+
+	log.Infof("Resetting bpf_jit_harden to %s", strings.TrimSpace(string(curValue)))
+	err = os.WriteFile(hardenPath, curValue, 0644)
+	if err != nil {
+		return fmt.Errorf("could not reset bpf_jit_harden to %s: %w", string(curValue), err)
+	}
+
+	return execErr
 }
 
 const connProtoTTL = 3 * time.Minute
