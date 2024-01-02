@@ -34,6 +34,7 @@ Why this limit? We would like to have this at 4k (the max header size). However,
 - The most obscure one:
   * if /proc/sys/net/core/bpj_jit_harden is enabled, a bigger probe size will trip up the bpf jit and give 'operation not supported' result.
   * disabling the bpf_jit_harden is an option, but will alarm the user, so we choose to lower the instruction count such that the bug does not surface.
+- A bug was 'filed' on the kernel mailing list: https://lore.kernel.org/bpf/xunyr135ytxr.fsf@redhat.com/t/
 */
 #define HTTP_HEADER_READ_LIMIT 1350 // This should be a multiple of HTTP_HEADER_READ_BUFFER_SIZE
 #define HTTP_BATCH_COUNT 135 //
