@@ -397,9 +397,9 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 			for _, l := range err2.Log[max(len(err2.Log)-500, 0):] {
 				_ = log.Errorf(l)
 			}
+			err2.Log = []string{}
 		}
-		err2.Log = []string{}
-		return err2
+		return err
 	}
 
 	programs, err := e.Manager.GetPrograms()
@@ -421,6 +421,10 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 
 // withoutHardenedBpfJit disables hardening of the bpf jit. this is required to load the http probes, which are big and trip up the jit.
 func withoutHardenedBpfJit(f func() error) error {
+	if value := os.Getenv("STS_DISABLE_BPF_JIT_HARDEN"); value != "true" {
+		return f()
+	}
+
 	var proc = "/proc"
 	if value := os.Getenv("HOST_PROC"); value != "" {
 		proc = value
@@ -444,6 +448,7 @@ func withoutHardenedBpfJit(f func() error) error {
 
 	execErr := f()
 
+	log.Infof("Resetting bpf_jit_harden to %s", strings.TrimSpace(string(curValue)))
 	err = os.WriteFile(hardenPath, curValue, 0644)
 	if err != nil {
 		return fmt.Errorf("could not reset bpf_jit_harden to %s: %w", string(curValue), err)
