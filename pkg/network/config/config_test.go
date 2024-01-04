@@ -1190,8 +1190,7 @@ service_monitoring_config:
 
 func TestMaxHTTPObservationsBuffered(t *testing.T) {
 	t.Run("value set through env var", func(t *testing.T) {
-		newConfig()
-		t.Cleanup(restoreGlobalConfig)
+		aconfig.ResetSystemProbeConfig(t)
 
 		t.Setenv("DD_SYSTEM_PROBE_NETWORK_MAX_HTTP_OBSERVATIONS_BUFFERED", "50000")
 
@@ -1200,11 +1199,10 @@ func TestMaxHTTPObservationsBuffered(t *testing.T) {
 	})
 
 	t.Run("value set through yaml", func(t *testing.T) {
-		newConfig()
-		t.Cleanup(restoreGlobalConfig)
+		aconfig.ResetSystemProbeConfig(t)
 
 		cfg := configurationFromYAML(t, `
-network_config:
+service_monitoring_config:
   max_http_observations_buffered: 30000
 `)
 
