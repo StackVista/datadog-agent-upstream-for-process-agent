@@ -330,7 +330,7 @@ func New() *Config {
 		MaxMongoStatsBuffered:     cfg.GetInt(join(smNS, "max_mongo_stats_buffered")),
 
 		EnableHTTPTracing:           cfg.GetBool(join(netNS, "enable_http_tracing")),
-		MaxHTTPObservationsBuffered: cfg.GetInt(join(netNS, "max_http_observations_buffered")),
+		MaxHTTPObservationsBuffered: cfg.GetInt(join(smNS, "max_http_observations_buffered")),
 
 		MaxTrackedHTTPConnections: cfg.GetInt64(join(smNS, "max_tracked_http_connections")),
 		HTTPNotificationThreshold: cfg.GetInt64(join(smNS, "http_notification_threshold")),

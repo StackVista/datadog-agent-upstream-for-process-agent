@@ -6,6 +6,7 @@
         <array>
           <option value="linux_bpf" />
           <option value="kubelet" />
+          <option value="test" />
         </array>
       </option>
     </buildTags>
