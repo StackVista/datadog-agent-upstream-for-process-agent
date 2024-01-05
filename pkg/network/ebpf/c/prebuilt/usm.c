@@ -30,6 +30,15 @@ int socket__protocol_dispatcher_kafka(struct __sk_buff *skb) {
     return 0;
 }
 
+// This entry point is needed to bypass a memory limit on socket filters
+// See: https://datadoghq.atlassian.net/wiki/spaces/NET/pages/2326855913/HTTP#Known-issues
+SEC("socket/protocol_dispatcher_mongo")
+int socket__protocol_dispatcher_mongo(struct __sk_buff *skb) {
+    dispatch_mongo(skb);
+    return 0;
+}
+
+
 SEC("kprobe/tcp_sendmsg")
 int BPF_KPROBE(kprobe__tcp_sendmsg, struct sock *sk) {
     log_debug("kprobe/tcp_sendmsg: sk=%llx\n", sk);

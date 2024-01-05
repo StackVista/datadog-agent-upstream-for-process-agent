@@ -15,6 +15,9 @@
 #include "protocols/http2/usm-events.h"
 #include "protocols/kafka/kafka-classification.h"
 #include "protocols/kafka/usm-events.h"
+#include "protocols/mongo/mongo-classification.h"
+#include "protocols/mongo/usm-events.h"
+
 
 __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protocol_t proto) {
     switch(proto) {
@@ -24,6 +27,8 @@ __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protoc
         return PROG_HTTP2;
     case PROTOCOL_KAFKA:
         return PROG_KAFKA;
+    case PROTOCOL_MONGO:
+        return PROG_MONGO;
     default:
         if (proto != PROTOCOL_UNKNOWN) {
             log_debug("protocol doesn't have a matching program: %d\n", proto);
@@ -150,6 +155,7 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
         if (is_kafka_monitoring_enabled() && cur_fragment_protocol == PROTOCOL_UNKNOWN) {
             bpf_tail_call_compat(skb, &dispatcher_classification_progs, DISPATCHER_KAFKA_PROG);
         }
+
         log_debug("[protocol_dispatcher_entrypoint]: %p Classifying protocol as: %d\n", skb, cur_fragment_protocol);
         // If there has been a change in the classification, save the new protocol.
         if (cur_fragment_protocol != PROTOCOL_UNKNOWN) {

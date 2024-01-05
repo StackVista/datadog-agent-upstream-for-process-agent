@@ -23,6 +23,7 @@ type DispatcherProgramType C.dispatcher_prog_t
 
 const (
 	DispatcherKafkaProg DispatcherProgramType = C.DISPATCHER_KAFKA_PROG
+	DispatcherMongoProg DispatcherProgramType = C.DISPATCHER_MONGO_PROG
 )
 
 type ProgramType C.protocol_prog_t
@@ -32,6 +33,7 @@ const (
 	ProgramHTTP2            ProgramType = C.PROG_HTTP2
 	ProgramHTTP2FrameParser ProgramType = C.PROG_HTTP2_FRAME_PARSER
 	ProgramKafka            ProgramType = C.PROG_KAFKA
+	ProgramMongo            ProgramType = C.PROG_MONGO
 )
 
 func Application(protoNum uint8) ProtocolType {
