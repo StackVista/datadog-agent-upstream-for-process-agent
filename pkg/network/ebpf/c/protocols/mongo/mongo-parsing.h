@@ -36,6 +36,11 @@ int socket__mongo_filter(struct __sk_buff* skb) {
     return 0;
 }
 
+static __always_inline bool is_valid_mongo_request_header (mongo_header_t *header) {
+    // TODO: Validate at least request/response id and OP_CODE plausibility.
+    return true;
+}
+
 static __always_inline bool mongo_process(mongo_transaction_t *mongo_transaction, struct __sk_buff* skb, __u32 offset) {
     /*
         We perform mongo request validation as we can get mongo traffic that is not relevant for parsing (unsupported requests, responses, etc)
