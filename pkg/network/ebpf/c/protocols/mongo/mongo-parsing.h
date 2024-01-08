@@ -50,8 +50,8 @@ static __always_inline bool mongo_process(mongo_transaction_t *mongo_transaction
     bpf_memset(&mongo_header, 0, sizeof(mongo_header));
     bpf_skb_load_bytes_with_telemetry(skb, offset, (char *)&mongo_header, sizeof(mongo_header));
     mongo_header.message_length = bpf_ntohl(mongo_header.message_length);
-    mongo_header.op_code = bpf_ntohs(mongo_header.op_code);
-    mongo_header.request_id = bpf_ntohs(mongo_header.request_id);
+    mongo_header.op_code = bpf_ntohl(mongo_header.op_code);
+    mongo_header.request_id = bpf_ntohl(mongo_header.request_id);
     mongo_header.response_to = bpf_ntohl(mongo_header.response_to);
 
     log_debug("mongo: mongo_header.op_code: %d\n", mongo_header.op_code);
