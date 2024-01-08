@@ -24,13 +24,14 @@ func NewKey(saddr, daddr util.Address, sport, dport uint16, netns uint32, topicN
 	}
 }
 
-// RequestStat stores stats for Mongo requests to a particular key
+// RequestStat stores stats for Kafka requests to a particular key
 type RequestStat struct {
 	Count int
 }
 
-// CombineWith merges the data in 2 RequestStats objects
-// newStats is kept as it is, while the method receiver gets mutated
-func (r *RequestStat) CombineWith(newStats *RequestStat) {
-	r.Count += newStats.Count
+type TransactionObservation struct {
+	// This field holds the value (in nanoseconds) of the operation.
+	// Latency is measured from the time the first byte of the request is sent to the server until the time the first byte of the response is received.
+	LatencyNs float64
+	Key       Key
 }
