@@ -9,8 +9,8 @@ replace (
 )
 
 require (
-	github.com/DataDog/datadog-agent/pkg/util/log v0.49.1
-	github.com/DataDog/datadog-agent/pkg/util/pointer v0.49.1
+	github.com/DataDog/datadog-agent/pkg/util/log v0.49.1-rc.1
+	github.com/DataDog/datadog-agent/pkg/util/pointer v0.49.1-rc.1
 	github.com/containerd/cgroups/v3 v3.0.2
 	github.com/google/go-cmp v0.5.8
 	github.com/karrick/godirwalk v1.17.0
