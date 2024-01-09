@@ -30,19 +30,19 @@ func RunDockerServer(t testing.TB, serverName, dockerPath string, env []string, 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	cmd := exec.CommandContext(ctx, "docker-compose", "-f", dockerPath, "up")
+	cmd := exec.CommandContext(ctx, "docker", "compose", "-f", dockerPath, "up")
 	patternScanner := NewScanner(serverStartRegex, make(chan struct{}, 1))
 
 	cmd.Stdout = patternScanner
 	cmd.Stderr = patternScanner
 	cmd.Env = append(cmd.Env, env...)
 	err := cmd.Start()
-	require.NoErrorf(t, err, "could not start %s with docker-compose", serverName)
+	require.NoErrorf(t, err, "could not start %s with docker compose", serverName)
 	t.Cleanup(func() {
 		cancel()
 		_ = cmd.Wait()
 
-		c := exec.Command("docker-compose", "-f", dockerPath, "down", "--remove-orphans")
+		c := exec.Command("docker", "compose", "-f", dockerPath, "down", "--remove-orphans")
 		c.Env = append(c.Env, env...)
 		_ = c.Run()
 	})

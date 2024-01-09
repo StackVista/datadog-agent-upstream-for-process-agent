@@ -28,20 +28,16 @@ type protocol struct {
 }
 
 const (
-	eventStreamName                          = "kafka"
-	filterTailCall                           = "socket__kafka_filter"
-	dispatcherTailCall                       = "socket__protocol_dispatcher_kafka"
-	protocolDispatcherClassificationPrograms = "dispatcher_classification_progs"
-	kafkaLastTCPSeqPerConnectionMap          = "kafka_last_tcp_seq_per_connection"
-	kafkaHeapMap                             = "kafka_heap"
+	eventStreamName                 = "kafka"
+	filterTailCall                  = "socket__kafka_filter"
+	dispatcherTailCall              = "socket__protocol_dispatcher_kafka"
+	kafkaLastTCPSeqPerConnectionMap = "kafka_last_tcp_seq_per_connection"
+	kafkaHeapMap                    = "kafka_heap"
 )
 
 var Spec = &protocols.ProtocolSpec{
 	Factory: newKafkaProtocol,
 	Maps: []*manager.Map{
-		{
-			Name: protocolDispatcherClassificationPrograms,
-		},
 		{
 			Name: kafkaLastTCPSeqPerConnectionMap,
 		},
@@ -58,7 +54,7 @@ var Spec = &protocols.ProtocolSpec{
 			},
 		},
 		{
-			ProgArrayName: protocolDispatcherClassificationPrograms,
+			ProgArrayName: protocols.ProtocolDispatcherClassificationPrograms,
 			Key:           uint32(protocols.DispatcherKafkaProg),
 			ProbeIdentificationPair: manager.ProbeIdentificationPair{
 				EBPFFuncName: dispatcherTailCall,

@@ -119,6 +119,7 @@ func newEBPFProgram(c *config.Config, sockFD, connectionProtocolMap *ebpf.Map, b
 			{Name: protocols.TLSDispatcherProgramsMap},
 			{Name: protocols.ProtocolDispatcherProgramsMap},
 			{Name: connectionStatesMap},
+			{Name: protocols.ProtocolDispatcherClassificationPrograms},
 		},
 		Probes: []*manager.Probe{
 			{

@@ -28,28 +28,14 @@ type protocol struct {
 }
 
 const (
-	eventStreamName                          = "mongo"
-	filterTailCall                           = "socket__mongo_filter"
-	dispatcherTailCall                       = "socket__protocol_dispatcher_mongo"
-	protocolDispatcherClassificationPrograms = "dispatcher_classification_progs"
-
-// kafkaLastTCPSeqPerConnectionMap          = "kafka_last_tcp_seq_per_connection"
-// kafkaHeapMap                             = "kafka_heap"
+	eventStreamName    = "mongo"
+	filterTailCall     = "socket__mongo_filter"
+	dispatcherTailCall = "socket__protocol_dispatcher_mongo"
 )
 
 var Spec = &protocols.ProtocolSpec{
 	Factory: newMongoProtocol,
-	Maps: []*manager.Map{
-		{
-			Name: protocolDispatcherClassificationPrograms,
-		},
-		//		{
-		//			Name: kafkaLastTCPSeqPerConnectionMap,
-		//		},
-		//		{
-		//			Name: kafkaHeapMap,
-		//		},
-	},
+	Maps:    []*manager.Map{},
 	TailCalls: []manager.TailCallRoute{
 		{
 			ProgArrayName: protocols.ProtocolDispatcherProgramsMap,
@@ -59,7 +45,7 @@ var Spec = &protocols.ProtocolSpec{
 			},
 		},
 		{
-			ProgArrayName: protocolDispatcherClassificationPrograms,
+			ProgArrayName: protocols.ProtocolDispatcherClassificationPrograms,
 			Key:           uint32(protocols.DispatcherMongoProg),
 			ProbeIdentificationPair: manager.ProbeIdentificationPair{
 				EBPFFuncName: dispatcherTailCall,
@@ -90,10 +76,6 @@ func (p *protocol) Name() string {
 // We also configure the kafka event stream with the manager and its options.
 func (p *protocol) ConfigureOptions(mgr *manager.Manager, opts *manager.Options) {
 	events.Configure(eventStreamName, mgr, opts)
-	//	opts.MapSpecEditors[kafkaLastTCPSeqPerConnectionMap] = manager.MapSpecEditor{
-	//		MaxEntries: p.cfg.MaxTrackedConnections,
-	//		EditorFlag: manager.EditMaxEntries,
-	//	}
 	utils.EnableOption(opts, "mongo_monitoring_enabled")
 }
 
