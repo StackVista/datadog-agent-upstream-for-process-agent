@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/DataDog/datadog-agent/pkg/network/config"
+	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
 
 type StatKeeper struct {
@@ -31,6 +32,8 @@ func NewStatkeeper(c *config.Config, telemetry *Telemetry) *StatKeeper {
 func (statKeeper *StatKeeper) Process(tx *EbpfTx) {
 	statKeeper.statsMutex.Lock()
 	defer statKeeper.statsMutex.Unlock()
+
+	log.Debug("Processing mongo transaction: %v", tx)
 
 	key := Key{
 		RequestId:     tx.Request_id,

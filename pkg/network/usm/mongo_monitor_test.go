@@ -24,20 +24,33 @@ const (
 	mongoPort = "27017"
 )
 
+func TestMonitorSetup(t *testing.T) {
+	monitor := newMongoMonitor(t, getMongoTestConfiguration())
+	t.Cleanup(func() {
+		monitor.Stop()
+	})
+	time.Sleep(5 * time.Second)
+}
+
 func TestMongoDetection(t *testing.T) {
+	monitor := newMongoMonitor(t, getMongoTestConfiguration())
+	t.Cleanup(func() {
+		monitor.Stop()
+	})
 
 	// We rely on port 27017 for the detection, so do not change it.
-	//	require.NoError(t, mongo.RunServer(t, "localhost", mongoPort))
+	require.NoError(t, mongo.RunServer(t, "0.0.0.0", mongoPort))
+
 	client, err := mongo.NewClient(mongo.Options{ServerAddress: "localhost:" + mongoPort, Username: "root", Password: "password"})
 	t.Logf("Waiting for mongo server to be ready, client error: %v", err)
 	defer client.Stop()
 
-	monitor := newMongoMonitor(t, getMongoTestConfiguration())
 	expectedStatsCount := 1
 	statsCount := PrintableInt(0)
 	mongoStats := make(map[mongo.Key]*mongo.RequestStat)
 	require.Eventually(t, func() bool {
 		protocolStats := monitor.GetProtocolStats()
+		t.Logf("Captured stats: %v", protocolStats)
 		mongoProtocolStats, exists := protocolStats[protocols.Mongo]
 		// We might not have mongo stats, and it might be the expected case (to capture 0).
 		if exists {
@@ -58,7 +71,7 @@ func TestMongoDetection(t *testing.T) {
 
 func getMongoTestConfiguration() *config.Config {
 	cfg := config.New()
-	cfg.EnableKafkaMonitoring = false
+	cfg.BPFDebug = true
 	cfg.EnableMongoMonitoring = true
 	cfg.MaxTrackedConnections = 1000
 	return cfg

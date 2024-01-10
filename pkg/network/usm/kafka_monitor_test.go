@@ -79,6 +79,12 @@ func skipTestIfKernelNotSupported(t *testing.T) {
 	}
 }
 
+func TestKafkaMonitorSetup(t *testing.T) {
+	monitor := newKafkaMonitor(t, getDefaultTestConfiguration())
+	time.Sleep(5 * time.Second)
+	monitor.Stop()
+}
+
 func TestKafkaProtocolParsing(t *testing.T) {
 	testutil2.SkipIfStackState(t, "We do not test this yet, it requires compos ein the environment")
 	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt, ebpftest.RuntimeCompiled, ebpftest.CORE}, "", testKafkaProtocolParsing)

@@ -8,7 +8,7 @@
 #include "protocols/classification/usm-context.h"
 
 // Checks if the packet represents a mongo request.
-static __always_inline bool is_mongo(struct __sk_buff *skb, skb_info_t *skb_info, const char* buf, __u32 buf_size) {
+static __always_inline bool is_mongo(struct __sk_buff *skb, skb_info_t *skb_info, const char* buf, __u32 buf_size, conn_tuple_t *skb_tup) {
     log_debug("Calling into is_mongo with skb argument");
     CHECK_PRELIMINARY_BUFFER_CONDITIONS(buf, buf_size, MONGO_MIN_LENGTH);
 
@@ -20,8 +20,12 @@ static __always_inline bool is_mongo(struct __sk_buff *skb, skb_info_t *skb_info
     mongo_header.request_id = bpf_ntohs(header_view->request_id);
     mongo_header.response_to = bpf_ntohl(header_view->response_to);
 
-    __maybe_unused usm_context_t *context = usm_context(skb);
-    log_debug("USM context for Mongo: %p\n", context);
+    // Check if source or target port match the mongo default port.
+    __u16 mongo_default_port = 27017;
+    if ((skb_tup->sport == mongo_default_port) || (skb_tup->dport == mongo_default_port)) {
+        log_debug("Src port: %d, Dst port: %d", skb_tup->sport, skb_tup->dport);
+        return true;
+    }
 
     /*
     if (!is_valid_kafka_request_header(&mongo_header)) {

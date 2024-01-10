@@ -37,10 +37,10 @@ type Client struct {
 func NewClient(opts Options) (*Client, error) {
 	clientOptions := options.Client().ApplyURI(fmt.Sprintf("mongodb://%s", opts.ServerAddress))
 	if opts.Username == "" {
-		opts.Username = User
+		opts.Username = "user"
 	}
 	if opts.Password == "" {
-		opts.Password = Pass
+		opts.Password = "pass"
 	}
 	creds := options.Credential{
 		Username:   opts.Username,

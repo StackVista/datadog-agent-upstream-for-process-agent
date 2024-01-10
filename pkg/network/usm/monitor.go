@@ -10,6 +10,7 @@ package usm
 import (
 	"errors"
 	"fmt"
+	"os"
 	"syscall"
 	"time"
 
@@ -132,6 +133,8 @@ func NewMonitor(c *config.Config, connectionProtocolMap, sockFD *ebpf.Map, bpfTe
 
 // Start USM monitor.
 func (m *Monitor) Start() error {
+	fmt.Fprintln(os.Stderr, "Starting USM monitor")
+
 	if m == nil {
 		return nil
 	}
@@ -151,6 +154,10 @@ func (m *Monitor) Start() error {
 			startupError = err
 		}
 	}()
+
+	for _, protocol := range m.enabledProtocols {
+		fmt.Fprintf(os.Stderr, "Enabled protocol: %v\n", protocol.Name())
+	}
 
 	// Deleting from an array while iterating it is not a simple task. Instead, every successfully enabled protocol,
 	// we'll keep it in a temporary copy, and in case of a mismatch (a.k.a., we have a failed protocols) between
@@ -174,6 +181,8 @@ func (m *Monitor) Start() error {
 	err = m.ebpfProgram.Start()
 	if err != nil {
 		return fmt.Errorf("error starting ebpf program for usm: %w", err)
+	} else {
+		fmt.Fprintf(os.Stderr, "Started ebpf program for: %v\n", m.ebpfProgram)
 	}
 
 	enabledProtocolsTmp = m.enabledProtocols[:0]
