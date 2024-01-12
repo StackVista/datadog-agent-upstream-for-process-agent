@@ -33,13 +33,14 @@ func (statKeeper *StatKeeper) Process(tx *EbpfTx) {
 	statKeeper.statsMutex.Lock()
 	defer statKeeper.statsMutex.Unlock()
 
-	log.Debug("Processing mongo transaction: %v", tx)
-
 	key := Key{
 		RequestId:     tx.Request_id,
 		ConnectionKey: tx.ConnTuple(),
 	}
 	requestStats, ok := statKeeper.stats[key]
+
+	log.Errorf("Requests for key %v: %v", key, requestStats)
+
 	if !ok {
 		if len(statKeeper.stats) >= statKeeper.maxEntries {
 			statKeeper.telemetry.dropped.Add(1)
@@ -48,13 +49,16 @@ func (statKeeper *StatKeeper) Process(tx *EbpfTx) {
 		requestStats = new(RequestStat)
 		statKeeper.stats[key] = requestStats
 	}
+
 	requestStats.Count++
+	log.Errorf("RequestStats %v", requestStats)
 }
 
 func (statKeeper *StatKeeper) GetAndResetAllStats() map[Key]*RequestStat {
 	statKeeper.statsMutex.RLock()
 	defer statKeeper.statsMutex.RUnlock()
 	ret := statKeeper.stats // No deep copy needed since `statKeeper.stats` gets reset
+	log.Errorf("Mongo stats: %v", ret)
 	statKeeper.stats = make(map[Key]*RequestStat)
 	return ret
 }

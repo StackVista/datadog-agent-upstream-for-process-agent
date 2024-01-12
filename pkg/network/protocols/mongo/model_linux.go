@@ -20,6 +20,6 @@ func (tx *EbpfTx) ConnTuple() types.ConnectionKey {
 	}
 }
 
-func (tx *EbpfTx) RequestId() int32 {
+func (tx *EbpfTx) RequestId() uint32 {
 	return tx.Request_id
 }

@@ -12,21 +12,22 @@ import (
 
 // Key is an identifier for a Mongo resquest/response pair
 type Key struct {
-	RequestId int32
+	RequestId uint32
 	types.ConnectionKey
 }
 
 // NewKey generates a new Key
-func NewKey(saddr, daddr util.Address, sport, dport uint16, netns uint32, topicName string, requestId int32) Key {
+func NewKey(saddr, daddr util.Address, sport, dport uint16, netns uint32, topicName string, requestId uint32) Key {
 	return Key{
 		ConnectionKey: types.NewConnectionKey(saddr, daddr, sport, dport, netns),
 		RequestId:     requestId,
 	}
 }
 
-// RequestStat stores stats for Kafka requests to a particular key
+// RequestStat stores stats for a given Mongo connection
 type RequestStat struct {
-	Count int
+	Count     int
+	LatencyNs float64
 }
 
 type TransactionObservation struct {

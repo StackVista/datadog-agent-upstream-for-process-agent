@@ -10,9 +10,46 @@
 // forward declaration
 static __always_inline bool mongo_allow_packet(mongo_transaction_t *mongo, struct __sk_buff* skb, skb_info_t *skb_info);
 static __always_inline bool mongo_process(mongo_transaction_t *mongo_transaction, struct __sk_buff* skb, __u32 offset);
+static __always_inline bool mongo_process_header(mongo_transaction_t *mongo_transaction, mongo_header_t *mongo_header);
+
+SEC("uprobe/mongo_process")
+int uprobe__mongo_process(struct pt_regs *ctx) {
+    log_debug("mongo: uprobe__mongo_process: start\n");
+    const __u32 zero = 0;
+    tls_dispatcher_arguments_t *args = bpf_map_lookup_elem(&tls_dispatcher_arguments, &zero);
+    if (args == NULL) {
+        return 0;
+    }
+
+    mongo_transaction_t *mongo_transaction = bpf_map_lookup_elem(&mongo_heap, &zero);
+    if (mongo_transaction == NULL) {
+        return 0;
+    }
+
+    bpf_memset(mongo_transaction, 0, sizeof(mongo_transaction_t));
+    bpf_memcpy(&mongo_transaction->base.tup, &args->tup, sizeof(conn_tuple_t));
+    normalize_tuple(&mongo_transaction->base.tup);
+
+    mongo_process_header(mongo_transaction, (mongo_header_t *)args->buffer_ptr);
+
+    /*
+    if (sizeof(mongo_header_t) > args->len) {
+        return 0;
+    }
+    mongo_header_t mongo_header;
+    bpf_memcpy(&mongo_header, args->buffer_ptr, sizeof(mongo_header_t));
+
+    // buffer_ptr is not a sk buffer but mongo_process only looks for the payload anyway
+    mongo_process_header(mongo_transaction, mongo_header);
+    http_batch_flush(ctx);
+    */
+   
+    return 0;
+}
 
 SEC("socket/mongo_filter")
 int socket__mongo_filter(struct __sk_buff* skb) {
+    log_debug("socket__mongo_filter: start\n");
     const u32 zero = 0;
     skb_info_t skb_info;
     mongo_transaction_t *mongo = bpf_map_lookup_elem(&mongo_heap, &zero);
@@ -28,6 +65,7 @@ int socket__mongo_filter(struct __sk_buff* skb) {
     }
 
     if (!mongo_allow_packet(mongo, skb, &skb_info)) {
+        log_debug("socket__mongo_filter: mongo_allow_packet returned false\n");
         return 0;
     }
     normalize_tuple(&mongo->base.tup);
@@ -42,32 +80,30 @@ static __always_inline bool is_valid_mongo_request_header (mongo_header_t *heade
 }
 
 static __always_inline bool mongo_process(mongo_transaction_t *mongo_transaction, struct __sk_buff* skb, __u32 offset) {
-    /*
-        We perform mongo request validation as we can get mongo traffic that is not relevant for parsing (unsupported requests, responses, etc)
-    */
-
     mongo_header_t mongo_header;
     bpf_memset(&mongo_header, 0, sizeof(mongo_header));
     bpf_skb_load_bytes_with_telemetry(skb, offset, (char *)&mongo_header, sizeof(mongo_header));
-    mongo_header.message_length = bpf_ntohl(mongo_header.message_length);
-    mongo_header.op_code = bpf_ntohl(mongo_header.op_code);
-    mongo_header.request_id = bpf_ntohl(mongo_header.request_id);
-    mongo_header.response_to = bpf_ntohl(mongo_header.response_to);
+    mongo_process_header(mongo_transaction, &mongo_header);
 
-    log_debug("mongo: mongo_header.op_code: %d\n", mongo_header.op_code);
-    log_debug("mongo: mongo_header.request_id: %d\n", mongo_header.request_id);
-    log_debug("mongo: mongo_header.response_to: %d\n", mongo_header.response_to);
+    return true;
+}
 
-    if (!is_valid_mongo_request_header(&mongo_header)) {
+static __always_inline bool mongo_process_header(mongo_transaction_t *mongo_transaction, mongo_header_t *mongo_header) {
+    // STS/JGT: The bswap dance is required to go from Mongos little-endian to network byte to host byte order.
+    log_debug("mongo: mongo_header.op_code: %u\n", bpf_ntohl(__builtin_bswap32(mongo_header->op_code)));
+    log_debug("mongo: mongo_header.request_id: %u\n", bpf_ntohl(__builtin_bswap32(mongo_header->request_id)));
+    log_debug("mongo: mongo_header.response_to: %u\n", bpf_ntohl(__builtin_bswap32(mongo_header->response_to)));
+
+    if (!is_valid_mongo_request_header(mongo_header)) {
         return false;
     }
 
-    mongo_transaction->base.mongo_request_id = mongo_header.request_id;
-    offset += sizeof(mongo_header_t);
-
+    mongo_transaction->base.mongo_request_id = mongo_header->request_id;
     mongo_batch_enqueue(&mongo_transaction->base);
+
     return true;
 }
+
 
 // this function is called by the socket-filter program to decide whether or not we should inspect
 // the contents of a certain packet, in order to avoid the cost of processing packets that are not

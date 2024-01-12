@@ -15,7 +15,7 @@
 #include "protocols/http2/usm-events.h"
 #include "protocols/kafka/kafka-classification.h"
 #include "protocols/kafka/usm-events.h"
-#include "protocols/mongo/mongo-classification.h"
+#include "protocols/mongo/helpers.h"
 #include "protocols/mongo/usm-events.h"
 
 
@@ -76,6 +76,8 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
         *protocol = PROTOCOL_HTTP;
     } else if (is_http2_monitoring_enabled() && is_http2(buf, size)) {
         *protocol = PROTOCOL_HTTP2;
+    } else if (is_mongo_monitoring_enabled() && is_mongo(tup, buf, size)) {
+        *protocol = PROTOCOL_MONGO;
     } else {
         *protocol = PROTOCOL_UNKNOWN;
     }
@@ -158,7 +160,6 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
         }
 
         if (is_mongo_monitoring_enabled() && cur_fragment_protocol == PROTOCOL_UNKNOWN) {
-            log_debug("[protocol_dispatcher_entrypoint]: %p Looking for Mongo\n", skb);
             bpf_tail_call_compat(skb, &dispatcher_classification_progs, DISPATCHER_MONGO_PROG);
         }
 
@@ -256,8 +257,9 @@ static __always_inline void dispatch_mongo(struct __sk_buff *skb) {
     const size_t payload_length = skb_info.data_end - skb_info.data_off;
     const size_t final_fragment_size = payload_length < CLASSIFICATION_MAX_BUFFER ? payload_length : CLASSIFICATION_MAX_BUFFER;
     protocol_t cur_fragment_protocol = PROTOCOL_UNKNOWN;
-    if (is_mongo(skb, &skb_info, request_fragment, final_fragment_size, &skb_tup)) {
+    if (is_mongo(&skb_tup, request_fragment, final_fragment_size)) {
         cur_fragment_protocol = PROTOCOL_MONGO;
+        log_debug("[dispatch_mongo]: %p classified as Mongo\n", skb);
         update_protocol_stack(&skb_tup, cur_fragment_protocol);
     }
 

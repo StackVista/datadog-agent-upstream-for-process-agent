@@ -28,7 +28,7 @@ func RunServer(t testing.TB, serverAddress, serverPort string) error {
 		"MONGO_USER=" + User,
 		"MONGO_PASSWORD=" + Pass,
 	}
+	t.Helper()
 	dir, _ := testutil.CurDir()
-	t.Logf("Running mongo server with docker-compose in %s", dir)
 	return protocolsUtils.RunDockerServer(t, "mongo", dir+"/testdata/docker-compose.yml", env, regexp.MustCompile(`.*Listening on.*`), 3*time.Minute)
 }

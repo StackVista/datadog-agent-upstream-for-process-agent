@@ -147,6 +147,7 @@ typedef enum {
     TLS_PROG_UNKNOWN = 0,
     TLS_HTTP_PROCESS,
     TLS_HTTP_TERMINATION,
+    TLS_MONGO_PROCESS,
     TLS_PROG_MAX,
 } tls_prog_t;
 

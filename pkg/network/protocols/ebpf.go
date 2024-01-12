@@ -92,4 +92,6 @@ const (
 	ProgramTLSHTTPProcess ProgramType = C.TLS_HTTP_PROCESS
 	// ProgramTLSHTTPTermination is tail call to process http termination.
 	ProgramTLSHTTPTermination ProgramType = C.TLS_HTTP_TERMINATION
+	// ProgramTLSMongoProcess is tail call to process mongo traffic over a TLS connection.
+	ProgramTLSMongoProcess ProgramType = C.TLS_MONGO_PROCESS
 )

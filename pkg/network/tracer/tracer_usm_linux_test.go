@@ -12,7 +12,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
 	"io"
 	"math/rand"
 	"net"
@@ -25,6 +24,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
 
 	krpretty "github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -80,6 +81,16 @@ func classificationSupported(config *config.Config) bool {
 
 type USMSuite struct {
 	suite.Suite
+}
+
+func TestEnableMongoOverTLSMonitoring(t *testing.T) {
+	cfg := testConfig()
+	cfg.EnableHTTPMonitoring = true
+	cfg.EnableHTTP2Monitoring = true
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableMongoMonitoring = true
+	cfg.BPFDebug = true
+	_ = setupTracer(t, cfg)
 }
 
 func TestUSMSuite(t *testing.T) {

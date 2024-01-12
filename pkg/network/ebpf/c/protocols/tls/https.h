@@ -35,6 +35,8 @@
 /* this function is called by all TLS hookpoints (OpenSSL, GnuTLS and GoTLS, JavaTLS) and */
 /* it's used for classify the subset of protocols that is supported by `classify_protocol_for_dispatcher` */
 static __always_inline void classify_decrypted_payload(protocol_stack_t *stack, conn_tuple_t *t, void *buffer, size_t len) {
+    log_debug("mongo: Hello from classify_decrypted_payload\n");
+
     // we're in the context of TLS hookpoints, thus the protocol is TLS.
     set_protocol(stack, PROTOCOL_TLS);
 
@@ -53,6 +55,7 @@ static __always_inline void classify_decrypted_payload(protocol_stack_t *stack, 
 }
 
 static __always_inline void tls_process(struct pt_regs *ctx, conn_tuple_t *t, void *buffer_ptr, size_t len, __u64 tags) {
+    log_debug("mongo: Hello from tls_process\n");
     protocol_stack_t *stack = get_protocol_stack(t);
     if (!stack) {
         return;
@@ -75,6 +78,9 @@ static __always_inline void tls_process(struct pt_regs *ctx, conn_tuple_t *t, vo
     case PROTOCOL_HTTP:
         prog = TLS_HTTP_PROCESS;
         break;
+    case PROTOCOL_MONGO:
+        prog = TLS_MONGO_PROCESS;
+        break;
     default:
         return;
     }
@@ -93,6 +99,7 @@ static __always_inline void tls_process(struct pt_regs *ctx, conn_tuple_t *t, vo
 }
 
 static __always_inline void tls_finish(struct pt_regs *ctx, conn_tuple_t *t) {
+    log_debug("mongo: Hello from tls_finish\n");
     protocol_stack_t *stack = get_protocol_stack(t);
     if (!stack) {
         return;

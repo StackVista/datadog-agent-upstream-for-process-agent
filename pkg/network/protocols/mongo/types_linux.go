@@ -17,6 +17,6 @@ type ConnTuple struct {
 
 type EbpfTx struct {
 	Tup        ConnTuple
-	Request_id int32
+	Request_id uint32
 	Pad_cgo_0  [4]byte
 }
