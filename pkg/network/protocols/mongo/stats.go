@@ -12,7 +12,6 @@ import (
 
 // Key is an identifier for a Mongo resquest/response pair
 type Key struct {
-	RequestId uint32
 	types.ConnectionKey
 }
 
@@ -20,25 +19,23 @@ type Key struct {
 func NewKey(saddr, daddr util.Address, sport, dport uint16, netns uint32, topicName string, requestId uint32) Key {
 	return Key{
 		ConnectionKey: types.NewConnectionKey(saddr, daddr, sport, dport, netns),
-		RequestId:     requestId,
 	}
 }
 
 // RequestStat stores stats for a given Mongo connection
 type RequestStat struct {
-	Count     int
-	LatencyNs float64
-}
-
-type TransactionObservation struct {
-	// This field holds the value (in nanoseconds) of the operation.
-	// Latency is measured from the time the first byte of the request is sent to the server until the time the first byte of the response is received.
-	LatencyNs float64
-	Key       Key
+	Count             int
+	LatencyNs         int64
+	RequestStartTimes map[uint32]int64
 }
 
 // CombineWith merges the data in 2 RequestStats objects
 // newStats is kept as it is, while the method receiver gets mutated
 func (r *RequestStat) CombineWith(newStats *RequestStat) {
 	r.Count += newStats.Count
+	r.LatencyNs += newStats.LatencyNs
+	// RequestStartTimes is the union of the 2 maps
+	for k, v := range newStats.RequestStartTimes {
+		r.RequestStartTimes[k] = v
+	}
 }

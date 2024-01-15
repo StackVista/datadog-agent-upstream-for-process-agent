@@ -113,8 +113,7 @@ func TestMongoStats(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		t.Logf("Observing: %+v", payload.Mongo)
-		return false
+		return len(payload.Mongo) > 0
 	}, time.Second*5, time.Millisecond*100, "Expected to find a stats, instead captured none")
 
 }

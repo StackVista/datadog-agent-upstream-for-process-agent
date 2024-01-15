@@ -9,9 +9,9 @@ package mongo
 
 import (
 	"sync"
+	"time"
 
 	"github.com/DataDog/datadog-agent/pkg/network/config"
-	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
 
 type StatKeeper struct {
@@ -34,12 +34,9 @@ func (statKeeper *StatKeeper) Process(tx *EbpfTx) {
 	defer statKeeper.statsMutex.Unlock()
 
 	key := Key{
-		RequestId:     tx.Request_id,
 		ConnectionKey: tx.ConnTuple(),
 	}
 	requestStats, ok := statKeeper.stats[key]
-
-	log.Errorf("Requests for key %v: %v", key, requestStats)
 
 	if !ok {
 		if len(statKeeper.stats) >= statKeeper.maxEntries {
@@ -47,18 +44,27 @@ func (statKeeper *StatKeeper) Process(tx *EbpfTx) {
 			return
 		}
 		requestStats = new(RequestStat)
+		requestStats.RequestStartTimes = make(map[uint32]int64)
 		statKeeper.stats[key] = requestStats
 	}
 
-	requestStats.Count++
-	log.Errorf("RequestStats %v", requestStats)
+	request_id := tx.RequestId()
+	now := time.Now().UnixNano()
+	start, found := requestStats.RequestStartTimes[request_id]
+	if !found {
+		requestStats.RequestStartTimes[request_id] = now
+	} else {
+		latency := now - start
+		requestStats.LatencyNs += latency
+		delete(requestStats.RequestStartTimes, request_id)
+		requestStats.Count++
+	}
 }
 
 func (statKeeper *StatKeeper) GetAndResetAllStats() map[Key]*RequestStat {
 	statKeeper.statsMutex.RLock()
 	defer statKeeper.statsMutex.RUnlock()
 	ret := statKeeper.stats // No deep copy needed since `statKeeper.stats` gets reset
-	log.Errorf("Mongo stats: %v", ret)
 	statKeeper.stats = make(map[Key]*RequestStat)
 	return ret
 }

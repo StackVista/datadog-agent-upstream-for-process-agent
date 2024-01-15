@@ -424,6 +424,7 @@ func (t *Tracer) GetActiveConnections(clientID string) (*network.Connections, er
 	conns.HTTP = delta.HTTP
 	conns.HTTP2 = delta.HTTP2
 	conns.Kafka = delta.Kafka
+	conns.Mongo = delta.Mongo
 	conns.HTTPObservations = delta.HTTPObservations
 	conns.ConnTelemetry = t.state.GetTelemetryDelta(clientID, t.getConnTelemetry(len(active)))
 	conns.CompilationTelemetryByAsset = t.getRuntimeCompilationTelemetry()
