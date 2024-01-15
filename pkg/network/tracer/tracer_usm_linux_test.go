@@ -42,6 +42,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http/testutil"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/mongo"
 	gotlstestutil "github.com/DataDog/datadog-agent/pkg/network/protocols/tls/gotls/testutil"
 	javatestutil "github.com/DataDog/datadog-agent/pkg/network/protocols/tls/java/testutil"
 	prototls "github.com/DataDog/datadog-agent/pkg/network/protocols/tls/openssl"
@@ -91,6 +92,31 @@ func TestEnableMongoOverTLSMonitoring(t *testing.T) {
 	cfg.EnableMongoMonitoring = true
 	cfg.BPFDebug = true
 	_ = setupTracer(t, cfg)
+}
+
+func TestMongoStats(t *testing.T) {
+	cfg := testConfig()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableMongoMonitoring = true
+	tr := setupTracer(t, cfg)
+
+	require.NoError(t, mongo.RunServer(t, "0.0.0.0", "27017"))
+
+	// Localhost client, use with server above
+	client, err := mongo.NewClient(mongo.Options{ServerAddress: "localhost:" + mongoPort, Username: "root", Password: "password"})
+	require.NoError(t, err)
+	defer client.Stop()
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("1")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Logf("Observing: %+v", payload.Mongo)
+		return false
+	}, time.Second*5, time.Millisecond*100, "Expected to find a stats, instead captured none")
+
 }
 
 func TestUSMSuite(t *testing.T) {
