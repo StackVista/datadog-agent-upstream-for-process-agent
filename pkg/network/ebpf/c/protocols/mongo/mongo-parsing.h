@@ -30,20 +30,10 @@ int uprobe__mongo_process(struct pt_regs *ctx) {
     bpf_memcpy(&mongo_transaction->base.tup, &args->tup, sizeof(conn_tuple_t));
     normalize_tuple(&mongo_transaction->base.tup);
 
-    mongo_process_header(mongo_transaction, (mongo_header_t *)args->buffer_ptr);
-
-    /*
-    if (sizeof(mongo_header_t) > args->len) {
-        return 0;
-    }
     mongo_header_t mongo_header;
-    bpf_memcpy(&mongo_header, args->buffer_ptr, sizeof(mongo_header_t));
-
-    // buffer_ptr is not a sk buffer but mongo_process only looks for the payload anyway
-    mongo_process_header(mongo_transaction, mongo_header);
-    http_batch_flush(ctx);
-    */
-   
+    bpf_probe_read_user_with_telemetry(&mongo_header, sizeof(mongo_header_t), args->buffer_ptr); 
+    mongo_process_header(mongo_transaction, &mongo_header);
+  
     return 0;
 }
 
