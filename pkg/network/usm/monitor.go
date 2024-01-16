@@ -181,8 +181,6 @@ func (m *Monitor) Start() error {
 	err = m.ebpfProgram.Start()
 	if err != nil {
 		return fmt.Errorf("error starting ebpf program for usm: %w", err)
-	} else {
-		fmt.Fprintf(os.Stderr, "Started ebpf program for: %v\n", m.ebpfProgram)
 	}
 
 	enabledProtocolsTmp = m.enabledProtocols[:0]

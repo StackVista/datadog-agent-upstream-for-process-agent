@@ -35,5 +35,5 @@ func (t *Telemetry) Count(_ *EbpfTx) {
 }
 
 func (t *Telemetry) Log() {
-	log.Debugf("Mongo stats summary: %s", t.metricGroup.Summary())
+	log.Infof("mongo stats summary: %s", t.metricGroup.Summary())
 }

@@ -113,7 +113,13 @@ func TestMongoStats(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		return len(payload.Mongo) > 0
+		for _, metrics := range payload.Mongo {
+			if metrics.Latencies.GetCount() > 0.0 {
+				return true
+			}
+		}
+
+		return false
 	}, time.Second*5, time.Millisecond*100, "Expected to find a stats, instead captured none")
 
 }

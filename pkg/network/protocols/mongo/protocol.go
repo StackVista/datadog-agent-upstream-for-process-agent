@@ -18,7 +18,6 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/events"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/utils"
-	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
 
 type protocol struct {
@@ -64,11 +63,10 @@ var Spec = &protocols.ProtocolSpec{
 }
 
 func newMongoProtocol(cfg *config.Config) (protocols.Protocol, error) {
-	log.Errorf("Enabling Mongo!")
 	if !cfg.EnableMongoMonitoring {
 		return nil, nil
 	}
-	log.Errorf("Enabled Mongo!")
+
 	return &protocol{
 		cfg:       cfg,
 		telemetry: NewTelemetry(),
