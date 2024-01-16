@@ -15,8 +15,9 @@ import (
 type Telemetry struct {
 	metricGroup *libtelemetry.MetricGroup
 
-	totalHits *libtelemetry.Counter
-	dropped   *libtelemetry.Counter // this happens when MongoStatKeeper reaches capacity
+	totalHits            *libtelemetry.Counter
+	dropped              *libtelemetry.Counter // this happens when MongoStatKeeper reaches capacity
+	transactionsObserved *libtelemetry.Counter
 }
 
 func NewTelemetry() *Telemetry {
@@ -25,8 +26,9 @@ func NewTelemetry() *Telemetry {
 	return &Telemetry{
 		metricGroup: metricGroup,
 		// these metrics are also exported as statsd metrics
-		totalHits: metricGroup.NewCounter("total_hits"),
-		dropped:   metricGroup.NewCounter("dropped"),
+		totalHits:            metricGroup.NewCounter("total_hits"),
+		dropped:              metricGroup.NewCounter("dropped"),
+		transactionsObserved: metricGroup.NewCounter("transactions_observed"),
 	}
 }
 

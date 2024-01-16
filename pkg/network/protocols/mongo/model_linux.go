@@ -23,3 +23,7 @@ func (tx *EbpfTx) ConnTuple() types.ConnectionKey {
 func (tx *EbpfTx) RequestId() uint32 {
 	return tx.Request_id
 }
+
+func (tx *EbpfTx) ResponseTo() uint32 {
+	return tx.Response_to
+}

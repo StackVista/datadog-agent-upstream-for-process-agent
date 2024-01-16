@@ -3,6 +3,7 @@
 
 #include "bpf_builtins.h"
 #include "bpf_telemetry.h"
+#include "protocols/mongo/defs.h"
 #include "protocols/mongo/types.h"
 #include "protocols/mongo/parsing-maps.h"
 #include "protocols/mongo/usm-events.h"
@@ -65,6 +66,19 @@ int socket__mongo_filter(struct __sk_buff* skb) {
 }
 
 static __always_inline bool is_valid_mongo_request_header (mongo_header_t *header) {
+
+    // Check for valid op_code
+    if (header->op_code < MONGO_OP_UPDATE || header->op_code > MONGO_OP_MSG) {
+        if (header->op_code != MONGO_OP_REPLY) {
+            return false;
+        }
+    }
+
+    // Check for a request id of 0
+    if (header->request_id == 0) {
+        return false;
+    }
+
     // TODO: Validate at least request/response id and OP_CODE plausibility.
     return true;
 }
@@ -89,6 +103,8 @@ static __always_inline bool mongo_process_header(mongo_transaction_t *mongo_tran
     }
 
     mongo_transaction->base.mongo_request_id = mongo_header->request_id;
+    mongo_transaction->base.mongo_response_to = mongo_header->response_to;
+
     mongo_batch_enqueue(&mongo_transaction->base);
 
     return true;

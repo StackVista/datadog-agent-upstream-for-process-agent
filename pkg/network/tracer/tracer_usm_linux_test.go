@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DataDog/datadog-agent/pkg/util/log"
 	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
 
 	krpretty "github.com/kr/pretty"
@@ -114,6 +115,7 @@ func TestMongoStats(t *testing.T) {
 		}
 
 		for _, metrics := range payload.Mongo {
+			log.Errorf("Sum of latency: %f", metrics.Latencies.GetSum())
 			if metrics.Latencies.GetCount() > 0.0 {
 				return true
 			}
