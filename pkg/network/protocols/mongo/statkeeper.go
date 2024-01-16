@@ -15,21 +15,32 @@ import (
 )
 
 type StatKeeper struct {
-	stats      map[Key]*RequestStat
-	statsMutex sync.RWMutex
-	maxEntries int
-	telemetry  *Telemetry
+	stats             map[Key]*RequestStat
+	statsMutex        sync.RWMutex
+	maxEntries        int
+	telemetry         *Telemetry
+	requestStartTimes map[RequestLatencyKey]int64 // Start time for open requests, where we observed no response yet
+}
+
+// Read this as "the request with id `requestId` on the connection identified by `connection`"
+type RequestLatencyKey struct {
+	connection Key
+	requestId  uint32
 }
 
 func NewStatkeeper(c *config.Config, telemetry *Telemetry) *StatKeeper {
 	return &StatKeeper{
-		stats:      make(map[Key]*RequestStat),
-		maxEntries: c.MaxMongoStatsBuffered,
-		telemetry:  telemetry,
+		stats:             make(map[Key]*RequestStat),
+		maxEntries:        c.MaxMongoStatsBuffered,
+		telemetry:         telemetry,
+		requestStartTimes: make(map[RequestLatencyKey]int64),
 	}
 }
 
 func (statKeeper *StatKeeper) Process(tx *EbpfTx) {
+	// TODO/JGT: We would like to grab the timestamp at a lower level
+	now := time.Now().UnixNano()
+
 	statKeeper.statsMutex.Lock()
 	defer statKeeper.statsMutex.Unlock()
 
@@ -44,20 +55,20 @@ func (statKeeper *StatKeeper) Process(tx *EbpfTx) {
 			return
 		}
 		requestStats = new(RequestStat)
-		requestStats.RequestStartTimes = make(map[uint32]int64)
+		requestStats.initSketch()
 		statKeeper.stats[key] = requestStats
 	}
 
 	request_id := tx.RequestId()
-	now := time.Now().UnixNano()
-	start, found := requestStats.RequestStartTimes[request_id]
+	latency_key := RequestLatencyKey{connection: key, requestId: request_id}
+	start, found := statKeeper.requestStartTimes[latency_key]
 	if !found {
-		requestStats.RequestStartTimes[request_id] = now
+		// TODO/JGT: Put a limit on the amount of open requests we track
+		statKeeper.requestStartTimes[latency_key] = now
 	} else {
 		latency := now - start
-		requestStats.LatencyNs += latency
-		delete(requestStats.RequestStartTimes, request_id)
-		requestStats.Count++
+		requestStats.Latencies.Add(float64(latency))
+		delete(statKeeper.requestStartTimes, latency_key)
 	}
 }
 

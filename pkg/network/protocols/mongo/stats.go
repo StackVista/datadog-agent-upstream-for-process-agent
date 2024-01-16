@@ -8,9 +8,17 @@ package mongo
 import (
 	"github.com/DataDog/datadog-agent/pkg/network/types"
 	"github.com/DataDog/datadog-agent/pkg/process/util"
+	"github.com/DataDog/datadog-agent/pkg/util/log"
+	"github.com/DataDog/sketches-go/ddsketch"
 )
 
-// Key is an identifier for a Mongo resquest/response pair
+// RelativeAccuracy defines the acceptable error in quantile values calculated by DDSketch.
+// For example, if the actual value at p50 is 100, with a relative accuracy of 0.01 the value calculated
+// will be between 99 and 101
+const RelativeAccuracy = 0.01
+
+// Key is an identifier for a Mongo connection
+// Many requests and responses will generally be observed over a single connection
 type Key struct {
 	types.ConnectionKey
 }
@@ -24,18 +32,22 @@ func NewKey(saddr, daddr util.Address, sport, dport uint16, netns uint32, topicN
 
 // RequestStat stores stats for a given Mongo connection
 type RequestStat struct {
-	Count             int
-	LatencyNs         int64
-	RequestStartTimes map[uint32]int64
+	Latencies *ddsketch.DDSketch
+}
+
+func (r *RequestStat) initSketch() (err error) {
+	r.Latencies, err = ddsketch.NewDefaultDDSketch(RelativeAccuracy)
+	if err != nil {
+		log.Debugf("error recording mongo transaction latency: could not create new ddsketch: %v", err)
+	}
+	return
 }
 
 // CombineWith merges the data in 2 RequestStats objects
 // newStats is kept as it is, while the method receiver gets mutated
 func (r *RequestStat) CombineWith(newStats *RequestStat) {
-	r.Count += newStats.Count
-	r.LatencyNs += newStats.LatencyNs
-	// RequestStartTimes is the union of the 2 maps
-	for k, v := range newStats.RequestStartTimes {
-		r.RequestStartTimes[k] = v
+	err := r.Latencies.MergeWith(newStats.Latencies)
+	if err != nil {
+		log.Debugf("error merging mongo transactions: %v", err)
 	}
 }
