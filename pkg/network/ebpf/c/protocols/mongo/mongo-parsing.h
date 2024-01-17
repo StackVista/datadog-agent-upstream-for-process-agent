@@ -43,6 +43,7 @@ int socket__mongo_filter(struct __sk_buff* skb) {
     log_debug("socket__mongo_filter: start\n");
     const u32 zero = 0;
     skb_info_t skb_info;
+
     mongo_transaction_t *mongo = bpf_map_lookup_elem(&mongo_heap, &zero);
     if (mongo == NULL) {
         log_debug("socket__mongo_filter: mongo_transaction state is NULL\n");

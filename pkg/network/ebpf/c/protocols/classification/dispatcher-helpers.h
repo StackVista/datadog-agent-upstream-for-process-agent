@@ -248,9 +248,6 @@ static __always_inline void dispatch_mongo(struct __sk_buff *skb) {
         return;
     }
 
-    // Add netns to separate localhost traffic
-    skb_tup.netns = get_netns();
-
     char request_fragment[CLASSIFICATION_MAX_BUFFER];
     bpf_memset(request_fragment, 0, sizeof(request_fragment));
     read_into_buffer_for_classification((char *)request_fragment, skb, skb_info.data_off);
@@ -261,30 +258,11 @@ static __always_inline void dispatch_mongo(struct __sk_buff *skb) {
         cur_fragment_protocol = PROTOCOL_MONGO;
         log_debug("[dispatch_mongo]: %p classified as Mongo\n", skb);
         update_protocol_stack(&skb_tup, cur_fragment_protocol);
-    }
-
-    if (cur_fragment_protocol != PROTOCOL_UNKNOWN) {
-        // dispatch if possible
-
-        // [STS] Comment added by stackstate, why this approach is ok.
-        // Okey, here it goes: We would like to use a LRU_HASHMAP here based on the skb pointer, to communicate additional arguments
-        // to the tail call. However, earlier kernel versions (<5.19) do not allow bringing in kernel pointers as map keys.
-        // So we go with the old PER_CPU_MAP approach, which is actually problematic due to  https://lore.kernel.org/bpf/CAMy7=ZWPc279vnKK6L1fssp5h7cb6cqS9_EuMNbfVBg_ixmTrQ@mail.gmail.com/T/,
-        // but there is not other option:
-        const u32 zero = 0;
-        dispatcher_arguments_t *args = bpf_map_lookup_elem(&dispatcher_arguments, &zero);
-        if (args == NULL) {
-            log_debug("dispatcher failed to save arguments for tail call\n");
-            return;
-        }
-        bpf_memset(args, 0, sizeof(dispatcher_arguments_t));
-        bpf_memcpy(&args->tup, &skb_tup, sizeof(conn_tuple_t));
-        bpf_memcpy(&args->skb_info, &skb_info, sizeof(skb_info_t));
-
-        // dispatch if possible
         log_debug("dispatching to protocol number: %d\n", cur_fragment_protocol);
         bpf_tail_call_compat(skb, &protocols_progs, protocol_to_program(cur_fragment_protocol));
     }
+
+
     return;
 }
 
