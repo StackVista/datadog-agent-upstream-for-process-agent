@@ -175,6 +175,7 @@ func (c *client) Reset() {
 	c.httpStatsDelta = make(map[http.Key]*http.RequestStats)
 	c.http2StatsDelta = make(map[http.Key]*http.RequestStats)
 	c.kafkaStatsDelta = make(map[kafka.Key]*kafka.RequestStat)
+	c.mongoStatsDelta = make(map[mongo.Key]*mongo.RequestStat)
 	c.httpObservationsDelta = make([]http.TransactionObservation, 0)
 }
 
@@ -385,7 +386,8 @@ func (ns *networkState) logTelemetry() {
 
 	// Flush log line if any metric is non-zero
 	if connDroppedDelta > 0 || closedConnDroppedDelta > 0 || dnsStatsDroppedDelta > 0 ||
-		httpStatsDroppedDelta > 0 || http2StatsDroppedDelta > 0 || kafkaStatsDroppedDelta > 0 || httpObservationsDroppedDelta > 0 {
+		httpStatsDroppedDelta > 0 || http2StatsDroppedDelta > 0 || kafkaStatsDroppedDelta > 0 ||
+		mongoStatsDroppedDelta > 0 || httpObservationsDroppedDelta > 0 {
 		s := "State telemetry: "
 		s += " [%d connections dropped due to stats]"
 		s += " [%d closed connections dropped]"
