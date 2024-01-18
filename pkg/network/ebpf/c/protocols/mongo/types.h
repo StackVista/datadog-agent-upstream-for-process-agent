@@ -34,6 +34,8 @@ typedef struct {
     conn_tuple_t tup;
     __u32 mongo_request_id;
     __u32 mongo_response_to;
+    __u64 mongo_timestamp_ns; // Timestamp when this packet was captured/observed
+    __u8 mongo_is_error; // Response contained an error 
 } mongo_transaction_batch_entry_t;
 
 // Mongo transaction information associated to a certain socket (tuple_t)

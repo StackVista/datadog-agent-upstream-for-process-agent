@@ -16,7 +16,10 @@ type ConnTuple struct {
 }
 
 type EbpfTx struct {
-	Tup         ConnTuple
-	Request_id  uint32
-	Response_to uint32
+	Tup          ConnTuple
+	Request_id   uint32
+	Response_to  uint32
+	Timestamp_ns uint64
+	Is_error     uint8
+	Pad_cgo_0    [7]byte
 }

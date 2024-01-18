@@ -31,7 +31,7 @@ const (
 	defaultConnsMessageBatchSize = 600
 
 	// defaultSystemProbeBPFDir is the default path for eBPF programs
-	defaultSystemProbeBPFDir = "/workspaces/STAC-20605/datadog-agent-upstream-for-process-agent/pkg/ebpf/bytecode/build"
+	defaultSystemProbeBPFDir = "/opt/datadog-agent/embedded/share/system-probe/ebpf"
 
 	// defaultSystemProbeJavaDir is the default path for java agent program
 	defaultSystemProbeJavaDir = "/opt/datadog-agent/embedded/share/system-probe/java"

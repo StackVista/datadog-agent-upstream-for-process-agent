@@ -28,3 +28,7 @@ func (tx *EbpfTx) RequestId() uint32 {
 func (tx *EbpfTx) ResponseTo() uint32 {
 	return tx.Response_to
 }
+
+func (tx *EbpfTx) ObservationTimestamp() uint64 {
+	return tx.Timestamp_ns
+}

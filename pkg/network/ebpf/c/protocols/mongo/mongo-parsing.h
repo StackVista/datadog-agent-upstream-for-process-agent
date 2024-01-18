@@ -105,6 +105,7 @@ static __always_inline bool mongo_process_header(mongo_transaction_t *mongo_tran
 
     mongo_transaction->base.mongo_request_id = mongo_header->request_id;
     mongo_transaction->base.mongo_response_to = mongo_header->response_to;
+    mongo_transaction->base.mongo_timestamp_ns = bpf_ktime_get_ns();
 
     mongo_batch_enqueue(&mongo_transaction->base);
 
