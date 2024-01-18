@@ -56,7 +56,7 @@ func (c *ComposeConf) Start() ([]byte, error) {
 		"--project-name", c.ProjectName,
 		"--file", c.FilePath,
 	}
-	pullCmd := exec.Command("docker compose", append(args, "pull", "--parallel")...)
+	pullCmd := exec.Command("docker-compose", append(args, "pull", "--parallel")...)
 	pullCmd.Env = customEnv
 	output, err := pullCmd.CombinedOutput()
 	if err != nil {
@@ -68,7 +68,7 @@ func (c *ComposeConf) Start() ([]byte, error) {
 		*/
 		log.Infof("retrying pull...")
 		// We need to rebuild a new command because the file-descriptors of stdout/err are already set
-		retryPull := exec.Command("docker", "compose", append(args, "pull", "--parallel")...)
+		retryPull := exec.Command("docker-compose", append(args, "pull", "--parallel")...)
 		retryPull.Env = customEnv
 		output, err = retryPull.CombinedOutput()
 		if err != nil {
