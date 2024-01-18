@@ -37,7 +37,7 @@ func RunDockerServer(t testing.TB, serverName, dockerPath string, env []string, 
 	cmd.Stderr = patternScanner
 	cmd.Env = append(cmd.Env, env...)
 	err := cmd.Start()
-	require.NoErrorf(t, err, "could not start %s with docker compose", serverName)
+	require.NoErrorf(t, err, "could not start %s with docker-compose", serverName)
 	t.Cleanup(func() {
 		cancel()
 		_ = cmd.Wait()
