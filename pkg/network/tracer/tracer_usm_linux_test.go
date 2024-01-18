@@ -95,6 +95,35 @@ func TestEnableMongoOverTLSMonitoring(t *testing.T) {
 	_ = setupTracer(t, cfg)
 }
 
+// Note: This test assumes there is a mongo client running in a separate network namespace.
+func TestEnableMongoOverTLSMonitoringNamespaces(t *testing.T) {
+	cfg := testConfig()
+	cfg.EnableHTTPMonitoring = true
+	cfg.EnableHTTP2Monitoring = true
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableMongoMonitoring = true
+	cfg.BPFDebug = true
+	tr := setupTracer(t, cfg)
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("1")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for key, metrics := range payload.Mongo {
+			log.Errorf("Key: %v", key)
+			return key.NetNs != 0
+			log.Errorf("Sum of latency: %f", metrics.Latencies.GetSum())
+			if metrics.Latencies.GetCount() > 0.0 {
+				return true
+			}
+		}
+		return false
+	}, time.Second*5, time.Millisecond*100, "Expected to find a stats, instead captured none")
+
+}
+
 func TestMongoStats(t *testing.T) {
 	cfg := testConfig()
 	cfg.EnableNativeTLSMonitoring = true
