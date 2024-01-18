@@ -140,11 +140,13 @@ static __always_inline conn_tuple_t* tup_from_ssl_ctx(void *ssl_ctx, u64 pid_tgi
         // then followed by the execution of tcp_sendmsg within the same CPU
         // context. This is not necessarily true for all cases (such as when
         // using the async SSL API) but seems to work on most-cases.
+        log_debug("tup_from_ssl_ctx: ssl_sock was NULL\n");
         bpf_map_update_with_telemetry(ssl_ctx_by_pid_tgid, &pid_tgid, &ssl_ctx, BPF_ANY);
         return NULL;
     }
 
     if (ssl_sock->tup.sport != 0 && ssl_sock->tup.dport != 0) {
+        log_debug("tup_from_ssl_ctx: returning tuple straight from ssl_sock with netns: %d\n", &ssl_sock->tup.netns);
         return &ssl_sock->tup;
     }
 
@@ -156,13 +158,17 @@ static __always_inline conn_tuple_t* tup_from_ssl_ctx(void *ssl_ctx, u64 pid_tgi
 
     struct sock **sock = bpf_map_lookup_elem(&sock_by_pid_fd, &pid_fd);
     if (sock == NULL)  {
+        log_debug("tup_from_ssl_ctx: got no **sock\n");
         return NULL;
     }
 
     conn_tuple_t t;
     if (!read_conn_tuple(&t, *sock, pid_tgid, CONN_TYPE_TCP)) {
+        log_debug("tup_from_ssl_ctx: read_conn_tuple returned NULL\n");
         return NULL;
     }
+
+    log_debug("tup_from_ssl_ctx: found tuple for pid %d, netns: %d\n", pid_fd.pid, t.netns);
 
     // Set the `.netns` and `.pid` values to always be 0.
     // They can't be sourced from inside `read_conn_tuple_skb`,
@@ -170,7 +176,6 @@ static __always_inline conn_tuple_t* tup_from_ssl_ctx(void *ssl_ctx, u64 pid_tgi
     // so we ensure it is always 0 here so that both paths produce the same `conn_tuple_t` value.
     // `netns` is not used in the userspace program part that binds http information to `ConnectionStats`,
     // so this is isn't a problem.
-    t.netns = 0;
     t.pid = 0;
 
     bpf_memcpy(&ssl_sock->tup, &t, sizeof(conn_tuple_t));
@@ -200,7 +205,6 @@ static __always_inline void map_ssl_ctx_to_sock(struct sock *skp) {
     if (!read_conn_tuple(&ssl_sock.tup, skp, pid_tgid, CONN_TYPE_TCP)) {
         return;
     }
-    ssl_sock.tup.netns = 0;
     ssl_sock.tup.pid = 0;
     normalize_tuple(&ssl_sock.tup);
 
