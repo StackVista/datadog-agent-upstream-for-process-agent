@@ -15,7 +15,6 @@ static __always_inline bool mongo_process_header(mongo_transaction_t *mongo_tran
 
 SEC("uprobe/mongo_process")
 int uprobe__mongo_process(struct pt_regs *ctx) {
-    log_debug("mongo: uprobe__mongo_process: start\n");
     const __u32 zero = 0;
     tls_dispatcher_arguments_t *args = bpf_map_lookup_elem(&tls_dispatcher_arguments, &zero);
     if (args == NULL) {
@@ -94,11 +93,6 @@ static __always_inline bool mongo_process(mongo_transaction_t *mongo_transaction
 }
 
 static __always_inline bool mongo_process_header(mongo_transaction_t *mongo_transaction, mongo_header_t *mongo_header) {
-    // STS/JGT: The bswap dance is required to go from Mongos little-endian to network byte to host byte order.
-    log_debug("mongo: mongo_header.op_code: %u\n", bpf_ntohl(__builtin_bswap32(mongo_header->op_code)));
-    log_debug("mongo: mongo_header.request_id: %u\n", bpf_ntohl(__builtin_bswap32(mongo_header->request_id)));
-    log_debug("mongo: mongo_header.response_to: %u\n", bpf_ntohl(__builtin_bswap32(mongo_header->response_to)));
-
     if (!is_valid_mongo_request_header(mongo_header)) {
         return false;
     }
@@ -131,7 +125,6 @@ static __always_inline bool mongo_allow_packet(mongo_transaction_t *mongo, struc
 
     // Check that we didn't see this tcp segment before so we won't process
     // the same traffic twice
-    log_debug("mongo: Current tcp sequence: %lu\n", skb_info->tcp_seq);
     // Hack to make verifier happy on 4.14.
     conn_tuple_t tup = mongo->base.tup;
     __u32 *last_tcp_seq = bpf_map_lookup_elem(&mongo_last_tcp_seq_per_connection, &tup);
