@@ -64,11 +64,7 @@ int socket__mongo_filter(struct __sk_buff* skb) {
         log_debug("socket__mongo_filter failed to fetch arguments for tail call\n");
         return 0;
     }
-
-    if (!mongo_allow_packet(mongo, skb, &skb_info)) {
-        log_debug("socket__mongo_filter: mongo_allow_packet returned false\n");
-        return 0;
-    }
+    // TODO: Move to mongo_process
     normalize_tuple(&mongo->base.tup);
 
     (void)mongo_process(mongo, skb, skb_info.data_off);

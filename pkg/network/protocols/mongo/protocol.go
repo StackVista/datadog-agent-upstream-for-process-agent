@@ -30,7 +30,6 @@ type protocol struct {
 const (
 	eventStreamName    = "mongo"
 	filterTailCall     = "socket__mongo_filter"
-	dispatcherTailCall = "socket__protocol_dispatcher_mongo"
 	tlsProcessTailCall = "uprobe__mongo_process"
 )
 
@@ -50,13 +49,6 @@ var Spec = &protocols.ProtocolSpec{
 			Key:           uint32(protocols.ProgramTLSMongoProcess),
 			ProbeIdentificationPair: manager.ProbeIdentificationPair{
 				EBPFFuncName: tlsProcessTailCall,
-			},
-		},
-		{
-			ProgArrayName: protocols.ProtocolDispatcherClassificationPrograms,
-			Key:           uint32(protocols.DispatcherMongoProg),
-			ProbeIdentificationPair: manager.ProbeIdentificationPair{
-				EBPFFuncName: dispatcherTailCall,
 			},
 		},
 	},
