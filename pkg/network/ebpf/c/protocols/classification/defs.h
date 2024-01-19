@@ -126,7 +126,6 @@ typedef enum {
 
 typedef enum {
     DISPATCHER_KAFKA_PROG = 0,
-    DISPATCHER_MONGO_PROG = 1,
     // Add before this value.
     DISPATCHER_PROG_MAX,
 } dispatcher_prog_t;

@@ -23,7 +23,6 @@ type DispatcherProgramType C.dispatcher_prog_t
 
 const (
 	DispatcherKafkaProg DispatcherProgramType = C.DISPATCHER_KAFKA_PROG
-	DispatcherMongoProg DispatcherProgramType = C.DISPATCHER_MONGO_PROG
 )
 
 type ProgramType C.protocol_prog_t

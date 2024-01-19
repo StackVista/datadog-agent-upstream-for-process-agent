@@ -8,11 +8,17 @@
 #include "protocols/mongo/parsing-maps.h"
 #include "protocols/mongo/usm-events.h"
 
-// forward declaration
-static __always_inline bool mongo_allow_packet(mongo_transaction_t *mongo, struct __sk_buff* skb, skb_info_t *skb_info);
+
+// Entry point for mongo 
 static __always_inline bool mongo_process(mongo_transaction_t *mongo_transaction, struct __sk_buff* skb, __u32 offset);
+
+// The actual data extraction and pushing to user-space. For TLS, we come here from uprobe__mongo_process,
+// for unencrypted traffic, we come here from socket__mongo_filter via mongo_process.
 static __always_inline bool mongo_process_header(mongo_transaction_t *mongo_transaction, mongo_header_t *mongo_header);
 
+// This is our entry point for MongoDB over TLS traffic.
+// The TLS dispatcher gives a different context from the unencrypted one, so we need to do a little
+// dance here get to the mongo header.
 SEC("uprobe/mongo_process")
 int uprobe__mongo_process(struct pt_regs *ctx) {
     const __u32 zero = 0;
@@ -37,6 +43,10 @@ int uprobe__mongo_process(struct pt_regs *ctx) {
     return 0;
 }
 
+// Don't be mislead by the name of this function or by the fact that it is in the socket section.
+// This will only be called from the dispatcher for packets on connections that have already been
+// identified as mongo connections. This is for unencrypted traffic only, for TLS traffic, see
+// the uprobe__mongo_process function above.
 SEC("socket/mongo_filter")
 int socket__mongo_filter(struct __sk_buff* skb) {
     log_debug("socket__mongo_filter: start\n");
@@ -65,51 +75,9 @@ int socket__mongo_filter(struct __sk_buff* skb) {
     return 0;
 }
 
-static __always_inline bool is_valid_mongo_request_header (mongo_header_t *header) {
-
-    // Check for valid op_code
-    if (header->op_code < MONGO_OP_UPDATE || header->op_code > MONGO_OP_MSG) {
-        if (header->op_code != MONGO_OP_REPLY) {
-            return false;
-        }
-    }
-
-    // Check for a request id of 0
-    if (header->request_id == 0) {
-        return false;
-    }
-
-    // TODO: Validate at least request/response id and OP_CODE plausibility.
-    return true;
-}
-
-static __always_inline bool mongo_process(mongo_transaction_t *mongo_transaction, struct __sk_buff* skb, __u32 offset) {
-    mongo_header_t mongo_header;
-    bpf_memset(&mongo_header, 0, sizeof(mongo_header));
-    bpf_skb_load_bytes_with_telemetry(skb, offset, (char *)&mongo_header, sizeof(mongo_header));
-    mongo_process_header(mongo_transaction, &mongo_header);
-
-    return true;
-}
-
-static __always_inline bool mongo_process_header(mongo_transaction_t *mongo_transaction, mongo_header_t *mongo_header) {
-    if (!is_valid_mongo_request_header(mongo_header)) {
-        return false;
-    }
-
-    mongo_transaction->base.mongo_request_id = mongo_header->request_id;
-    mongo_transaction->base.mongo_response_to = mongo_header->response_to;
-    mongo_transaction->base.mongo_timestamp_ns = bpf_ktime_get_ns();
-
-    mongo_batch_enqueue(&mongo_transaction->base);
-
-    return true;
-}
-
-
-// this function is called by the socket-filter program to decide whether or not we should inspect
-// the contents of a certain packet, in order to avoid the cost of processing packets that are not
-// of interest such as empty ACKs, UDP data or encrypted traffic.
+/// This function is called by the socket-filter program to decide whether or not we should inspect
+/// the contents of a certain packet, in order to avoid the cost of processing packets that are not
+/// of interest such as empty ACKs, UDP data or encrypted traffic.
 static __always_inline bool mongo_allow_packet(mongo_transaction_t *mongo, struct __sk_buff* skb, skb_info_t *skb_info) {
     // we're only interested in TCP traffic
     if (!(mongo->base.tup.metadata&CONN_TYPE_TCP)) {

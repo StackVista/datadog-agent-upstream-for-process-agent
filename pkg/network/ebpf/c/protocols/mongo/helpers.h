@@ -4,26 +4,38 @@
 #include "protocols/classification/common.h"
 #include "protocols/mongo/defs.h"
 
+/// Adds a request id to the mongo_request_id set
 static __always_inline void mongo_handle_request(conn_tuple_t *tup, __s32 request_id) {
-    // mongo_request_id acts as a set, and we only check for existence in that set.
-    // Thus, the val = true is just a dummy value, as we ignore the value.
-    const bool val = true;
+    // Track the time we observed this request for latency calculation.
+    __u64 timestamp = bpf_ktime_get_ns();
     mongo_key key = {};
     key.tup = *tup;
     key.req_id = request_id;
-    bpf_map_update_elem(&mongo_request_id, &key, &val, BPF_ANY);
+    bpf_map_update_elem(&mongo_request_timestamps, &key, &timestamp, BPF_ANY);
 }
 
-static __always_inline bool mongo_have_seen_request(conn_tuple_t *tup, __s32 response_to) {
+/// @brief Searches for the timestamp the request matching the given response was observed.
+/// If the request was observed, it will be removed from the map and the latency will be calculated and enqueued
+/// for user-space processing.
+/// @param tup Identifier for the connection.
+/// @param response_to Value of the response_to header field.
+/// @return Timestamp the request identified by tup and response_to was observed, or 0 if it was not observed.
+static __always_inline __u64 mongo_have_seen_request(conn_tuple_t *tup, __s32 response_to) {
     mongo_key key = {};
     key.tup = *tup;
     key.req_id = response_to;
-    void *exists = bpf_map_lookup_elem(&mongo_request_id, &key);
-    bpf_map_delete_elem(&mongo_request_id, &key);
-    return exists != NULL;
+    __u64 *timestamp = bpf_map_lookup_elem(&mongo_request_timestamps, &key);
+    bpf_map_delete_elem(&mongo_request_timestamps, &key);
+    if (timestamp == NULL) {
+        return 0;
+    }
+
+    return *timestamp;
 }
 
-// Checks if the given buffer represents a mongo request or a response.
+// Checks if the connection identified by tup is a mongo connection.
+// Once this has returned true, it will not be called again for traffic on the same connection. 
+// Returning false will give us another chance for classification with the next packet.
 static __always_inline bool is_mongo(conn_tuple_t *tup, const char *buf, __u32 size) {
     CHECK_PRELIMINARY_BUFFER_CONDITIONS(buf, size, MONGO_HEADER_LENGTH);
 

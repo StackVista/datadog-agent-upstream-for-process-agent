@@ -159,10 +159,6 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
             bpf_tail_call_compat(skb, &dispatcher_classification_progs, DISPATCHER_KAFKA_PROG);
         }
 
-        if (is_mongo_monitoring_enabled() && cur_fragment_protocol == PROTOCOL_UNKNOWN) {
-            bpf_tail_call_compat(skb, &dispatcher_classification_progs, DISPATCHER_MONGO_PROG);
-        }
-
         log_debug("[protocol_dispatcher_entrypoint]: %p Classifying protocol as: %d\n", skb, cur_fragment_protocol);
         // If there has been a change in the classification, save the new protocol.
         if (cur_fragment_protocol != PROTOCOL_UNKNOWN) {
@@ -237,32 +233,6 @@ static __always_inline void dispatch_kafka(struct __sk_buff *skb) {
         log_debug("dispatching to protocol number: %d\n", cur_fragment_protocol);
         bpf_tail_call_compat(skb, &protocols_progs, protocol_to_program(cur_fragment_protocol));
     }
-    return;
-}
-
-static __always_inline void dispatch_mongo(struct __sk_buff *skb) {
-    skb_info_t skb_info = {0};
-    conn_tuple_t skb_tup = {0};
-    // Exporting the conn tuple from the skb, alongside couple of relevant fields from the skb.
-    if (!read_conn_tuple_skb(skb, &skb_info, &skb_tup)) {
-        return;
-    }
-
-    char request_fragment[CLASSIFICATION_MAX_BUFFER];
-    bpf_memset(request_fragment, 0, sizeof(request_fragment));
-    read_into_buffer_for_classification((char *)request_fragment, skb, skb_info.data_off);
-    const size_t payload_length = skb_info.data_end - skb_info.data_off;
-    const size_t final_fragment_size = payload_length < CLASSIFICATION_MAX_BUFFER ? payload_length : CLASSIFICATION_MAX_BUFFER;
-    protocol_t cur_fragment_protocol = PROTOCOL_UNKNOWN;
-    if (is_mongo(&skb_tup, request_fragment, final_fragment_size)) {
-        cur_fragment_protocol = PROTOCOL_MONGO;
-        log_debug("[dispatch_mongo]: %p classified as Mongo\n", skb);
-        update_protocol_stack(&skb_tup, cur_fragment_protocol);
-        log_debug("dispatching to protocol number: %d\n", cur_fragment_protocol);
-        bpf_tail_call_compat(skb, &protocols_progs, protocol_to_program(cur_fragment_protocol));
-    }
-
-
     return;
 }
 
