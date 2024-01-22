@@ -113,10 +113,7 @@ func TestEnableMongoOverTLSMonitoringNamespaces(t *testing.T) {
 		}
 
 		for key, metrics := range payload.Mongo {
-			log.Errorf("Key: %v", key)
-			return key.NetNs != 0
-			log.Errorf("Sum of latency: %f", metrics.Latencies.GetSum())
-			if metrics.Latencies.GetCount() > 0.0 {
+			if metrics.Latencies.GetCount() > 0.0 && key.NetNs != 0 {
 				return true
 			}
 		}

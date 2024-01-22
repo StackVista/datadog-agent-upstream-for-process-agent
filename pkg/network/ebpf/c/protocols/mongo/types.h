@@ -13,16 +13,6 @@ typedef struct {
     __u64 mongo_latency_ns;
 } mongo_transaction_batch_entry_t;
 
-// Mongo transaction information associated to a certain socket (tuple_t)
-typedef struct {
-    // this field is used to disambiguate segments in the context of keep-alives
-    // we populate it with the TCP seq number of the request and then the response segments
-    __u32 tcp_seq;
-
-    __u32 current_offset_in_request_fragment;
-    mongo_transaction_batch_entry_t base;
-} mongo_transaction_t;
-
 // The key used in mongo_request_id set.
 typedef struct {
     conn_tuple_t tup;

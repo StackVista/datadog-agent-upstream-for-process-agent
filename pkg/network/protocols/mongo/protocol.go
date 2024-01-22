@@ -31,11 +31,21 @@ const (
 	eventStreamName    = "mongo"
 	filterTailCall     = "socket__mongo_filter"
 	tlsProcessTailCall = "uprobe__mongo_process"
+
+	mongoRequestTimestampMap    = "mongo_request_timestamps"
+	mongoClassificationTriesMap = "mongo_connection_classification_tries"
 )
 
 var Spec = &protocols.ProtocolSpec{
 	Factory: newMongoProtocol,
-	Maps:    []*manager.Map{},
+	Maps: []*manager.Map{
+		{
+			Name: mongoRequestTimestampMap,
+		},
+		{
+			Name: mongoClassificationTriesMap,
+		},
+	},
 	TailCalls: []manager.TailCallRoute{
 		{
 			ProgArrayName: protocols.ProtocolDispatcherProgramsMap,
@@ -76,6 +86,17 @@ func (p *protocol) Name() string {
 // We also configure the kafka event stream with the manager and its options.
 func (p *protocol) ConfigureOptions(mgr *manager.Manager, opts *manager.Options) {
 	events.Configure(eventStreamName, mgr, opts)
+
+	opts.MapSpecEditors[mongoClassificationTriesMap] = manager.MapSpecEditor{
+		MaxEntries: 64,
+		EditorFlag: manager.EditMaxEntries,
+	}
+
+	opts.MapSpecEditors[mongoRequestTimestampMap] = manager.MapSpecEditor{
+		MaxEntries: p.cfg.MaxTrackedConnections,
+		EditorFlag: manager.EditMaxEntries,
+	}
+
 	utils.EnableOption(opts, "mongo_monitoring_enabled")
 }
 

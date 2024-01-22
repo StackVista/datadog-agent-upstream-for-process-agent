@@ -36,6 +36,7 @@ static __always_inline __u64 mongo_have_seen_request(conn_tuple_t *tup, __s32 re
     mongo_transaction_batch_entry_t entry = {};
     entry.tup = *tup;
     entry.mongo_latency_ns = latency;
+    normalize_tuple(&entry.tup);
     mongo_batch_enqueue(&entry);
     return *timestamp;
 }
@@ -100,10 +101,12 @@ static __always_inline bool is_mongo(conn_tuple_t *tup, const char *buf, __u32 s
     }
 
     if (tries >= MONGO_MAX_CLASSIFICATION_TRIES) {
+        // We've tried to classify this connection too many times, give up.
+        // This approach is not necessarily more performant then just trying to parse the header
+        // every time, but we want to avoid false positives.
         return false;
     }
 
-    log_debug("mongo: %d -> %d, classification tries: %d\n", tup->sport, tup->dport, tries);
     tries++;
     bpf_map_update_elem(&mongo_connection_classification_tries, tup, &tries, BPF_ANY);
 
