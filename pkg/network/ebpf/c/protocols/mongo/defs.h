@@ -18,9 +18,6 @@
 
 #define MONGO_HEADER_LENGTH 16
 
-#define MONGO_MESSAGE_SECTION_TYPE_BODY 1
-#define MONGO_MESSAGE_SECTION_TYPE_INTERNAL 2
-
 #define MONGO_BATCH_SIZE 15
 
 // Number of packets to parse in unknown connection to determine if it is a mongo connection.
