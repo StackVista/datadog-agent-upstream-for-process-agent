@@ -1,8 +1,8 @@
-#ifndef __MONGO_HELPERS_H
-#define __MONGO_HELPERS_H
+#ifndef __MONGO_HELPERS
+#define __MONGO_HELPERS
 
-#include "protocols/classification/common.h"
-#include "protocols/mongo/defs.h"
+#include "protocols/mongo/maps.h"
+#include "protocols/mongo/usm-events.h"
 
 /// Adds a request id to the mongo_request_id set
 static __always_inline void mongo_handle_request(conn_tuple_t *tup, __s32 request_id) {
@@ -30,13 +30,22 @@ static __always_inline __u64 mongo_have_seen_request(conn_tuple_t *tup, __s32 re
         return 0;
     }
 
+    // Calculate the latency and enqueue it for user-space processing.
+    __u64 now = bpf_ktime_get_ns();
+    __u64 latency = now - *timestamp;
+    mongo_transaction_batch_entry_t entry = {};
+    entry.tup = *tup;
+    entry.mongo_latency_ns = latency;
+    mongo_batch_enqueue(&entry);
     return *timestamp;
 }
 
-// Checks if the connection identified by tup is a mongo connection.
-// Once this has returned true, it will not be called again for traffic on the same connection. 
-// Returning false will give us another chance for classification with the next packet.
-static __always_inline bool is_mongo(conn_tuple_t *tup, const char *buf, __u32 size) {
+// Validates and parse `buf` as a mongo header and records its request id and observation
+// timestamp for latency calculation. Return true if the header is valid, false otherwise.
+// While this should never fail to identify a valid header, there is a high chance of false
+// positives. This is because the header is very simple and the only field we can validate
+// is the op_code.
+static __always_inline bool try_parse_mongo_header(conn_tuple_t *tup, const char *buf, __u32 size) {
     CHECK_PRELIMINARY_BUFFER_CONDITIONS(buf, size, MONGO_HEADER_LENGTH);
 
     mongo_msg_header header = *((mongo_msg_header*)buf);
@@ -78,6 +87,27 @@ static __always_inline bool is_mongo(conn_tuple_t *tup, const char *buf, __u32 s
     }
 
     return false;
+}
+
+// Checks if the connection identified by tup is a mongo connection.
+// Once this has returned true, it will not be called again for traffic on the same connection. 
+// Returning false will give us another chance for classification with the next packet.
+static __always_inline bool is_mongo(conn_tuple_t *tup, const char *buf, __u32 size) {
+    __u32 tries = 0;
+    __u32 *tries_ptr = bpf_map_lookup_elem(&mongo_connection_classification_tries, tup);
+    if (tries_ptr != NULL) {
+        tries = *tries_ptr;
+    }
+
+    if (tries >= MONGO_MAX_CLASSIFICATION_TRIES) {
+        return false;
+    }
+
+    log_debug("mongo: %d -> %d, classification tries: %d\n", tup->sport, tup->dport, tries);
+    tries++;
+    bpf_map_update_elem(&mongo_connection_classification_tries, tup, &tries, BPF_ANY);
+
+    return try_parse_mongo_header(tup, buf, size);
 }
 
 #endif

@@ -21,14 +21,6 @@ func (tx *EbpfTx) ConnTuple() types.ConnectionKey {
 	}
 }
 
-func (tx *EbpfTx) RequestId() uint32 {
-	return tx.Request_id
-}
-
-func (tx *EbpfTx) ResponseTo() uint32 {
-	return tx.Response_to
-}
-
-func (tx *EbpfTx) ObservationTimestamp() uint64 {
-	return tx.Timestamp_ns
+func (tx *EbpfTx) LatencyNs() uint64 {
+	return tx.Latency_ns
 }

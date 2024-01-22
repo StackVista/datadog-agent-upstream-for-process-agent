@@ -1,20 +1,17 @@
-#ifndef __MONGO_PARSING
-#define __MONGO_PARSING
+#ifndef __MONGO_PARSING_H
+#define __MONGO_PARSING_H
 
 #include "bpf_builtins.h"
 #include "bpf_telemetry.h"
+#include "protocols/mongo/helpers.h"
 #include "protocols/mongo/defs.h"
 #include "protocols/mongo/types.h"
-#include "protocols/mongo/parsing-maps.h"
+#include "protocols/mongo/maps.h"
 #include "protocols/mongo/usm-events.h"
+#include "protocols/classification/common.h"
+#include "protocols/classification/dispatcher-maps.h"
+#include "protocols/classification/dispatcher-helpers.h"
 
-
-// Entry point for mongo 
-static __always_inline bool mongo_process(mongo_transaction_t *mongo_transaction, struct __sk_buff* skb, __u32 offset);
-
-// The actual data extraction and pushing to user-space. For TLS, we come here from uprobe__mongo_process,
-// for unencrypted traffic, we come here from socket__mongo_filter via mongo_process.
-static __always_inline bool mongo_process_header(mongo_transaction_t *mongo_transaction, mongo_header_t *mongo_header);
 
 // This is our entry point for MongoDB over TLS traffic.
 // The TLS dispatcher gives a different context from the unencrypted one, so we need to do a little
@@ -23,23 +20,15 @@ SEC("uprobe/mongo_process")
 int uprobe__mongo_process(struct pt_regs *ctx) {
     const __u32 zero = 0;
     tls_dispatcher_arguments_t *args = bpf_map_lookup_elem(&tls_dispatcher_arguments, &zero);
+
     if (args == NULL) {
+        log_debug("uprobe__mongo_process failed to fetch arguments for tail call\n");
         return 0;
     }
 
-    mongo_transaction_t *mongo_transaction = bpf_map_lookup_elem(&mongo_heap, &zero);
-    if (mongo_transaction == NULL) {
-        return 0;
-    }
-
-    bpf_memset(mongo_transaction, 0, sizeof(mongo_transaction_t));
-    bpf_memcpy(&mongo_transaction->base.tup, &args->tup, sizeof(conn_tuple_t));
-    normalize_tuple(&mongo_transaction->base.tup);
-
-    mongo_header_t mongo_header;
-    bpf_probe_read_user_with_telemetry(&mongo_header, sizeof(mongo_header_t), args->buffer_ptr); 
-    mongo_process_header(mongo_transaction, &mongo_header);
-  
+    mongo_msg_header mongo_header = {};
+    bpf_probe_read_user_with_telemetry(&mongo_header, MONGO_HEADER_LENGTH, args->buffer_ptr);
+    try_parse_mongo_header(&args->tup, (const char *)&mongo_header, MONGO_HEADER_LENGTH); 
     return 0;
 }
 
@@ -50,24 +39,17 @@ int uprobe__mongo_process(struct pt_regs *ctx) {
 SEC("socket/mongo_filter")
 int socket__mongo_filter(struct __sk_buff* skb) {
     log_debug("socket__mongo_filter: start\n");
-    const u32 zero = 0;
+    conn_tuple_t tup;
     skb_info_t skb_info;
 
-    mongo_transaction_t *mongo = bpf_map_lookup_elem(&mongo_heap, &zero);
-    if (mongo == NULL) {
-        log_debug("socket__mongo_filter: mongo_transaction state is NULL\n");
-        return 0;
-    }
-    bpf_memset(mongo, 0, sizeof(mongo_transaction_t));
-
-    if (!fetch_dispatching_arguments(&mongo->base.tup, &skb_info)) {
+    if (!fetch_dispatching_arguments(&tup, &skb_info)) {
         log_debug("socket__mongo_filter failed to fetch arguments for tail call\n");
         return 0;
     }
-    // TODO: Move to mongo_process
-    normalize_tuple(&mongo->base.tup);
 
-    (void)mongo_process(mongo, skb, skb_info.data_off);
+    mongo_msg_header mongo_header = {};
+    bpf_skb_load_bytes_with_telemetry(skb, skb_info.data_off, (char *)&mongo_header, MONGO_HEADER_LENGTH);
+    try_parse_mongo_header(&tup, (const char *)&mongo_header, MONGO_HEADER_LENGTH);
     return 0;
 }
 

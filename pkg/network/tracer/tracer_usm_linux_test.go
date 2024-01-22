@@ -96,6 +96,7 @@ func TestEnableMongoOverTLSMonitoring(t *testing.T) {
 }
 
 // Note: This test assumes there is a mongo client running in a separate network namespace.
+// To run this test, you will need a TLS-enabled mongo server.
 func TestEnableMongoOverTLSMonitoringNamespaces(t *testing.T) {
 	cfg := testConfig()
 	cfg.EnableHTTPMonitoring = true

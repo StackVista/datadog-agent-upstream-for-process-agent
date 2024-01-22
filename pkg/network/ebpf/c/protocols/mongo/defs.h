@@ -23,4 +23,7 @@
 
 #define MONGO_BATCH_SIZE 15
 
+// Number of packets to parse in unknown connection to determine if it is a mongo connection.
+#define MONGO_MAX_CLASSIFICATION_TRIES 15
+
 #endif

@@ -1,39 +1,16 @@
 #ifndef __MONGO_TYPES_H
 #define __MONGO_TYPES_H
 
-#include "defs.h"
-
-// The standard mongo header, every message will have this.
-// STS/JGT: The docs call the fields "int", but they seem to be unsigned.
-// STS/JGT: On the wire, the fields are always little-endian, even though network byte order is traditionally big-endian.
 typedef struct {
-    __u32 message_length;
-    __u32 request_id;
-    __u32 response_to; // Only valid for responses
-    __u32 op_code;
-} __attribute__ ((packed)) mongo_header_t;
-
-#define MONGO_MIN_LENGTH (sizeof(mongo_header_t))
-
-typedef struct {
-    __u8 section_type;
-    __u32 section_size; // In bytes
-    // C string follows
-    // BSON follows
-}  __attribute__ ((packed)) mongo_message_section_t;
-
-// Header for messages of op_type MONGO_OP_MSG
-typedef struct {
-    mongo_header_t header; // standard message header
-    __u32 flagBits; // message flags
-    mongo_message_section_t sections[]; // data sections
-    // optional CRC-32C checksum follows
-}  __attribute__ ((packed)) mongo_message_header_t;
+    __s32   message_length; // total message size, including this
+    __s32   request_id;     // identifier for this message
+    __s32   response_to;    // requestID from the original request (used in responses from db)
+    __s32   op_code;        // request type - see table below for details
+} mongo_msg_header;
 
 typedef struct {
     conn_tuple_t tup;
     __u64 mongo_latency_ns;
-    bool mongo_is_error; // Response contained an error 
 } mongo_transaction_batch_entry_t;
 
 // Mongo transaction information associated to a certain socket (tuple_t)
@@ -45,5 +22,11 @@ typedef struct {
     __u32 current_offset_in_request_fragment;
     mongo_transaction_batch_entry_t base;
 } mongo_transaction_t;
+
+// The key used in mongo_request_id set.
+typedef struct {
+    conn_tuple_t tup;
+    __s32 req_id;
+} mongo_key;
 
 #endif
