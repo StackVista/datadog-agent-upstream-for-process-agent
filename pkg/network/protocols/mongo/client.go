@@ -84,6 +84,16 @@ var (
 	}
 )
 
+// Do some work on the database to generate some stats
+// You will generally not care about the result of this function
+func (c *Client) GenerateLoad() error {
+	c.C.ListDatabases(context.Background(), bson.M{})
+	usersCollection := c.C.Database("testing").Collection("users")
+	user := bson.D{{"fullName", "John Doe"}, {"age", 30}}
+	_, err := usersCollection.InsertOne(context.Background(), user)
+	return err
+}
+
 func (c *Client) DeleteDatabases() error {
 	dbs, err := c.C.ListDatabases(context.Background(), bson.M{})
 	if err != nil {
