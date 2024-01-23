@@ -126,31 +126,41 @@ func TestMongoStats(t *testing.T) {
 	cfg := testConfig()
 	cfg.EnableNativeTLSMonitoring = true
 	cfg.EnableMongoMonitoring = true
+	cfg.BPFDebug = true
 	tr := setupTracer(t, cfg)
 
-	require.NoError(t, mongo.RunServer(t, "0.0.0.0", "27017"))
+	// If these tests time out, do a docker pull mongo:<version> first and try again.
+	for _, mongoVersion := range []string{"4", "6", "7"} {
+		t.Run(fmt.Sprintf("MongoVersion%s", mongoVersion), func(t *testing.T) {
+			testMongoStats(t, tr, mongoVersion)
+		})
+	}
 
-	// Localhost client, use with server above
+}
+
+func testMongoStats(t *testing.T, tr *Tracer, mongoVersion string) {
+	require.NoError(t, mongo.RunServer(t, "0.0.0.0", "27017", mongoVersion))
+
 	client, err := mongo.NewClient(mongo.Options{ServerAddress: "localhost:" + mongoPort, Username: "root", Password: "password"})
 	require.NoError(t, err)
 	defer client.Stop()
 
+	client.GenerateLoad()
 	require.Eventually(t, func() bool {
-		payload, err := tr.GetActiveConnections("1")
+		payload, err := tr.GetActiveConnections("mongo-testing-client")
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		for _, metrics := range payload.Mongo {
-			log.Errorf("Sum of latency: %f", metrics.Latencies.GetSum())
-			if metrics.Latencies.GetCount() > 0.0 {
+			if metrics.Latencies.GetCount() > 3.0 {
+				log.Errorf("Avg. of latencies: %.2f ms", metrics.Latencies.GetSum()/1000000.0/metrics.Latencies.GetCount())
 				return true
 			}
 		}
 
 		return false
 	}, time.Second*5, time.Millisecond*100, "Expected to find a stats, instead captured none")
-
 }
 
 func TestUSMSuite(t *testing.T) {

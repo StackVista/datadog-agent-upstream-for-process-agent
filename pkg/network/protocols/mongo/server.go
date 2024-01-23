@@ -21,14 +21,15 @@ const (
 	Pass = "password"
 )
 
-func RunServer(t testing.TB, serverAddress, serverPort string) error {
+func RunServer(t testing.TB, serverAddress, serverPort string, mongoVersion string) error {
 	env := []string{
 		"MONGO_ADDR=" + serverAddress,
 		"MONGO_PORT=" + serverPort,
 		"MONGO_USER=" + User,
 		"MONGO_PASSWORD=" + Pass,
+		"MONGO_VERSION=" + mongoVersion,
 	}
 	t.Helper()
 	dir, _ := testutil.CurDir()
-	return protocolsUtils.RunDockerServer(t, "mongo", dir+"/testdata/docker-compose.yml", env, regexp.MustCompile(`.*Listening on.*`), 3*time.Minute)
+	return protocolsUtils.RunDockerServer(t, "mongo", dir+"/testdata/docker-compose.yml", env, regexp.MustCompile(`.*istening .*`), 3*time.Minute)
 }
