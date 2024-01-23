@@ -36,7 +36,6 @@ static __always_inline __u64 mongo_have_seen_request(conn_tuple_t *tup, __s32 re
     mongo_transaction_batch_entry_t entry = {};
     entry.tup = *tup;
     entry.mongo_latency_ns = latency;
-    normalize_tuple(&entry.tup);
     mongo_batch_enqueue(&entry);
     return *timestamp;
 }
@@ -46,10 +45,22 @@ static __always_inline __u64 mongo_have_seen_request(conn_tuple_t *tup, __s32 re
 // While this should never fail to identify a valid header, there is a high chance of false
 // positives. This is because the header is very simple and the only field we can validate
 // is the op_code.
-static __always_inline bool try_parse_mongo_header(conn_tuple_t *tup, const char *buf, __u32 size) {
+static __always_inline bool try_parse_mongo_header(conn_tuple_t *raw_tup, const char *buf, __u32 size) {
     CHECK_PRELIMINARY_BUFFER_CONDITIONS(buf, size, MONGO_HEADER_LENGTH);
 
+    // For matching, we need a consistent tuple format.
+    // Make a copy as we do not know what the caller will do with the tuple.
+    conn_tuple_t tup_copy = *raw_tup;
+    conn_tuple_t *tup = &tup_copy;
+    normalize_tuple(tup);
+
     mongo_msg_header header = *((mongo_msg_header*)buf);
+
+    // Header is little-endian on thr wire, convert to host byte order.
+    header.message_length = bpf_ntohl(__builtin_bswap32(header.message_length));
+    header.request_id = bpf_ntohl(__builtin_bswap32(header.request_id));
+    header.response_to = bpf_ntohl(__builtin_bswap32(header.response_to));
+    header.op_code = bpf_ntohl(__builtin_bswap32(header.op_code));
 
     // The message length should contain the size of headers
     if (header.message_length < MONGO_HEADER_LENGTH) {
