@@ -17,10 +17,10 @@ static __always_inline void mongo_handle_request(conn_tuple_t *tup, __s32 reques
 /// @brief Searches for the timestamp the request matching the given response was observed.
 /// If the request was observed, it will be removed from the map and the latency will be calculated and enqueued
 /// for user-space processing.
-/// @param tup Identifier for the connection.
+/// @param tup Identifier for the connection. Must be a normalized tuple for the mathing to work.
 /// @param response_to Value of the response_to header field.
 /// @return Timestamp the request identified by tup and response_to was observed, or 0 if it was not observed.
-static __always_inline __u64 mongo_have_seen_request(conn_tuple_t *tup, __s32 response_to) {
+static __always_inline __u64 mongo_try_match_request(conn_tuple_t *tup, __s32 response_to) {
     mongo_key key = {};
     key.tup = *tup;
     key.req_id = response_to;
@@ -80,7 +80,7 @@ static __always_inline bool try_parse_mongo_header(conn_tuple_t *raw_tup, const 
     case MONGO_OP_REPLY:
         // If the message is a reply, make sure we've seen the request of the response.
         // If will eliminate false positives.
-        return mongo_have_seen_request(tup, header.response_to);
+        return mongo_try_match_request(tup, header.response_to);
     case MONGO_OP_QUERY:
     case MONGO_OP_GET_MORE:
         if (header.response_to == 0) {
@@ -95,7 +95,7 @@ static __always_inline bool try_parse_mongo_header(conn_tuple_t *raw_tup, const 
             mongo_handle_request(tup, header.request_id);
             return true;
         }
-        return mongo_have_seen_request(tup, header.response_to);
+        return mongo_try_match_request(tup, header.response_to);
     }
 
     return false;
