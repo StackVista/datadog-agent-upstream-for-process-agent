@@ -370,6 +370,10 @@ def ninja_cgo_type_files(nw, windows):
                 "pkg/network/ebpf/c/tracer/tracer.h",
                 "pkg/network/ebpf/c/protocols/kafka/types.h",
             ],
+            "pkg/network/protocols/mongo/types.go": [
+                "pkg/network/ebpf/c/tracer/tracer.h",
+                "pkg/network/ebpf/c/protocols/mongo/types.h",
+            ],
             "pkg/network/telemetry/telemetry_types.go": [
                 "pkg/ebpf/c/telemetry_types.h",
             ],

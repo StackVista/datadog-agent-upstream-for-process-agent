@@ -5,7 +5,7 @@
 
 //go:build linux_bpf
 
-package kafka
+package mongo
 
 import (
 	"strings"
@@ -28,43 +28,44 @@ type protocol struct {
 }
 
 const (
-	eventStreamName                 = "kafka"
-	filterTailCall                  = "socket__kafka_filter"
-	dispatcherTailCall              = "socket__protocol_dispatcher_kafka"
-	kafkaLastTCPSeqPerConnectionMap = "kafka_last_tcp_seq_per_connection"
-	kafkaHeapMap                    = "kafka_heap"
+	eventStreamName    = "mongo"
+	filterTailCall     = "socket__mongo_filter"
+	tlsProcessTailCall = "uprobe__mongo_process"
+
+	mongoRequestTimestampMap    = "mongo_request_timestamps"
+	mongoClassificationTriesMap = "mongo_connection_classification_tries"
 )
 
 var Spec = &protocols.ProtocolSpec{
-	Factory: newKafkaProtocol,
+	Factory: newMongoProtocol,
 	Maps: []*manager.Map{
 		{
-			Name: kafkaLastTCPSeqPerConnectionMap,
+			Name: mongoRequestTimestampMap,
 		},
 		{
-			Name: kafkaHeapMap,
+			Name: mongoClassificationTriesMap,
 		},
 	},
 	TailCalls: []manager.TailCallRoute{
 		{
 			ProgArrayName: protocols.ProtocolDispatcherProgramsMap,
-			Key:           uint32(protocols.ProgramKafka),
+			Key:           uint32(protocols.ProgramMongo),
 			ProbeIdentificationPair: manager.ProbeIdentificationPair{
 				EBPFFuncName: filterTailCall,
 			},
 		},
 		{
-			ProgArrayName: protocols.ProtocolDispatcherClassificationPrograms,
-			Key:           uint32(protocols.DispatcherKafkaProg),
+			ProgArrayName: protocols.TLSDispatcherProgramsMap,
+			Key:           uint32(protocols.ProgramTLSMongoProcess),
 			ProbeIdentificationPair: manager.ProbeIdentificationPair{
-				EBPFFuncName: dispatcherTailCall,
+				EBPFFuncName: tlsProcessTailCall,
 			},
 		},
 	},
 }
 
-func newKafkaProtocol(cfg *config.Config) (protocols.Protocol, error) {
-	if !cfg.EnableKafkaMonitoring {
+func newMongoProtocol(cfg *config.Config) (protocols.Protocol, error) {
+	if !cfg.EnableMongoMonitoring {
 		return nil, nil
 	}
 
@@ -75,21 +76,28 @@ func newKafkaProtocol(cfg *config.Config) (protocols.Protocol, error) {
 }
 
 func (p *protocol) Name() string {
-	return "Kafka"
+	return "Mongo"
 }
 
-// ConfigureOptions add the necessary options for the kafka monitoring to work,
+// ConfigureOptions add the necessary options for the mongo monitoring to work,
 // to be used by the manager. These are:
 // - Set the `kafka_last_tcp_seq_per_connection` map size to the value of the `max_tracked_connection` configuration variable.
 //
 // We also configure the kafka event stream with the manager and its options.
 func (p *protocol) ConfigureOptions(mgr *manager.Manager, opts *manager.Options) {
 	events.Configure(eventStreamName, mgr, opts)
-	opts.MapSpecEditors[kafkaLastTCPSeqPerConnectionMap] = manager.MapSpecEditor{
+
+	opts.MapSpecEditors[mongoClassificationTriesMap] = manager.MapSpecEditor{
+		MaxEntries: 64,
+		EditorFlag: manager.EditMaxEntries,
+	}
+
+	opts.MapSpecEditors[mongoRequestTimestampMap] = manager.MapSpecEditor{
 		MaxEntries: p.cfg.MaxTrackedConnections,
 		EditorFlag: manager.EditMaxEntries,
 	}
-	utils.EnableOption(opts, "kafka_monitoring_enabled")
+
+	utils.EnableOption(opts, "mongo_monitoring_enabled")
 }
 
 func (p *protocol) PreStart(mgr *manager.Manager) error {
@@ -97,7 +105,7 @@ func (p *protocol) PreStart(mgr *manager.Manager) error {
 	p.eventsConsumer, err = events.NewConsumer(
 		eventStreamName,
 		mgr,
-		p.processKafka,
+		p.processMongo,
 	)
 	if err != nil {
 		return err
@@ -121,19 +129,19 @@ func (p *protocol) Stop(_ *manager.Manager) {
 
 func (p *protocol) DumpMaps(_ *strings.Builder, _ string, _ *ebpf.Map) {}
 
-func (p *protocol) processKafka(data []byte) {
+func (p *protocol) processMongo(data []byte) {
 	tx := (*EbpfTx)(unsafe.Pointer(&data[0]))
 	p.telemetry.Count(tx)
 	p.statkeeper.Process(tx)
 }
 
-// GetStats returns a map of Kafka stats stored in the following format:
+// GetStats returns a map of Mongo stats stored in the following format:
 // [source, dest tuple, request path] -> RequestStats object
 func (p *protocol) GetStats() *protocols.ProtocolStats {
 	p.eventsConsumer.Sync()
 	p.telemetry.Log()
 	return &protocols.ProtocolStats{
-		Type:  protocols.Kafka,
+		Type:  protocols.Mongo,
 		Stats: p.statkeeper.GetAndResetAllStats(),
 	}
 }

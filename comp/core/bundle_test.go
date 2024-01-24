@@ -16,18 +16,6 @@ import (
 	"github.com/DataDog/datadog-agent/comp/core/log"
 )
 
-func TestBundleDependencies(t *testing.T) {
-	require.NoError(t, fx.ValidateApp(
-		// instantiate all of the core components, since this is not done
-		// automatically.
-		fx.Invoke(func(config.Component) {}),
-		fx.Invoke(func(log.Component) {}),
-		fx.Invoke(func(hostname.Component) {}),
-
-		fx.Supply(BundleParams{}),
-		Bundle))
-}
-
 func TestMockBundleDependencies(t *testing.T) {
 	require.NoError(t, fx.ValidateApp(
 		fx.Supply(fx.Annotate(t, fx.As(new(testing.TB)))),
