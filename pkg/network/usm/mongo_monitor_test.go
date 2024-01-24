@@ -10,12 +10,11 @@ package usm
 import (
 	"context"
 	"fmt"
-	"os/exec"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
-	"github.com/DataDog/datadog-agent/pkg/util/log"
 	"go.mongodb.org/mongo-driver/bson"
 	mgo "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -33,7 +32,6 @@ const (
 
 func getMongoTestConfiguration() *config.Config {
 	cfg := config.New()
-	cfg.BPFDebug = true
 	cfg.EnableNativeTLSMonitoring = true
 	cfg.EnableMongoMonitoring = true
 	cfg.MaxTrackedConnections = 1000
@@ -50,11 +48,23 @@ func TestMonitorSetup(t *testing.T) {
 }
 
 func TestTLSCloudMongoDetection(t *testing.T) {
+	// To run this test, you need to have a TLS-enabled MongoDB instance running.
+	// One way to do this is to use the MongoDB Atlas service, the free tier is enough.
+	// Provide the URI of your MongoDB Atlas cluster in the MONGODB_URI environment variable.
+	//
+	// 	export MONGODB_URI="mongodb+srv://secret_user:secret_pass@free-cluster-01.mongodb.net/?retryWrites=true&w=majority"
+	//
+	mongoURI := os.Getenv("MONGODB_URI")
+
+	if mongoURI == "" {
+		t.Skip("MONGODB_URI not set, skipping test")
+	}
+
 	newMongoMonitor(t, getMongoTestConfiguration())
 
 	// Use the SetServerAPIOptions() method to set the Stable API version to 1
 	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
-	opts := options.Client().ApplyURI("mongodb+srv://mongo-test-user-01:mongo-test-pass-01@free-cluster-01.ia3g9tu.mongodb.net/?retryWrites=true&w=majority").SetServerAPIOptions(serverAPI)
+	opts := options.Client().ApplyURI(mongoURI).SetServerAPIOptions(serverAPI)
 	// Create a new client and connect to the server
 	client, err := mgo.Connect(context.TODO(), opts)
 	if err != nil {
@@ -69,32 +79,22 @@ func TestTLSCloudMongoDetection(t *testing.T) {
 	if err := client.Database("admin").RunCommand(context.TODO(), bson.D{{"ping", 1}}).Err(); err != nil {
 		panic(err)
 	}
+
 	fmt.Println("Pinged your deployment. You successfully connected to MongoDB!")
-}
-
-func TestBasicBehavior(t *testing.T) {
-	newMongoMonitor(t, getMongoTestConfiguration())
-	exec.Command("docker", "rm", "-f", "testdata-mongodb-primary-1").Run()
-	require.NoError(t, mongo.RunServer(t, "0.0.0.0", mongoPort))
-
-	require.Eventually(t, func() bool {
-		return true
-	}, time.Second*2, time.Millisecond*100, "Expected to find a stats, instead captured none")
 }
 
 func TestMongoDetection(t *testing.T) {
 	monitor := newMongoMonitor(t, getMongoTestConfiguration())
 
-	// Clear any leftover Doccker container
-	exec.Command("docker", "rm", "-f", "testdata-mongodb-primary-1").Run()
-
 	// We rely on port 27017 for the detection, so do not change it.
-	require.NoError(t, mongo.RunServer(t, "0.0.0.0", mongoPort))
+	require.NoError(t, mongo.RunServer(t, "0.0.0.0", mongoPort, "7"))
 
 	// Localhost client, use with server above
 	client, err := mongo.NewClient(mongo.Options{ServerAddress: "localhost:" + mongoPort, Username: "root", Password: "password"})
 	require.NoError(t, err)
 	defer client.Stop()
+
+	client.GenerateLoad()
 
 	require.Eventually(t, func() bool {
 		protocolStats := monitor.GetProtocolStats()
@@ -102,7 +102,6 @@ func TestMongoDetection(t *testing.T) {
 		// We might not have mongo stats, and it might be the expected case (to capture 0).
 		if exists {
 			currentStats := mongoProtocolStats.(map[mongo.Key]*mongo.RequestStat)
-			log.Errorf("len(currentStats): %v", len(currentStats))
 			return len(currentStats) > 0
 		}
 		return false
