@@ -87,10 +87,8 @@ type USMSuite struct {
 	suite.Suite
 }
 
-func TestEnableMongoOverTLSMonitoring(t *testing.T) {
+func TestMongoOverTLSTracerSetup(t *testing.T) {
 	cfg := testConfig()
-	cfg.EnableHTTPMonitoring = true
-	cfg.EnableHTTP2Monitoring = true
 	cfg.EnableNativeTLSMonitoring = true
 	cfg.EnableMongoMonitoring = true
 	cfg.BPFDebug = true
