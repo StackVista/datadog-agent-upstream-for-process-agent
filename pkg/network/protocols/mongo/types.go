@@ -3,16 +3,16 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
 // Copyright 2016-present Datadog, Inc.
 
-package core
+//go:build ignore
 
-import (
-	"testing"
+package mongo
 
-	"go.uber.org/fx"
+/*
+#include "../../ebpf/c/conn_tuple.h"
+#include "../../ebpf/c/protocols/mongo/types.h"
+*/
+import "C"
 
-	"github.com/DataDog/datadog-agent/pkg/util/fxutil"
-)
+type ConnTuple C.conn_tuple_t
 
-func TestMockBundleDependencies(t *testing.T) {
-	fxutil.TestBundle(t, MockBundle(), fx.Supply(BundleParams{}))
-}
+type EbpfTx C.mongo_transaction_batch_entry_t

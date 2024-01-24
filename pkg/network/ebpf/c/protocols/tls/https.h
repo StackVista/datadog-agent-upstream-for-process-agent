@@ -86,6 +86,9 @@ static __always_inline void tls_process(struct pt_regs *ctx, conn_tuple_t *t, vo
         prog = TLS_HTTP2_FIRST_FRAME;
         final_tuple = *t;
         break;
+    case PROTOCOL_MONGO:
+        prog = TLS_MONGO_PROCESS;
+        break;
     default:
         return;
     }
@@ -179,6 +182,12 @@ static __always_inline conn_tuple_t* tup_from_ssl_ctx(void *ssl_ctx, u64 pid_tgi
         return NULL;
     }
 
+    // Set `.pid` value to always be 0.
+    // It can't be sourced from inside `read_conn_tuple_skb`,
+    // which is used elsewhere to produce the same `conn_tuple_t` value from a `struct __sk_buff*` value,
+    // so we ensure it is always 0 here so that both paths produce the same `conn_tuple_t` value.
+    t.pid = 0;
+
     bpf_memcpy(&ssl_sock->tup, &t, sizeof(conn_tuple_t));
     return &ssl_sock->tup;
 }
@@ -201,6 +210,8 @@ static __always_inline void map_ssl_ctx_to_sock(struct sock *skp) {
     if (!read_conn_tuple(&ssl_sock.tup, skp, pid_tgid, CONN_TYPE_TCP)) {
         return;
     }
+    ssl_sock.tup.pid = 0;
+    normalize_tuple(&ssl_sock.tup);
 
     // copy map value to stack. required for older kernels
     void *ssl_ctx = *ssl_ctx_map_val;

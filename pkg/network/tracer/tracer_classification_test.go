@@ -1011,7 +1011,7 @@ func testMongoProtocolClassification(t *testing.T, tr *Tracer, clientHost, targe
 	// Setting one instance of mongo server for all tests.
 	serverAddress := net.JoinHostPort(serverHost, mongoPort)
 	targetAddress := net.JoinHostPort(targetHost, mongoPort)
-	require.NoError(t, protocolsmongo.RunServer(t, serverHost, mongoPort))
+	require.NoError(t, protocolsmongo.RunServer(t, serverHost, mongoPort, "7"))
 
 	tests := []protocolClassificationAttributes{
 		{

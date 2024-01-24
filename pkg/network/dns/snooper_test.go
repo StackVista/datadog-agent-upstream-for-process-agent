@@ -8,6 +8,8 @@
 package dns
 
 import (
+	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -235,6 +237,11 @@ func TestDNSFailedResponseCount(t *testing.T) {
 		require.NotNil(t, rep)
 		require.Equal(t, rep.Rcode, mdns.RcodeNameError) // All the queries should have failed
 	}
+	key1 := getKey(queryIP, queryPort, validDNSServerIP, syscall.IPPROTO_TCP)
+
+	h := handler{}
+	shutdown, _ := newTestServer(t, localhost, 53, "udp", h.ServeDNS)
+	defer shutdown()
 
 	var allStats StatsByKeyByNameByType
 	// First check the one sent over TCP. Expected error type: NXDomain
@@ -278,11 +285,11 @@ func TestDNSOverNonPort53(t *testing.T) {
 	domains := []string{
 		"nonexistent.net.com",
 	}
-	shutdown, port := newTestServer(t, localhost, "udp")
+	h := &handler{}
+	shutdown, port := newTestServer(t, localhost, 0, "udp", h.ServeDNS)
 	defer shutdown()
 
-	queryIP, queryPort, reps, err := testdns.SendDNSQueriesOnPort(t, domains, net.ParseIP(localhost), strconv.Itoa(int(port)), "udp")
-	require.NoError(t, err)
+	queryIP, queryPort, reps := sendDNSQueriesOnPort(t, domains, localhost, fmt.Sprintf("%d", port), "udp")
 	require.NotNil(t, reps[0])
 
 	// we only pick up on port 53 traffic, so we shouldn't ever get stats
@@ -400,8 +407,11 @@ func TestDNSOverIPv6(t *testing.T) {
 	reverseDNS := initDNSTestsWithDomainCollection(t, true)
 	defer reverseDNS.Close()
 	statKeeper := reverseDNS.statKeeper
-	domain := "missingdomain.com"
-	serverIP := testdns.GetServerIP(t)
+
+	// This DNS server is set up so it always returns a NXDOMAIN answer
+	serverIP := net.IPv6loopback.String()
+	closeFn, _ := newTestServer(t, serverIP, 53, "udp", nxDomainHandler)
+	defer closeFn()
 
 	queryIP, queryPort, reps := testdns.SendDNSQueriesAndCheckError(t, []string{domain}, serverIP, "udp")
 	require.NotNil(t, reps[0])
@@ -426,7 +436,18 @@ func TestDNSNestedCNAME(t *testing.T) {
 	defer reverseDNS.Close()
 	statKeeper := reverseDNS.statKeeper
 
-	domain := "nestedcname.com"
+	serverIP := "127.0.0.1"
+	closeFn, _ := newTestServer(t, serverIP, 53, "udp", func(w dns.ResponseWriter, r *dns.Msg) {
+		answer := new(dns.Msg)
+		answer.SetReply(r)
+
+		top := new(dns.CNAME)
+		top.Hdr = dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 3600}
+		top.Target = "www.example.com."
+
+		nested := new(dns.CNAME)
+		nested.Hdr = dns.RR_Header{Name: "www.example.com.", Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 3600}
+		nested.Target = "www2.example.com."
 
 	serverIP := testdns.GetServerIP(t)
 
@@ -445,7 +466,48 @@ func TestDNSNestedCNAME(t *testing.T) {
 	assert.Equal(t, 1, len(stats.CountByRcode))
 	assert.Equal(t, uint32(1), stats.CountByRcode[uint32(layers.DNSResponseCodeNoErr)])
 
-	checkSnooping(t, serverIP.String(), domain, reverseDNS)
+	checkSnooping(t, serverIP, "example.com", reverseDNS)
+}
+
+func newTestServer(t *testing.T, ip string, port uint16, protocol string, handler dns.HandlerFunc) (func(), uint16) {
+	addr := net.JoinHostPort(ip, strconv.Itoa(int(port)))
+	srv := &dns.Server{Addr: addr, Net: protocol, Handler: handler}
+
+	initChan := make(chan error, 1)
+	srv.NotifyStartedFunc = func() {
+		initChan <- nil
+	}
+
+	go func() {
+		initChan <- srv.ListenAndServe()
+		close(initChan)
+	}()
+
+	if err := <-initChan; err != nil {
+		t.Errorf("could not initialize DNS server: %s", err)
+		return func() {}, port
+	}
+
+	if port == 0 {
+		switch protocol {
+		case "udp":
+			port = uint16(srv.PacketConn.LocalAddr().(*net.UDPAddr).Port)
+		case "tcp":
+			port = uint16(srv.Listener.Addr().(*net.TCPAddr).Port)
+		}
+	}
+
+	return func() {
+		_ = srv.Shutdown()
+	}, port
+}
+
+// nxDomainHandler returns a NXDOMAIN response for any query
+func nxDomainHandler(w dns.ResponseWriter, r *dns.Msg) {
+	answer := new(dns.Msg)
+	answer.SetReply(r)
+	answer.SetRcode(r, dns.RcodeNameError)
+	_ = w.WriteMsg(answer)
 }
 
 func testConfig() *config.Config {

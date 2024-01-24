@@ -5,11 +5,10 @@
 
 //go:build linux_bpf
 
-package kafka
+package mongo
 
 import "github.com/DataDog/datadog-agent/pkg/network/types"
 
-// ConnTuple returns the connection tuple for the transaction
 func (tx *EbpfTx) ConnTuple() types.ConnectionKey {
 	return types.ConnectionKey{
 		SrcIPHigh: tx.Tup.Saddr_h,
@@ -22,12 +21,6 @@ func (tx *EbpfTx) ConnTuple() types.ConnectionKey {
 	}
 }
 
-// APIKey returns the API key for the transaction
-func (tx *EbpfTx) APIKey() uint16 {
-	return tx.Request_api_key
-}
-
-// APIVersion returns the API version for the transaction
-func (tx *EbpfTx) APIVersion() uint16 {
-	return tx.Request_api_version
+func (tx *EbpfTx) LatencyNs() uint64 {
+	return tx.Latency_ns
 }

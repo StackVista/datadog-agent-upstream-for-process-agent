@@ -15,6 +15,9 @@
 #include "protocols/http2/usm-events.h"
 #include "protocols/kafka/kafka-classification.h"
 #include "protocols/kafka/usm-events.h"
+#include "protocols/mongo/helpers.h"
+#include "protocols/mongo/usm-events.h"
+
 
 __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protocol_t proto) {
     switch(proto) {
@@ -24,6 +27,8 @@ __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protoc
         return PROG_HTTP2_HANDLE_FIRST_FRAME;
     case PROTOCOL_KAFKA:
         return PROG_KAFKA;
+    case PROTOCOL_MONGO:
+        return PROG_MONGO;
     default:
         if (proto != PROTOCOL_UNKNOWN) {
             log_debug("protocol doesn't have a matching program: %d", proto);
@@ -71,6 +76,8 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
         *protocol = PROTOCOL_HTTP;
     } else if (is_http2_monitoring_enabled() && is_http2(buf, size)) {
         *protocol = PROTOCOL_HTTP2;
+    } else if (is_mongo_monitoring_enabled() && is_mongo(tup, buf, size)) {
+        *protocol = PROTOCOL_MONGO;
     } else {
         *protocol = PROTOCOL_UNKNOWN;
     }
@@ -148,10 +155,12 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
         const size_t payload_length = skb_info.data_end - skb_info.data_off;
         const size_t final_fragment_size = payload_length < CLASSIFICATION_MAX_BUFFER ? payload_length : CLASSIFICATION_MAX_BUFFER;
         classify_protocol_for_dispatcher(&cur_fragment_protocol, &skb_tup, request_fragment, final_fragment_size);
+
         if (is_kafka_monitoring_enabled() && cur_fragment_protocol == PROTOCOL_UNKNOWN) {
             bpf_tail_call_compat(skb, &dispatcher_classification_progs, DISPATCHER_KAFKA_PROG);
         }
-        log_debug("[protocol_dispatcher_entrypoint]: %p Classifying protocol as: %d", skb, cur_fragment_protocol);
+
+        log_debug("[protocol_dispatcher_entrypoint]: %p Classifying protocol as: %d\n", skb, cur_fragment_protocol);
         // If there has been a change in the classification, save the new protocol.
         if (cur_fragment_protocol != PROTOCOL_UNKNOWN) {
             set_protocol(stack, cur_fragment_protocol);

@@ -105,7 +105,7 @@
                 "ubuntu-20-04": "ami-0ccf50ab09c6df2d4",
                 "ubuntu-20-04-2": "ami-023f1e40b096c3ebc",
                 "ubuntu-21-04": "ami-044f0ceee8e885e87",
-                "ubuntu-22-04": "ami-0f1d4680f8b775120",
+                "ubuntu-22-04": "ami-02ddaf75821f25213",
                 "ubuntu-23-04": "ami-05fab5da2d7fe0b0b",
                 "ubuntu-23-10": "ami-0dea732dd5f1da0a8"
             }

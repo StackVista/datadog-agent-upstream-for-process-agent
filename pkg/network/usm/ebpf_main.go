@@ -100,6 +100,7 @@ func newEBPFProgram(c *config.Config, connectionProtocolMap *ebpf.Map, bpfTeleme
 			{Name: protocols.TLSDispatcherProgramsMap},
 			{Name: protocols.ProtocolDispatcherProgramsMap},
 			{Name: connectionStatesMap},
+			{Name: protocols.ProtocolDispatcherClassificationPrograms},
 			{Name: sockFDLookupArgsMap},
 			{Name: sockByPidFDMap},
 			{Name: pidFDBySockMap},

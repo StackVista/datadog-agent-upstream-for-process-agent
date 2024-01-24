@@ -43,6 +43,7 @@ const (
 	ProgramHTTP2EOSParser ProgramType = C.PROG_HTTP2_EOS_PARSER
 	// ProgramKafka is the Golang representation of the C.PROG_KAFKA enum
 	ProgramKafka ProgramType = C.PROG_KAFKA
+	ProgramMongo ProgramType = C.PROG_MONGO
 )
 
 // Application layer of the protocol stack.
@@ -114,4 +115,6 @@ const (
 	ProgramTLSHTTP2EOSParser TLSProgramType = C.TLS_HTTP2_EOS_PARSER
 	// ProgramTLSHTTP2Termination is tail call to process TLS HTTP2 termination.
 	ProgramTLSHTTP2Termination TLSProgramType = C.TLS_HTTP2_TERMINATION
+	// ProgramTLSMongoProcess is tail call to process mongo traffic over a TLS connection.
+	ProgramTLSMongoProcess ProgramType = C.TLS_MONGO_PROCESS
 )
