@@ -34,6 +34,26 @@ type Client struct {
 	C *mongo.Client
 }
 
+func NewClientWithClientOptions(clientOptions *options.ClientOptions, timeout time.Duration) (*Client, error) {
+	timedCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	client, err := mongo.Connect(timedCtx, clientOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	timedCtx, cancel = context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := client.Ping(timedCtx, nil); err != nil {
+		return nil, err
+	}
+
+	return &Client{
+		C: client,
+	}, nil
+
+}
+
 func NewClient(opts Options) (*Client, error) {
 	clientOptions := options.Client().ApplyURI(fmt.Sprintf("mongodb://%s", opts.ServerAddress))
 	if opts.Username == "" {
@@ -58,22 +78,7 @@ func NewClient(opts Options) (*Client, error) {
 		clientOptions.SetDialer(opts.ClientDialer)
 	}
 
-	timedCtx, cancel := context.WithTimeout(context.Background(), opts.ConnectionTimout)
-	defer cancel()
-	client, err := mongo.Connect(timedCtx, clientOptions)
-	if err != nil {
-		return nil, err
-	}
-
-	timedCtx, cancel = context.WithTimeout(context.Background(), opts.ConnectionTimout)
-	defer cancel()
-	if err := client.Ping(timedCtx, nil); err != nil {
-		return nil, err
-	}
-
-	return &Client{
-		C: client,
-	}, nil
+	return NewClientWithClientOptions(clientOptions, opts.ConnectionTimout)
 }
 
 var (

@@ -52,6 +52,8 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/tracer/connection/kprobe"
 	"github.com/DataDog/datadog-agent/pkg/network/tracer/testutil/grpc"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/utils"
+
+	mongooptions "go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func httpSupported() bool {
@@ -95,16 +97,31 @@ func TestEnableMongoOverTLSMonitoring(t *testing.T) {
 	_ = setupTracer(t, cfg)
 }
 
-// Note: This test assumes there is a mongo client running in a separate network namespace.
-// To run this test, you will need a TLS-enabled mongo server.
+// To run this test, you need to have a TLS-enabled MongoDB instance running.
+// One way to do this is to use the MongoDB Atlas service, the free tier is enough.
+// Provide the URI of your MongoDB Atlas cluster in the MONGODB_URI environment variable.
+//
+//	export MONGODB_URI="mongodb+srv://secret_user:secret_pass@free-cluster-01.mongodb.net/?retryWrites=true&w=majority"
 func TestEnableMongoOverTLSMonitoringNamespaces(t *testing.T) {
+	mongoURI := os.Getenv("MONGODB_URI")
+
+	if mongoURI == "" {
+		t.Skip("MONGODB_URI not set, skipping test")
+	}
+
 	cfg := testConfig()
 	cfg.EnableHTTPMonitoring = true
 	cfg.EnableHTTP2Monitoring = true
 	cfg.EnableNativeTLSMonitoring = true
 	cfg.EnableMongoMonitoring = true
-	cfg.BPFDebug = true
 	tr := setupTracer(t, cfg)
+
+	opts := mongooptions.Client().ApplyURI(mongoURI)
+	client, err := mongo.NewClientWithClientOptions(opts, 10*time.Second)
+	require.NoError(t, err)
+	defer client.Stop()
+
+	client.GenerateLoad()
 
 	require.Eventually(t, func() bool {
 		payload, err := tr.GetActiveConnections("1")
@@ -126,7 +143,6 @@ func TestMongoStats(t *testing.T) {
 	cfg := testConfig()
 	cfg.EnableNativeTLSMonitoring = true
 	cfg.EnableMongoMonitoring = true
-	cfg.BPFDebug = true
 	tr := setupTracer(t, cfg)
 
 	// If these tests time out, do a docker pull mongo:<version> first and try again.

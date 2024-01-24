@@ -19,7 +19,6 @@ func BenchmarkStatKeeperSameTX(b *testing.B) {
 	sk := NewStatkeeper(cfg, tel)
 
 	tx := new(EbpfTx)
-	tx.Request_id = 1
 
 	b.ReportAllocs()
 	b.ResetTimer()
