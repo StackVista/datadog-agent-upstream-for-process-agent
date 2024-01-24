@@ -83,6 +83,9 @@ type Config struct {
 	// EnableKafkaMonitoring specifies whether the tracer should monitor Kafka traffic
 	EnableKafkaMonitoring bool
 
+	// EnableMongoMonitoring specifies whether the tracer should monitor Mongo traffic
+	EnableMongoMonitoring bool
+
 	// EnableNativeTLSMonitoring specifies whether the USM should monitor HTTPS traffic via native libraries.
 	// Supported libraries: OpenSSL, GnuTLS, LibCrypto.
 	EnableNativeTLSMonitoring bool
@@ -168,9 +171,14 @@ type Config struct {
 	// MaxKafkaStatsBuffered represents the maximum number of Kafka stats we'll buffer in memory. These stats
 	// get flushed on every client request (default 30s check interval)
 	MaxKafkaStatsBuffered int
+
 	// MaxHTTPObservationsBuffered represents the maximum number of HTTP observations we'll buffer in memory. These stats
 	// get flushed on every client request (default 30s check interval)
 	MaxHTTPObservationsBuffered int
+
+	// MaxMongoStatsBuffered represents the maximum number of MongoDB stats we'll buffer in memory. These stats
+	// get flushed on every client request (default 30s check interval)
+	MaxMongoStatsBuffered int
 
 	// EnableHTTPTracing enables distributed tracing by reading the X-Request-Id header and reporting that for distributed tracing
 	EnableHTTPTracing bool
@@ -322,6 +330,7 @@ func New() *Config {
 		MaxUSMConcurrentRequests:  uint32(cfg.GetInt(join(smNS, "max_concurrent_requests"))),
 		MaxHTTPStatsBuffered:      cfg.GetInt(join(smNS, "max_http_stats_buffered")),
 		MaxKafkaStatsBuffered:     cfg.GetInt(join(smNS, "max_kafka_stats_buffered")),
+		MaxMongoStatsBuffered:     cfg.GetInt(join(smNS, "max_mongo_stats_buffered")),
 
 		EnableHTTPTracing:           cfg.GetBool(join(netNS, "enable_http_tracing")),
 		MaxHTTPObservationsBuffered: cfg.GetInt(join(smNS, "max_http_observations_buffered")),

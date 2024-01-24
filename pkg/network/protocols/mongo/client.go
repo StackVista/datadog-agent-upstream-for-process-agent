@@ -34,13 +34,33 @@ type Client struct {
 	C *mongo.Client
 }
 
+func NewClientWithClientOptions(clientOptions *options.ClientOptions, timeout time.Duration) (*Client, error) {
+	timedCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	client, err := mongo.Connect(timedCtx, clientOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	timedCtx, cancel = context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := client.Ping(timedCtx, nil); err != nil {
+		return nil, err
+	}
+
+	return &Client{
+		C: client,
+	}, nil
+
+}
+
 func NewClient(opts Options) (*Client, error) {
 	clientOptions := options.Client().ApplyURI(fmt.Sprintf("mongodb://%s", opts.ServerAddress))
 	if opts.Username == "" {
-		opts.Username = User
+		opts.Username = "user"
 	}
 	if opts.Password == "" {
-		opts.Password = Pass
+		opts.Password = "pass"
 	}
 	creds := options.Credential{
 		Username:   opts.Username,
@@ -58,22 +78,7 @@ func NewClient(opts Options) (*Client, error) {
 		clientOptions.SetDialer(opts.ClientDialer)
 	}
 
-	timedCtx, cancel := context.WithTimeout(context.Background(), opts.ConnectionTimout)
-	defer cancel()
-	client, err := mongo.Connect(timedCtx, clientOptions)
-	if err != nil {
-		return nil, err
-	}
-
-	timedCtx, cancel = context.WithTimeout(context.Background(), opts.ConnectionTimout)
-	defer cancel()
-	if err := client.Ping(timedCtx, nil); err != nil {
-		return nil, err
-	}
-
-	return &Client{
-		C: client,
-	}, nil
+	return NewClientWithClientOptions(clientOptions, opts.ConnectionTimout)
 }
 
 var (
@@ -83,6 +88,16 @@ var (
 		"local":  {},
 	}
 )
+
+// Do some work on the database to generate some stats
+// You will generally not care about the result of this function
+func (c *Client) GenerateLoad() error {
+	c.C.ListDatabases(context.Background(), bson.M{})
+	usersCollection := c.C.Database("testing").Collection("users")
+	user := bson.D{{"fullName", "John Doe"}, {"age", 30}}
+	_, err := usersCollection.InsertOne(context.Background(), user)
+	return err
+}
 
 func (c *Client) DeleteDatabases() error {
 	dbs, err := c.C.ListDatabases(context.Background(), bson.M{})

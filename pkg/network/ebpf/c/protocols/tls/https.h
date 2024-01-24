@@ -75,6 +75,9 @@ static __always_inline void tls_process(struct pt_regs *ctx, conn_tuple_t *t, vo
     case PROTOCOL_HTTP:
         prog = TLS_HTTP_PROCESS;
         break;
+    case PROTOCOL_MONGO:
+        prog = TLS_MONGO_PROCESS;
+        break;
     default:
         return;
     }
@@ -157,13 +160,10 @@ static __always_inline conn_tuple_t* tup_from_ssl_ctx(void *ssl_ctx, u64 pid_tgi
         return NULL;
     }
 
-    // Set the `.netns` and `.pid` values to always be 0.
-    // They can't be sourced from inside `read_conn_tuple_skb`,
+    // Set `.pid` value to always be 0.
+    // It can't be sourced from inside `read_conn_tuple_skb`,
     // which is used elsewhere to produce the same `conn_tuple_t` value from a `struct __sk_buff*` value,
     // so we ensure it is always 0 here so that both paths produce the same `conn_tuple_t` value.
-    // `netns` is not used in the userspace program part that binds http information to `ConnectionStats`,
-    // so this is isn't a problem.
-    t.netns = 0;
     t.pid = 0;
 
     bpf_memcpy(&ssl_sock->tup, &t, sizeof(conn_tuple_t));
@@ -193,7 +193,6 @@ static __always_inline void map_ssl_ctx_to_sock(struct sock *skp) {
     if (!read_conn_tuple(&ssl_sock.tup, skp, pid_tgid, CONN_TYPE_TCP)) {
         return;
     }
-    ssl_sock.tup.netns = 0;
     ssl_sock.tup.pid = 0;
     normalize_tuple(&ssl_sock.tup);
 

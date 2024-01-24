@@ -12,7 +12,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
 	"io"
 	"math/rand"
 	"net"
@@ -25,6 +24,9 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/DataDog/datadog-agent/pkg/util/log"
+	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
 
 	krpretty "github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -41,6 +43,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http/testutil"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/mongo"
 	gotlstestutil "github.com/DataDog/datadog-agent/pkg/network/protocols/tls/gotls/testutil"
 	javatestutil "github.com/DataDog/datadog-agent/pkg/network/protocols/tls/java/testutil"
 	prototls "github.com/DataDog/datadog-agent/pkg/network/protocols/tls/openssl"
@@ -49,6 +52,8 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/tracer/connection/kprobe"
 	"github.com/DataDog/datadog-agent/pkg/network/tracer/testutil/grpc"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/utils"
+
+	mongooptions "go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func httpSupported() bool {
@@ -80,6 +85,96 @@ func classificationSupported(config *config.Config) bool {
 
 type USMSuite struct {
 	suite.Suite
+}
+
+func TestMongoOverTLSTracerSetup(t *testing.T) {
+	cfg := testConfig()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableMongoMonitoring = true
+	cfg.BPFDebug = true
+	_ = setupTracer(t, cfg)
+}
+
+// To run this test, you need to have a TLS-enabled MongoDB instance running.
+// One way to do this is to use the MongoDB Atlas service, the free tier is enough.
+// Provide the URI of your MongoDB Atlas cluster in the MONGODB_URI environment variable.
+//
+//	export MONGODB_URI="mongodb+srv://secret_user:secret_pass@free-cluster-01.mongodb.net/?retryWrites=true&w=majority"
+func TestEnableMongoOverTLSMonitoringNamespaces(t *testing.T) {
+	mongoURI := os.Getenv("MONGODB_URI")
+
+	if mongoURI == "" {
+		t.Skip("MONGODB_URI not set, skipping test")
+	}
+
+	cfg := testConfig()
+	cfg.EnableHTTPMonitoring = true
+	cfg.EnableHTTP2Monitoring = true
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableMongoMonitoring = true
+	tr := setupTracer(t, cfg)
+
+	opts := mongooptions.Client().ApplyURI(mongoURI)
+	client, err := mongo.NewClientWithClientOptions(opts, 10*time.Second)
+	require.NoError(t, err)
+	defer client.Stop()
+
+	client.GenerateLoad()
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("1")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for key, metrics := range payload.Mongo {
+			if metrics.Latencies.GetCount() > 0.0 && key.NetNs != 0 {
+				return true
+			}
+		}
+		return false
+	}, time.Second*5, time.Millisecond*100, "Expected to find a stats, instead captured none")
+
+}
+
+func TestMongoStats(t *testing.T) {
+	cfg := testConfig()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableMongoMonitoring = true
+	tr := setupTracer(t, cfg)
+
+	// If these tests time out, do a docker pull mongo:<version> first and try again.
+	for _, mongoVersion := range []string{"4", "6", "7"} {
+		t.Run(fmt.Sprintf("MongoVersion%s", mongoVersion), func(t *testing.T) {
+			testMongoStats(t, tr, mongoVersion)
+		})
+	}
+
+}
+
+func testMongoStats(t *testing.T, tr *Tracer, mongoVersion string) {
+	require.NoError(t, mongo.RunServer(t, "0.0.0.0", "27017", mongoVersion))
+
+	client, err := mongo.NewClient(mongo.Options{ServerAddress: "localhost:" + mongoPort, Username: "root", Password: "password"})
+	require.NoError(t, err)
+	defer client.Stop()
+
+	client.GenerateLoad()
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("mongo-testing-client")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, metrics := range payload.Mongo {
+			if metrics.Latencies.GetCount() > 3.0 {
+				log.Errorf("Avg. of latencies: %.2f ms", metrics.Latencies.GetSum()/1000000.0/metrics.Latencies.GetCount())
+				return true
+			}
+		}
+
+		return false
+	}, time.Second*5, time.Millisecond*100, "Expected to find a stats, instead captured none")
 }
 
 func TestUSMSuite(t *testing.T) {

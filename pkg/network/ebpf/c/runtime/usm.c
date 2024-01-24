@@ -17,6 +17,7 @@
 #include "protocols/http/http.h"
 #include "protocols/http2/decoding.h"
 #include "protocols/kafka/kafka-parsing.h"
+#include "protocols/mongo/mongo-parsing.h"
 #include "protocols/tls/java/erpc_dispatcher.h"
 #include "protocols/tls/java/erpc_handlers.h"
 #include "protocols/tls/go-tls-types.h"
@@ -59,6 +60,7 @@ int tracepoint__net__netif_receive_skb(struct pt_regs* ctx) {
     http_batch_flush(ctx);
     http2_batch_flush(ctx);
     kafka_batch_flush(ctx);
+    mongo_batch_flush(ctx);
     return 0;
 }
 

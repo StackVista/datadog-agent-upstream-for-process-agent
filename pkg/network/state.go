@@ -18,6 +18,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/kafka"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/mongo"
 	"github.com/DataDog/datadog-agent/pkg/network/slice"
 	nettelemetry "github.com/DataDog/datadog-agent/pkg/network/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/process/util"
@@ -40,6 +41,7 @@ var stateTelemetry = struct {
 	httpStatsDropped        *nettelemetry.StatCounterWrapper
 	http2StatsDropped       *nettelemetry.StatCounterWrapper
 	kafkaStatsDropped       *nettelemetry.StatCounterWrapper
+	mongoStatsDropped       *nettelemetry.StatCounterWrapper
 	httpObservationsDropped *nettelemetry.StatCounterWrapper
 	dnsPidCollisions        *nettelemetry.StatCounterWrapper
 	udpDirectionFixes       telemetry.Counter
@@ -53,6 +55,7 @@ var stateTelemetry = struct {
 	nettelemetry.NewStatCounterWrapper(stateModuleName, "http_stats_dropped", []string{}, "Counter measuring the number of http stats dropped"),
 	nettelemetry.NewStatCounterWrapper(stateModuleName, "http2_stats_dropped", []string{}, "Counter measuring the number of http2 stats dropped"),
 	nettelemetry.NewStatCounterWrapper(stateModuleName, "kafka_stats_dropped", []string{}, "Counter measuring the number of kafka stats dropped"),
+	nettelemetry.NewStatCounterWrapper(stateModuleName, "mongo_stats_dropped", []string{}, "Counter measuring the number of mongo stats dropped"),
 	nettelemetry.NewStatCounterWrapper(stateModuleName, "http_observations_dropped", []string{}, "Counter measuring the number of http observations dropped"),
 	nettelemetry.NewStatCounterWrapper(stateModuleName, "dns_pid_collisions", []string{}, "Counter measuring the number of DNS PID collisions"),
 	telemetry.NewCounter(stateModuleName, "udp_direction_fixes", []string{}, "Counter measuring the number of udp direction fixes"),
@@ -121,6 +124,7 @@ type Delta struct {
 	HTTP             map[http.Key]*http.RequestStats
 	HTTP2            map[http.Key]*http.RequestStats
 	Kafka            map[kafka.Key]*kafka.RequestStat
+	Mongo            map[mongo.Key]*mongo.RequestStat
 	HTTPObservations []http.TransactionObservation
 	DNSStats         dns.StatsByKeyByNameByType
 }
@@ -135,6 +139,7 @@ type lastStateTelemetry struct {
 	httpStatsDropped        int64
 	http2StatsDropped       int64
 	kafkaStatsDropped       int64
+	mongoStatsDropped       int64
 	httpObservationsDropped int64
 	dnsPidCollisions        int64
 }
@@ -153,6 +158,7 @@ type client struct {
 	httpStatsDelta        map[http.Key]*http.RequestStats
 	http2StatsDelta       map[http.Key]*http.RequestStats
 	kafkaStatsDelta       map[kafka.Key]*kafka.RequestStat
+	mongoStatsDelta       map[mongo.Key]*mongo.RequestStat
 	httpObservationsDelta []http.TransactionObservation
 	lastTelemetries       map[ConnTelemetryType]int64
 }
@@ -169,6 +175,7 @@ func (c *client) Reset() {
 	c.httpStatsDelta = make(map[http.Key]*http.RequestStats)
 	c.http2StatsDelta = make(map[http.Key]*http.RequestStats)
 	c.kafkaStatsDelta = make(map[kafka.Key]*kafka.RequestStat)
+	c.mongoStatsDelta = make(map[mongo.Key]*mongo.RequestStat)
 	c.httpObservationsDelta = make([]http.TransactionObservation, 0)
 }
 
@@ -188,13 +195,14 @@ type networkState struct {
 	maxDNSStats         int
 	maxHTTPStats        int
 	maxKafkaStats       int
+	maxMongoStats       int
 	maxHTTPObservations int
 
 	mergeStatsBuffers [2][]byte
 }
 
 // NewState creates a new network state
-func NewState(clientExpiry time.Duration, maxClosedConns uint32, maxClientStats int, maxDNSStats int, maxHTTPStats int, maxKafkaStats int, maxHTTPObservations int) State {
+func NewState(clientExpiry time.Duration, maxClosedConns uint32, maxClientStats int, maxDNSStats int, maxHTTPStats int, maxKafkaStats int, maxMongoStats int, maxHTTPObservations int) State {
 	return &networkState{
 		clients:             map[string]*client{},
 		clientExpiry:        clientExpiry,
@@ -203,6 +211,7 @@ func NewState(clientExpiry time.Duration, maxClosedConns uint32, maxClientStats 
 		maxDNSStats:         maxDNSStats,
 		maxHTTPStats:        maxHTTPStats,
 		maxKafkaStats:       maxKafkaStats,
+		maxMongoStats:       maxMongoStats,
 		maxHTTPObservations: maxHTTPObservations,
 		mergeStatsBuffers: [2][]byte{
 			make([]byte, ConnectionByteKeyMaxLen),
@@ -301,6 +310,9 @@ func (ns *networkState) GetDelta(
 		case protocols.Kafka:
 			stats := protocolStats.(map[kafka.Key]*kafka.RequestStat)
 			ns.storeKafkaStats(stats)
+		case protocols.Mongo:
+			stats := protocolStats.(map[mongo.Key]*mongo.RequestStat)
+			ns.storeMongoStats(stats)
 		case protocols.HTTP2:
 			stats := protocolStats.(http.AllHttpStats)
 			ns.storeHTTP2Stats(stats.RequestStats)
@@ -314,6 +326,7 @@ func (ns *networkState) GetDelta(
 		HTTP2:            client.http2StatsDelta,
 		DNSStats:         client.dnsStats,
 		Kafka:            client.kafkaStatsDelta,
+		Mongo:            client.mongoStatsDelta,
 		HTTPObservations: client.httpObservationsDelta,
 	}
 }
@@ -367,12 +380,14 @@ func (ns *networkState) logTelemetry() {
 	httpStatsDroppedDelta := stateTelemetry.httpStatsDropped.Load() - ns.lastTelemetry.httpStatsDropped
 	http2StatsDroppedDelta := stateTelemetry.http2StatsDropped.Load() - ns.lastTelemetry.http2StatsDropped
 	kafkaStatsDroppedDelta := stateTelemetry.kafkaStatsDropped.Load() - ns.lastTelemetry.kafkaStatsDropped
+	mongoStatsDroppedDelta := stateTelemetry.mongoStatsDropped.Load() - ns.lastTelemetry.mongoStatsDropped
 	httpObservationsDroppedDelta := stateTelemetry.httpObservationsDropped.Load() - ns.lastTelemetry.httpObservationsDropped
 	dnsPidCollisionsDelta := stateTelemetry.dnsPidCollisions.Load() - ns.lastTelemetry.dnsPidCollisions
 
 	// Flush log line if any metric is non-zero
 	if connDroppedDelta > 0 || closedConnDroppedDelta > 0 || dnsStatsDroppedDelta > 0 ||
-		httpStatsDroppedDelta > 0 || http2StatsDroppedDelta > 0 || kafkaStatsDroppedDelta > 0 || httpObservationsDroppedDelta > 0 {
+		httpStatsDroppedDelta > 0 || http2StatsDroppedDelta > 0 || kafkaStatsDroppedDelta > 0 ||
+		mongoStatsDroppedDelta > 0 || httpObservationsDroppedDelta > 0 {
 		s := "State telemetry: "
 		s += " [%d connections dropped due to stats]"
 		s += " [%d closed connections dropped]"
@@ -380,6 +395,7 @@ func (ns *networkState) logTelemetry() {
 		s += " [%d HTTP stats dropped]"
 		s += " [%d HTTP2 stats dropped]"
 		s += " [%d Kafka stats dropped]"
+		s += " [%d Mongo stats dropped]"
 		s += " [%d HTTP observations dropped]"
 		log.Warnf(s,
 			connDroppedDelta,
@@ -388,6 +404,7 @@ func (ns *networkState) logTelemetry() {
 			httpStatsDroppedDelta,
 			http2StatsDroppedDelta,
 			kafkaStatsDroppedDelta,
+			mongoStatsDroppedDelta,
 			httpObservationsDroppedDelta,
 		)
 	}
@@ -417,6 +434,7 @@ func (ns *networkState) logTelemetry() {
 	ns.lastTelemetry.httpStatsDropped = stateTelemetry.httpStatsDropped.Load()
 	ns.lastTelemetry.http2StatsDropped = stateTelemetry.http2StatsDropped.Load()
 	ns.lastTelemetry.kafkaStatsDropped = stateTelemetry.kafkaStatsDropped.Load()
+	ns.lastTelemetry.mongoStatsDropped = stateTelemetry.mongoStatsDropped.Load()
 	ns.lastTelemetry.httpObservationsDropped = stateTelemetry.httpObservationsDropped.Load()
 	ns.lastTelemetry.dnsPidCollisions = stateTelemetry.dnsPidCollisions.Load()
 }
@@ -694,6 +712,37 @@ func (ns *networkState) storeKafkaStats(allStats map[kafka.Key]*kafka.RequestSta
 	}
 }
 
+// storeMongoStats stores the latest Mongo stats for all clients
+func (ns *networkState) storeMongoStats(allStats map[mongo.Key]*mongo.RequestStat) {
+	if len(ns.clients) == 1 {
+		for _, client := range ns.clients {
+			if len(client.mongoStatsDelta) == 0 && len(allStats) <= ns.maxMongoStats {
+				// optimization for the common case:
+				// if there is only one client and no previous state, no memory allocation is needed
+				client.mongoStatsDelta = allStats
+				return
+			}
+		}
+	}
+
+	for key, stats := range allStats {
+		for _, client := range ns.clients {
+			prevStats, ok := client.mongoStatsDelta[key]
+			if !ok && len(client.mongoStatsDelta) >= ns.maxMongoStats {
+				stateTelemetry.mongoStatsDropped.Inc()
+				continue
+			}
+
+			if prevStats != nil {
+				prevStats.CombineWith(stats)
+				client.mongoStatsDelta[key] = prevStats
+			} else {
+				client.mongoStatsDelta[key] = stats
+			}
+		}
+	}
+}
+
 func (ns *networkState) getClient(clientID string) *client {
 	if c, ok := ns.clients[clientID]; ok {
 		return c
@@ -708,6 +757,7 @@ func (ns *networkState) getClient(clientID string) *client {
 		httpStatsDelta:        map[http.Key]*http.RequestStats{},
 		http2StatsDelta:       map[http.Key]*http.RequestStats{},
 		kafkaStatsDelta:       map[kafka.Key]*kafka.RequestStat{},
+		mongoStatsDelta:       map[mongo.Key]*mongo.RequestStat{},
 		lastTelemetries:       make(map[ConnTelemetryType]int64),
 	}
 	ns.clients[clientID] = c

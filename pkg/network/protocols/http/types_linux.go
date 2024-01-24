@@ -29,18 +29,19 @@ type EbpfEvent struct {
 	Http  EbpfTx
 }
 type EbpfTx struct {
-	Request_started      uint64
-	Response_last_seen   uint64
-	Tags                 uint64
-	Tcp_seq              uint32
-	Response_status_code uint16
-	Request_method       uint8
-	Pad_cgo_0            [1]byte
-	Request_fragment     [160]byte
-	Request_tracing_id   [40]byte
-	Response_tracing_id  [40]byte
-	Request_parse_result uint8
+	Request_started       uint64
+	Response_last_seen    uint64
+	Tags                  uint64
+	Tcp_seq               uint32
+	Response_status_code  uint16
+	Request_method        uint8
+	Pad_cgo_0             [1]byte
+	Request_fragment      [160]byte
+	Request_tracing_id    [40]byte
+	Response_tracing_id   [40]byte
+	Request_parse_result  uint8
 	Response_parse_result uint8
+	Pad_cgo_1             [6]byte
 }
 
 const (

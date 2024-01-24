@@ -32,6 +32,7 @@ const (
 	ProgramHTTP2            ProgramType = C.PROG_HTTP2
 	ProgramHTTP2FrameParser ProgramType = C.PROG_HTTP2_FRAME_PARSER
 	ProgramKafka            ProgramType = C.PROG_KAFKA
+	ProgramMongo            ProgramType = C.PROG_MONGO
 )
 
 func Application(protoNum uint8) ProtocolType {
@@ -90,4 +91,6 @@ const (
 	ProgramTLSHTTPProcess ProgramType = C.TLS_HTTP_PROCESS
 	// ProgramTLSHTTPTermination is tail call to process http termination.
 	ProgramTLSHTTPTermination ProgramType = C.TLS_HTTP_TERMINATION
+	// ProgramTLSMongoProcess is tail call to process mongo traffic over a TLS connection.
+	ProgramTLSMongoProcess ProgramType = C.TLS_MONGO_PROCESS
 )

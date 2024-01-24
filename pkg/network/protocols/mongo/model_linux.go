@@ -5,7 +5,7 @@
 
 //go:build linux_bpf
 
-package kafka
+package mongo
 
 import "github.com/DataDog/datadog-agent/pkg/network/types"
 
@@ -21,10 +21,6 @@ func (tx *EbpfTx) ConnTuple() types.ConnectionKey {
 	}
 }
 
-func (tx *EbpfTx) APIKey() uint16 {
-	return tx.Request_api_key
-}
-
-func (tx *EbpfTx) APIVersion() uint16 {
-	return tx.Request_api_version
+func (tx *EbpfTx) LatencyNs() uint64 {
+	return tx.Latency_ns
 }

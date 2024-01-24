@@ -3,12 +3,14 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
 // Copyright 2016-present Datadog, Inc.
 
+//go:build test
+
 package mongo
 
 import (
-	"fmt"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http/testutil"
 	protocolsUtils "github.com/DataDog/datadog-agent/pkg/network/protocols/testutil"
@@ -19,13 +21,15 @@ const (
 	Pass = "password"
 )
 
-func RunServer(t testing.TB, serverAddress, serverPort string) error {
+func RunServer(t testing.TB, serverAddress, serverPort string, mongoVersion string) error {
 	env := []string{
 		"MONGO_ADDR=" + serverAddress,
 		"MONGO_PORT=" + serverPort,
 		"MONGO_USER=" + User,
 		"MONGO_PASSWORD=" + Pass,
+		"MONGO_VERSION=" + mongoVersion,
 	}
+	t.Helper()
 	dir, _ := testutil.CurDir()
-	return protocolsUtils.RunDockerServer(t, "mongo", dir+"/testdata/docker-compose.yml", env, regexp.MustCompile(fmt.Sprintf(".*Waiting for connections.*port.*:%s.*", serverPort)), protocolsUtils.DefaultTimeout)
+	return protocolsUtils.RunDockerServer(t, "mongo", dir+"/testdata/docker-compose.yml", env, regexp.MustCompile(`.*istening .*`), 3*time.Minute)
 }
