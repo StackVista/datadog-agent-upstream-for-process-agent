@@ -17,7 +17,8 @@
 #include "protocols/kafka/usm-events.h"
 #include "protocols/mongo/helpers.h"
 #include "protocols/mongo/usm-events.h"
-
+#include "protocols/amqp/helpers.h"
+#include "protocols/amqp/usm-events.h"
 
 __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protocol_t proto) {
     switch(proto) {
@@ -78,6 +79,8 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
         *protocol = PROTOCOL_HTTP2;
     } else if (is_mongo_monitoring_enabled() && is_mongo(tup, buf, size)) {
         *protocol = PROTOCOL_MONGO;
+    } else if (is_amqp_monitoring_enabled() && is_amqp(tup, buf, size)) {
+        *protocol = PROTOCOL_AMQP;
     } else {
         *protocol = PROTOCOL_UNKNOWN;
     }

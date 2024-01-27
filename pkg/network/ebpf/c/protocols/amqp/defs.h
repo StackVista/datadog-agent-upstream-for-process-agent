@@ -25,9 +25,6 @@
 #define AMQP_MIN_FRAME_LENGTH 8
 #define AMQP_MIN_PAYLOAD_LENGTH 11
 
-typedef struct {
-    __u16 class_id;
-    __u16 method_id;
-} amqp_header;
+#define AMQP_BATCH_SIZE 15
 
 #endif
