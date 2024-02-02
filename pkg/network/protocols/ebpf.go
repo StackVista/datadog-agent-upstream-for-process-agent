@@ -33,6 +33,7 @@ const (
 	ProgramHTTP2FrameParser ProgramType = C.PROG_HTTP2_FRAME_PARSER
 	ProgramKafka            ProgramType = C.PROG_KAFKA
 	ProgramMongo            ProgramType = C.PROG_MONGO
+	ProgramAMQP             ProgramType = C.PROG_AMQP
 )
 
 func Application(protoNum uint8) ProtocolType {

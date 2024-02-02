@@ -225,6 +225,7 @@ func InitSystemProbeConfig(cfg Config) {
 	cfg.BindEnv(join(smNS, "max_http_stats_buffered"))
 	cfg.BindEnvAndSetDefault(join(smNS, "max_kafka_stats_buffered"), 100000)
 	cfg.BindEnvAndSetDefault(join(smNS, "max_mongo_stats_buffered"), 100000)
+	cfg.BindEnvAndSetDefault(join(smNS, "max_amqp_stats_buffered"), 100000)
 	cfg.BindEnv(join(smNS, "max_concurrent_requests"))
 
 	oldHTTPRules := join(netNS, "http_replace_rules")

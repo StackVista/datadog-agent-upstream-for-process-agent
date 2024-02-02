@@ -5,7 +5,7 @@
 
 //go:build linux_bpf
 
-package mongo
+package amqp
 
 import (
 	"strings"
@@ -29,33 +29,40 @@ type protocol struct {
 
 const (
 	eventStreamName    = "amqp"
-	filterTailCall     = "socket__amqp_filter"
+	processTailCall    = "socket__amqp_process"
 	tlsProcessTailCall = "uprobe__amqp_process"
+	amqpHeapMap        = "amqp_heap"
 )
 
 var Spec = &protocols.ProtocolSpec{
-	Factory: newMongoProtocol,
-	Maps:    []*manager.Map{},
+	Factory: newAMQPProtocol,
+	Maps: []*manager.Map{
+		{
+			Name: amqpHeapMap,
+		},
+	},
 	TailCalls: []manager.TailCallRoute{
 		{
 			ProgArrayName: protocols.ProtocolDispatcherProgramsMap,
-			Key:           uint32(protocols.ProgramMongo),
+			Key:           uint32(protocols.ProgramAMQP),
 			ProbeIdentificationPair: manager.ProbeIdentificationPair{
-				EBPFFuncName: filterTailCall,
+				EBPFFuncName: processTailCall,
 			},
 		},
-		{
-			ProgArrayName: protocols.TLSDispatcherProgramsMap,
-			Key:           uint32(protocols.ProgramTLSMongoProcess),
-			ProbeIdentificationPair: manager.ProbeIdentificationPair{
-				EBPFFuncName: tlsProcessTailCall,
+		/*
+			{
+				ProgArrayName: protocols.TLSDispatcherProgramsMap,
+				Key:           uint32(protocols.ProgramTLSAMQPProcess),
+				ProbeIdentificationPair: manager.ProbeIdentificationPair{
+					EBPFFuncName: tlsProcessTailCall,
+				},
 			},
-		},
+		*/
 	},
 }
 
-func newMongoProtocol(cfg *config.Config) (protocols.Protocol, error) {
-	if !cfg.EnableMongoMonitoring {
+func newAMQPProtocol(cfg *config.Config) (protocols.Protocol, error) {
+	if !cfg.EnableAMQPMonitoring {
 		return nil, nil
 	}
 
@@ -84,7 +91,7 @@ func (p *protocol) PreStart(mgr *manager.Manager) error {
 	p.eventsConsumer, err = events.NewConsumer(
 		eventStreamName,
 		mgr,
-		p.processMongo,
+		p.processAMQPTransactionData,
 	)
 	if err != nil {
 		return err
@@ -108,7 +115,7 @@ func (p *protocol) Stop(_ *manager.Manager) {
 
 func (p *protocol) DumpMaps(_ *strings.Builder, _ string, _ *ebpf.Map) {}
 
-func (p *protocol) processMongo(data []byte) {
+func (p *protocol) processAMQPTransactionData(data []byte) {
 	tx := (*EbpfTx)(unsafe.Pointer(&data[0]))
 	p.telemetry.Count(tx)
 	p.statkeeper.Process(tx)

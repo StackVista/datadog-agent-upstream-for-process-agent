@@ -215,6 +215,7 @@ func newTracer(cfg *config.Config) (_ *Tracer, reterr error) {
 		cfg.MaxHTTPStatsBuffered,
 		cfg.MaxKafkaStatsBuffered,
 		cfg.MaxMongoStatsBuffered,
+		cfg.MaxAMQPStatsBuffered,
 		cfg.MaxHTTPObservationsBuffered,
 	)
 

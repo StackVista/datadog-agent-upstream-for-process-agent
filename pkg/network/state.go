@@ -196,13 +196,14 @@ type networkState struct {
 	maxHTTPStats        int
 	maxKafkaStats       int
 	maxMongoStats       int
+	MaxAMQPStats        int
 	maxHTTPObservations int
 
 	mergeStatsBuffers [2][]byte
 }
 
 // NewState creates a new network state
-func NewState(clientExpiry time.Duration, maxClosedConns uint32, maxClientStats int, maxDNSStats int, maxHTTPStats int, maxKafkaStats int, maxMongoStats int, maxHTTPObservations int) State {
+func NewState(clientExpiry time.Duration, maxClosedConns uint32, maxClientStats int, maxDNSStats int, maxHTTPStats int, maxKafkaStats int, maxMongoStats int, maxAMQPStats int, maxHTTPObservations int) State {
 	return &networkState{
 		clients:             map[string]*client{},
 		clientExpiry:        clientExpiry,
@@ -212,6 +213,7 @@ func NewState(clientExpiry time.Duration, maxClosedConns uint32, maxClientStats 
 		maxHTTPStats:        maxHTTPStats,
 		maxKafkaStats:       maxKafkaStats,
 		maxMongoStats:       maxMongoStats,
+		MaxAMQPStats:        maxAMQPStats,
 		maxHTTPObservations: maxHTTPObservations,
 		mergeStatsBuffers: [2][]byte{
 			make([]byte, ConnectionByteKeyMaxLen),

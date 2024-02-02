@@ -20,11 +20,14 @@
 #define AMQP_METHOD_CONSUME 20
 #define AMQP_METHOD_PUBLISH 40
 #define AMQP_METHOD_DELIVER 60
-#define AMQP_FRAME_METHOD_TYPE 1
 
+// Enough to get to the frame size.
 #define AMQP_MIN_FRAME_LENGTH 8
 #define AMQP_MIN_PAYLOAD_LENGTH 11
 
-#define AMQP_BATCH_SIZE 15
+// Since the AMQP tranaction entries contain the exchange name and routing key,
+// each indiviual batch entry is rather larget (> 512 bytes), so the batch has to be
+// smaller.
+#define AMQP_BATCH_SIZE 5
 
 #endif

@@ -87,6 +87,17 @@ type USMSuite struct {
 	suite.Suite
 }
 
+func TestAMQPOverTLSTracerSetup(t *testing.T) {
+
+	cfg := testConfig()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableAMQPMonitoring = true
+	cfg.BPFDebug = true
+	_ = setupTracer(t, cfg)
+
+	time.Sleep(30 * time.Second)
+}
+
 func TestMongoOverTLSTracerSetup(t *testing.T) {
 	cfg := testConfig()
 	cfg.EnableNativeTLSMonitoring = true

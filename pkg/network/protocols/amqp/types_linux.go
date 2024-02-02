@@ -16,6 +16,9 @@ type ConnTuple struct {
 }
 
 type EbpfTx struct {
-	Tup         ConnTuple
-	Placeholder uint64
+	Tup                    ConnTuple
+	Exchange               [256]int8
+	Routing_key            [256]int8
+	Messages_delivered     uint64
+	Transaction_latency_ns uint64
 }
