@@ -21,6 +21,6 @@ func (tx *EbpfTx) ConnTuple() types.ConnectionKey {
 	}
 }
 
-func (tx *EbpfTx) MessagesDelivered() uint64 {
+func (tx *EbpfTx) MessagesDelivered() uint32 {
 	return tx.Messages_delivered
 }

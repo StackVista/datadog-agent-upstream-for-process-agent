@@ -30,9 +30,19 @@ typedef struct {
 } amqp_method_identifier_t;
 
 typedef struct {
+    conn_tuple_t tup;
+    __u32 messages_delivered; // Messages delivered to the client on this connection. This is the count of messages traveling from the server to the client.
+    __u32 messages_published; // Messages published on this connection. This is the count of messages traveling from the client to the server.
+    __u8 reply_code; // AMQP reply code. Only transmitted when a connection is closed, 0 otherwise.
+    char exchange_or_queue[256]; // Name of the exchange or queue
+    __u8 is_exchange; // 1 if the name above is for an exchange, 0 if it is for a queue
+} amqp_transaction_batch_entry_t;
+
+typedef struct {
   amqp_frame_header_t header;
   amqp_method_identifier_t method;
   amqp_short_string_t string;
+  amqp_transaction_batch_entry_t transaction;
 } amqp_heap_helper_t; // This is a helper struct to be used in the BPF program to load the string from the packet.
 
 
@@ -51,11 +61,3 @@ typedef enum {
   AMQP_FRAME_TYPE_CONTENT_BODY = 3,
   AMQP_FRAME_TYPE_HEARTBEAT = 8
 } amqp_frame_type_t;
-
-typedef struct {
-    conn_tuple_t tup;
-    char exchange[256];
-    char routing_key[256];
-    __u64 messages_delivered; // AMQP connections created on this TCP connection
-    __u64 transaction_latency_ns;
-} amqp_transaction_batch_entry_t;
