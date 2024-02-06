@@ -47,7 +47,8 @@ typedef struct {
 
 
 typedef struct {
-    __u8 preamble[5]; // "AMQP\0"
+    __u8 preamble[4]; // "AMQP"
+    __u8 protocol_id; // 1 before TLS handshake, then 0 inside. 
     __u8 major;
     __u8 minor;
     __u8 revision;

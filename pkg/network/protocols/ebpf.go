@@ -94,4 +94,6 @@ const (
 	ProgramTLSHTTPTermination ProgramType = C.TLS_HTTP_TERMINATION
 	// ProgramTLSMongoProcess is tail call to process mongo traffic over a TLS connection.
 	ProgramTLSMongoProcess ProgramType = C.TLS_MONGO_PROCESS
+	// ProgramTLSAMQPProcess is tail call to process AMQP traffic over a TLS connection.
+	ProgramTLSAMQPProcess ProgramType = C.TLS_AMQP_PROCESS
 )

@@ -49,15 +49,13 @@ var Spec = &protocols.ProtocolSpec{
 				EBPFFuncName: processTailCall,
 			},
 		},
-		/*
-			{
-				ProgArrayName: protocols.TLSDispatcherProgramsMap,
-				Key:           uint32(protocols.ProgramTLSAMQPProcess),
-				ProbeIdentificationPair: manager.ProbeIdentificationPair{
-					EBPFFuncName: tlsProcessTailCall,
-				},
+		{
+			ProgArrayName: protocols.TLSDispatcherProgramsMap,
+			Key:           uint32(protocols.ProgramTLSAMQPProcess),
+			ProbeIdentificationPair: manager.ProbeIdentificationPair{
+				EBPFFuncName: tlsProcessTailCall,
 			},
-		*/
+		},
 	},
 }
 

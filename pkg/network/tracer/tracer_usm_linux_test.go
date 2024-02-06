@@ -138,6 +138,53 @@ func TestAMQPStats(t *testing.T) {
 
 }
 
+func TestAMQPOverTLSStats(t *testing.T) {
+	// This test fails because AMQP over GoTLS is not properly detected for unknown reasons.
+	// To see AMQP over TLS working, run this test whilst running another AMQP client using OpenSSL or similar.
+
+	cfg := testConfig()
+	cfg.EnableHTTPMonitoring = true
+	cfg.EnableHTTP2Monitoring = true
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableAMQPMonitoring = true
+	cfg.MaxAMQPStatsBuffered = 100
+	cfg.BPFDebug = true
+	tr := setupTracer(t, cfg)
+
+	// This is kept here for future reference.
+	/*
+		client, err := amqp.NewTLSClient(amqp.Options{ServerAddress: "kangaroo.rmq.cloudamqp.com:5671/<vhost>", Username: "<user>", Password: "<pass>"})
+		require.NoError(t, err)
+		defer client.Terminate()
+
+		// Make a queue, send some messages, consume them.
+		// It is important to send many messages to properly test the many-frames-in-a-single-packet case.
+		client.DeclareQueue("queue-name", client.PublishChannel)
+		// for i := range 500 { // Requires Go 1.22
+		for i := 0; i < 500; i++ {
+			client.Publish("queue-name", fmt.Sprintf("message-%d", i))
+		}
+
+		// Make sure we will consume all the messages batched.
+		time.Sleep(1 * time.Second)
+		client.Consume("queue-name", 500)
+	*/
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("amqp-testing-client")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for tup, metrics := range payload.AMQP {
+			log.Errorf("AMQP metrics %v:%v", tup, metrics)
+		}
+
+		return len(payload.AMQP) > 0
+	}, time.Second*30, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
+
+}
+
 func TestMongoOverTLSTracerSetup(t *testing.T) {
 	cfg := testConfig()
 	cfg.EnableNativeTLSMonitoring = true

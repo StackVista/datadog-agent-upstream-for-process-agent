@@ -87,7 +87,7 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
         *protocol = PROTOCOL_UNKNOWN;
     }
 
-    log_debug("[protocol_dispatcher_classifier]: Classified protocol as %d %d; %s\n", *protocol, size, buf);
+    log_debug("[classify_protocol_for_dispatcher]: Classified protocol as %d (buffer size:%d, contents: %s)\n", *protocol, size, buf);
 }
 
 static __always_inline void dispatcher_delete_protocol_stack(conn_tuple_t *tuple, protocol_stack_t *stack) {
