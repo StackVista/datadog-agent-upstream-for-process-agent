@@ -16,7 +16,7 @@ type Telemetry struct {
 	metricGroup *libtelemetry.MetricGroup
 
 	totalHits            *libtelemetry.Counter
-	dropped              *libtelemetry.Counter // this happens when MongoStatKeeper reaches capacity
+	dropped              *libtelemetry.Counter // this happens when AMQPStatKeeper reaches capacity
 	transactionsObserved *libtelemetry.Counter
 }
 

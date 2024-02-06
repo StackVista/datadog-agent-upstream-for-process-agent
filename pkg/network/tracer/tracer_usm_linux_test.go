@@ -97,29 +97,38 @@ func TestAMQPTracerSetup(t *testing.T) {
 	_ = setupTracer(t, cfg)
 }
 
-func TestAMQPStats(t *testing.T, tr *Tracer) {
+func TestAMQPStats(t *testing.T) {
+	cfg := testConfig()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableAMQPMonitoring = true
+	cfg.MaxAMQPStatsBuffered = 1000
+	cfg.BPFDebug = true
+	tr := setupTracer(t, cfg)
+
 	require.NoError(t, amqp.RunServer(t, "0.0.0.0", "5672"))
 
-	client, err := amqp.NewClient(amqp.Options{ServerAddress: "localhost", Username: "root", Password: "password"})
+	client, err := amqp.NewClient(amqp.Options{ServerAddress: "localhost:5672"})
 	require.NoError(t, err)
-	defer client.Stop()
+	defer client.Terminate()
 
-	client.GenerateLoad()
+	client.DeclareQueue("queue-name", client.PublishChannel)
+	client.Publish("queue-name", "message 1")
+	client.Publish("queue-name", "message 2")
+	client.Consume("queue-name", 2)
+
 	require.Eventually(t, func() bool {
-		payload, err := tr.GetActiveConnections("mongo-testing-client")
+		payload, err := tr.GetActiveConnections("amqp-testing-client")
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		for _, metrics := range payload.Mongo {
-			if metrics.Latencies.GetCount() > 3.0 {
-				log.Errorf("Avg. of latencies: %.2f ms", metrics.Latencies.GetSum()/1000000.0/metrics.Latencies.GetCount())
-				return true
-			}
+		for tup, metrics := range payload.AMQP {
+			log.Errorf("AMQP metrics %v:%v", tup, metrics)
 		}
 
-		return false
-	}, time.Second*5, time.Millisecond*100, "Expected to find a stats, instead captured none")
+		return len(payload.AMQP) > 0
+	}, time.Second*30, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
+
 }
 
 func TestMongoOverTLSTracerSetup(t *testing.T) {

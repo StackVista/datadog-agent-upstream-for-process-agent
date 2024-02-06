@@ -36,6 +36,12 @@ func (statKeeper *StatKeeper) Process(tx *EbpfTx) {
 		ConnectionKey: tx.ConnTuple(),
 	}
 
+	if tx.Is_exchange == 1 {
+		key.ExchangeName = tx.ExchangeOrQueueName()
+	} else {
+		key.QueueName = tx.ExchangeOrQueueName()
+	}
+
 	requestStats, ok := statKeeper.stats[key]
 
 	if !ok {
@@ -48,10 +54,11 @@ func (statKeeper *StatKeeper) Process(tx *EbpfTx) {
 		statKeeper.stats[key] = requestStats
 	}
 
-	/*
-		latency := tx.LatencyNs()
-		requestStats.Latencies.Add(float64(latency))
-	*/
+	requestStats.MessagesDelivered += uint64(tx.MessagesDelivered())
+	requestStats.MessagesPublished += uint64(tx.MessagesPublished())
+	if tx.ReplyCode() != 0 {
+		requestStats.ReplyCode = tx.ReplyCode()
+	}
 	statKeeper.telemetry.transactionsObserved.Add(1)
 }
 

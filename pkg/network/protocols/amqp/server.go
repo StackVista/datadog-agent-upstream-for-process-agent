@@ -6,6 +6,7 @@
 package amqp
 
 import (
+	"fmt"
 	"regexp"
 	"testing"
 
@@ -19,11 +20,14 @@ const (
 )
 
 func RunServer(t testing.TB, serverAddr, serverPort string) error {
-	t.Helper()
 	env := []string{
-		"AMQP_SERVER_ADDR=" + serverAddr,
-		"AMQP_SERVER_PORT=" + serverPort,
+		"AMQP_ADDR=" + serverAddr,
+		"AMQP_PORT=" + serverPort,
+		"USER=" + User,
+		"PASS=" + Pass,
 	}
+
+	t.Helper()
 	dir, _ := testutil.CurDir()
-	return protocolsUtils.RunDockerServer(t, "amqp", dir+"/testdata/docker-compose.yml", env, regexp.MustCompile(".*Server startup complete.*"), protocolsUtils.DefaultTimeout)
+	return protocolsUtils.RunDockerServer(t, "amqp", dir+"/testdata/docker-compose.yml", env, regexp.MustCompile(fmt.Sprintf(".*started TCP listener on .*%s.*", serverPort)), protocolsUtils.DefaultTimeout)
 }

@@ -34,7 +34,7 @@ typedef struct {
     __u32 messages_delivered; // Messages delivered to the client on this connection. This is the count of messages traveling from the server to the client.
     __u32 messages_published; // Messages published on this connection. This is the count of messages traveling from the client to the server.
     __u8 reply_code; // AMQP reply code. Only transmitted when a connection is closed, 0 otherwise.
-    char exchange_or_queue[256]; // Name of the exchange or queue
+    __u8 exchange_or_queue[256]; // Name of the exchange or queue
     __u8 is_exchange; // 1 if the name above is for an exchange, 0 if it is for a queue
 } amqp_transaction_batch_entry_t;
 

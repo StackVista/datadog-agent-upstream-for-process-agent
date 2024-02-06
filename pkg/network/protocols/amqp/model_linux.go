@@ -7,7 +7,11 @@
 
 package amqp
 
-import "github.com/DataDog/datadog-agent/pkg/network/types"
+import (
+	"bytes"
+
+	"github.com/DataDog/datadog-agent/pkg/network/types"
+)
 
 func (tx *EbpfTx) ConnTuple() types.ConnectionKey {
 	return types.ConnectionKey{
@@ -23,4 +27,17 @@ func (tx *EbpfTx) ConnTuple() types.ConnectionKey {
 
 func (tx *EbpfTx) MessagesDelivered() uint32 {
 	return tx.Messages_delivered
+}
+
+func (tx *EbpfTx) MessagesPublished() uint32 {
+	return tx.Messages_published
+}
+
+func (tx *EbpfTx) ExchangeOrQueueName() string {
+	n := bytes.IndexByte(tx.Exchange_or_queue[:], 0)
+	return string(tx.Exchange_or_queue[:n])
+}
+
+func (tx *EbpfTx) ReplyCode() uint8 {
+	return tx.Reply_code
 }

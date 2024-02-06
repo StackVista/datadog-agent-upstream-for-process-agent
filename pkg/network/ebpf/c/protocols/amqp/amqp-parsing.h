@@ -45,6 +45,10 @@ int socket__amqp_process(struct __sk_buff* skb) {
         return 0;
     }
 
+    // Normalize the connection tuple so that the direction is always from client to server.
+    normalize_tuple(&tup);
+    heap->transaction.tup = tup;
+    heap->transaction.reply_code = 0;
     heap->transaction.messages_delivered = 0;
     heap->transaction.messages_published = 0;
     bpf_memset(heap->transaction.exchange_or_queue, 0, 256);

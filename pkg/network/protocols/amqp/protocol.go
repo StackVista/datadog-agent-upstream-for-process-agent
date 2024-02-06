@@ -76,11 +76,9 @@ func (p *protocol) Name() string {
 	return "AMQP"
 }
 
-// ConfigureOptions add the necessary options for the mongo monitoring to work,
+// ConfigureOptions add the necessary options for the AMQP monitoring to work,
 // to be used by the manager. These are:
-// - Set the `kafka_last_tcp_seq_per_connection` map size to the value of the `max_tracked_connection` configuration variable.
-//
-// We also configure the kafka event stream with the manager and its options.
+// We also configure the AMQP event stream with the manager and its options.
 func (p *protocol) ConfigureOptions(mgr *manager.Manager, opts *manager.Options) {
 	events.Configure(eventStreamName, mgr, opts)
 	utils.EnableOption(opts, "amqp_monitoring_enabled")
@@ -121,13 +119,13 @@ func (p *protocol) processAMQPTransactionData(data []byte) {
 	p.statkeeper.Process(tx)
 }
 
-// GetStats returns a map of Mongo stats stored in the following format:
+// GetStats returns a map of AMQP stats stored in the following format:
 // [source, dest tuple, request path] -> RequestStats object
 func (p *protocol) GetStats() *protocols.ProtocolStats {
 	p.eventsConsumer.Sync()
 	p.telemetry.Log()
 	return &protocols.ProtocolStats{
-		Type:  protocols.Mongo,
+		Type:  protocols.AMQP,
 		Stats: p.statkeeper.GetAndResetAllStats(),
 	}
 }
