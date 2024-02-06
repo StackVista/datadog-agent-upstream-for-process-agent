@@ -4,6 +4,9 @@
 // For protocol detection.
 #define AMQP_PREFACE "AMQP"
 
+// Frame types we care about.
+#define AMQP_FRAME_TYPE_METHOD 1
+
 // RabbitMQ supported classes.
 // Ref: https://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf
 #define AMQP_CONNECTION_CLASS 10

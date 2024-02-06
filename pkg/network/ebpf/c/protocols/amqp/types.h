@@ -8,17 +8,6 @@ typedef struct {
 } amqp_short_string_t;
 
 typedef struct {
-  __u16 ticket; // unused
-  amqp_short_string_t queue;
-} amqp_consume_parameters_t;
-
-typedef struct {
-  __u16 ticket; // unused
-  amqp_short_string_t exchange;
-  // amqp_short_string_t routing_key; follows, but neet to parse exchange.length fo find it.
-} amqp_publish_parameters_t;
-
-typedef struct {
   __u8 frame_type;       
   __u16 channel;
   __u32 length;
@@ -45,20 +34,12 @@ typedef struct {
   amqp_transaction_batch_entry_t transaction;
 } amqp_heap_helper_t; // This is a helper struct to be used in the BPF program to load the string from the packet.
 
-
 typedef struct {
     __u8 preamble[4]; // "AMQP"
-    __u8 protocol_id; // 1 before TLS handshake, then 0 inside. 
+    __u8 protocol_id; // 2 before TLS handshake, then 0 inside. 
     __u8 major;
     __u8 minor;
     __u8 revision;
 } amqp_protocol_identifier;
 
 #pragma pack(pop)
-
-typedef enum {
-  AMQP_FRAME_TYPE_METHOD = 1,
-  AMQP_FRAME_TYPE_CONTENT_HEADER = 2,
-  AMQP_FRAME_TYPE_CONTENT_BODY = 3,
-  AMQP_FRAME_TYPE_HEARTBEAT = 8
-} amqp_frame_type_t;

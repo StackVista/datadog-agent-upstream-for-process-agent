@@ -200,8 +200,8 @@ int uprobe__amqp_process(struct pt_regs *ctx) {
 
 // Don't be mislead by the name of this function or by the fact that it is in the socket section.
 // This will only be called from the dispatcher for packets on connections that have already been
-// identified as mongo connections. This is for unencrypted traffic only, for TLS traffic, see
-// the uprobe__mongo_process function above.
+// identified as AMQP connections. This is for unencrypted traffic only, for TLS traffic, see
+// the uprobe__amqp_process function above.
 SEC("socket/amqp_process")
 int socket__amqp_process(struct __sk_buff* skb) {
     conn_tuple_t tup;

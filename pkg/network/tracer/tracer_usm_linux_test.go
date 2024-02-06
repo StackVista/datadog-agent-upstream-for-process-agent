@@ -147,7 +147,7 @@ func TestAMQPOverTLSStats(t *testing.T) {
 	cfg.EnableHTTP2Monitoring = true
 	cfg.EnableNativeTLSMonitoring = true
 	cfg.EnableAMQPMonitoring = true
-	cfg.MaxAMQPStatsBuffered = 100
+	cfg.MaxAMQPStatsBuffered = 1000
 	cfg.BPFDebug = true
 	tr := setupTracer(t, cfg)
 
