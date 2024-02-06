@@ -94,7 +94,7 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const char *buf, stru
         __u8 new_messages_delivered = 0;
         __u8 new_messages_published = 0;
 
-        if (class == 60 && method == 60) { 
+        if (class == AMQP_BASIC_CLASS && method == AMQP_METHOD_DELIVER) { 
             // The basic.deliver method, which is used to send messages to consumers.
             // This message type has a variable-length consumer tag, delivery tag, and flags we need to skip.
             amqp_load_data(skb, buf, current_offset, &heap->string, 1);
@@ -102,18 +102,18 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const char *buf, stru
             current_offset += sizeof(__u64); // Jump over the delivery tag
             current_offset += sizeof(__u8); // Jump over the flags
             new_messages_delivered++;
-        } else if (class == 60 && method == 40) {
+        } else if (class == AMQP_BASIC_CLASS && method == AMQP_METHOD_PUBLISH) {
             // The basic.publish method, which is used to send messages to the server.
             // This messagge type only has the fixed-size ticket field in front of the exchange name and routing key.
             current_offset += sizeof(__u16); // Jump over the ticket
             new_messages_published++;
-        } else if (class == 60 && method == 71) {
+        } else if (class == AMQP_BASIC_CLASS && method == AMQP_METHOD_GET_OK) {
             // The basic.get-ok method, which is used to return a single message from a synchronous basic.get call.
             // This message type has fixed-size delivery tag and flags fields in front of the exchange name and routing key.
             current_offset += sizeof(__u64); // Jump over the delivery tag
             current_offset += sizeof(__u8); // Jump over the flags
             new_messages_delivered++;
-        } else if (class == 10 && method == 50) {
+        } else if (class == AMQP_CONNECTION_CLASS && method == AMQP_METHOD_CONNECTION_CLOSE) {
             // The connection.close method, which is used to close a connection.
             // From this message, we extract the reply code only.
             amqp_load_data(skb, buf, current_offset, &heap->transaction.reply_code, 1);
