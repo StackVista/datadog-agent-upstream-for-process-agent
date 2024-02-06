@@ -62,6 +62,7 @@ int tracepoint__net__netif_receive_skb(struct pt_regs* ctx) {
     http2_batch_flush(ctx);
     kafka_batch_flush(ctx);
     mongo_batch_flush(ctx);
+    amqp_batch_flush(ctx);
     return 0;
 }
 

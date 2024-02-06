@@ -41,6 +41,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/config"
 	netlink "github.com/DataDog/datadog-agent/pkg/network/netlink/testutil"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/amqp"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http/testutil"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/mongo"
@@ -87,15 +88,38 @@ type USMSuite struct {
 	suite.Suite
 }
 
-func TestAMQPOverTLSTracerSetup(t *testing.T) {
+func TestAMQPTracerSetup(t *testing.T) {
 
 	cfg := testConfig()
 	cfg.EnableNativeTLSMonitoring = true
 	cfg.EnableAMQPMonitoring = true
 	cfg.BPFDebug = true
 	_ = setupTracer(t, cfg)
+}
 
-	time.Sleep(30 * time.Second)
+func TestAMQPStats(t *testing.T, tr *Tracer) {
+	require.NoError(t, amqp.RunServer(t, "0.0.0.0", "5672"))
+
+	client, err := amqp.NewClient(amqp.Options{ServerAddress: "localhost", Username: "root", Password: "password"})
+	require.NoError(t, err)
+	defer client.Stop()
+
+	client.GenerateLoad()
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("mongo-testing-client")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, metrics := range payload.Mongo {
+			if metrics.Latencies.GetCount() > 3.0 {
+				log.Errorf("Avg. of latencies: %.2f ms", metrics.Latencies.GetSum()/1000000.0/metrics.Latencies.GetCount())
+				return true
+			}
+		}
+
+		return false
+	}, time.Second*5, time.Millisecond*100, "Expected to find a stats, instead captured none")
 }
 
 func TestMongoOverTLSTracerSetup(t *testing.T) {

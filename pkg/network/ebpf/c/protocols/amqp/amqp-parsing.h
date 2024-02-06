@@ -51,9 +51,9 @@ int socket__amqp_process(struct __sk_buff* skb) {
     bpf_memset(heap->string.data, 0, 256);
 
     // We need to limit ourselves here as the eBPF verifier will otherwise go crazy.
-    __u8 number_of_frames_processed = 0;
+    __u16 number_of_frames_processed = 0;
 
-    while (current_frame_offset + size_to_load < skb_info.data_end && number_of_frames_processed < 15) {
+    while (current_frame_offset + size_to_load < skb_info.data_end && number_of_frames_processed < 200) {
         current_offset = current_frame_offset;
         number_of_frames_processed++;
 
@@ -62,7 +62,16 @@ int socket__amqp_process(struct __sk_buff* skb) {
             return 0;
         }
 
-        __u32 frame_length = bpf_ntohl(heap->header.length);
+        __u32 frame_length = bpf_ntohl(heap->header.length) + sizeof(amqp_frame_header_t);
+        __u8 end_of_frame = 0;
+        bpf_skb_load_bytes_with_telemetry(skb, current_offset + frame_length, &end_of_frame, 1);
+
+        if (end_of_frame != 0xce) {
+            log_debug("process_amqp: No 0xce marker after frame\n");
+            break;
+        }
+
+        frame_length++; // Include the 0xce marker, so we can use the frame length to jump to the next frame.
         current_offset += sizeof(amqp_frame_header_t);
 
         if (heap->header.frame_type != AMQP_FRAME_TYPE_METHOD) {
@@ -145,9 +154,9 @@ int socket__amqp_process(struct __sk_buff* skb) {
             heap->transaction.messages_delivered += new_messages_delivered;
             heap->transaction.messages_published += new_messages_published;
         } else {
-            log_debug("process_amqp: %s != %s\n", heap->transaction.exchange_or_queue, heap->string.data);
             // The exchange/queue name does not match the previously seen one, but there is already a name set.
-            // Send of the previous transaction and set the new name, reset the counters.
+            // Send off the previous transaction and set the new name, reset the counters.
+            log_debug("process_amqp: in processed/delivered/published: %d/%d/%d\n", number_of_frames_processed, heap->transaction.messages_delivered, heap->transaction.messages_published);
             amqp_batch_enqueue(&heap->transaction);
             bpf_memcpy(heap->transaction.exchange_or_queue, heap->string.data, 256);
             heap->transaction.is_exchange = is_exchange;
@@ -159,7 +168,7 @@ int socket__amqp_process(struct __sk_buff* skb) {
     } // End of frame loop
       
     if (heap->transaction.exchange_or_queue[0] != 0) {
-        log_debug("process_amqp: processed %d frames, %d messages delivered, %d published.\n", number_of_frames_processed, heap->transaction.messages_delivered, heap->transaction.messages_published);
+        log_debug("process_amqp: ex processed/delivered/published: %d/%d/%d\n", number_of_frames_processed, heap->transaction.messages_delivered, heap->transaction.messages_published);
         amqp_batch_enqueue(&heap->transaction);
     }
 

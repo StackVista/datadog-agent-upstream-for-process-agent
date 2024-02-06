@@ -26,8 +26,8 @@
 #define AMQP_MIN_PAYLOAD_LENGTH 11
 
 // Since the AMQP tranaction entries contain the exchange name and routing key,
-// each indiviual batch entry is rather larget (> 512 bytes), so the batch has to be
+// each indiviual batch entry is rather large (> 512 bytes), so the batch has to be
 // smaller.
-#define AMQP_BATCH_SIZE 5
+#define AMQP_BATCH_SIZE 13
 
 #endif
