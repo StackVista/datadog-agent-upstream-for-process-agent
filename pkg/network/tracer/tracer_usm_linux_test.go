@@ -111,10 +111,17 @@ func TestAMQPStats(t *testing.T) {
 	require.NoError(t, err)
 	defer client.Terminate()
 
+	// Make a queue, send some messages, consume them.
+	// It is important to send many messages to properly test the many-frames-in-a-single-packet case.
 	client.DeclareQueue("queue-name", client.PublishChannel)
-	client.Publish("queue-name", "message 1")
-	client.Publish("queue-name", "message 2")
-	client.Consume("queue-name", 2)
+	// for i := range 500 { // Requires Go 1.22
+	for i := 0; i < 500; i++ {
+		client.Publish("queue-name", fmt.Sprintf("message-%d", i))
+	}
+
+	// Make sure we will consume all the messages batched.
+	time.Sleep(1 * time.Second)
+	client.Consume("queue-name", 500)
 
 	require.Eventually(t, func() bool {
 		payload, err := tr.GetActiveConnections("amqp-testing-client")
