@@ -116,6 +116,8 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const char *buf, stru
         } else if (class == AMQP_CONNECTION_CLASS && method == AMQP_METHOD_CONNECTION_CLOSE) {
             // The connection.close method, which is used to close a connection.
             // From this message, we extract the reply code only.
+            // There will only ever be one reply code per connection, as the connection will be closed after this message.
+            // Therefore, we can safely set it here without checking for previous values on the same connection.
             amqp_load_data(skb, buf, current_offset, &heap->transaction.reply_code, 1);
             current_frame_offset += frame_length;
             continue;
@@ -174,7 +176,7 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const char *buf, stru
     }
 
     if (current_frame_offset < size) {
-        log_debug("process_amqp: processed %d frames, but there is still data left in the packet: %pM\n", number_of_frames_processed, buf);
+        log_debug("process_amqp: processed %d frames, but there is still data left in the packet.\n", number_of_frames_processed);
     }
 
     return 0;
