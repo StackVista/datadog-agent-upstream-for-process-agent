@@ -17,7 +17,8 @@
 #include "protocols/kafka/usm-events.h"
 #include "protocols/mongo/helpers.h"
 #include "protocols/mongo/usm-events.h"
-
+#include "protocols/amqp/helpers.h"
+#include "protocols/amqp/usm-events.h"
 
 __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protocol_t proto) {
     switch(proto) {
@@ -29,6 +30,8 @@ __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protoc
         return PROG_KAFKA;
     case PROTOCOL_MONGO:
         return PROG_MONGO;
+    case PROTOCOL_AMQP:
+        return PROG_AMQP;
     default:
         if (proto != PROTOCOL_UNKNOWN) {
             log_debug("protocol doesn't have a matching program: %d\n", proto);
@@ -78,11 +81,13 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
         *protocol = PROTOCOL_HTTP2;
     } else if (is_mongo_monitoring_enabled() && is_mongo(tup, buf, size)) {
         *protocol = PROTOCOL_MONGO;
+    } else if (is_amqp_monitoring_enabled() && is_amqp(tup, buf, size)) {
+        *protocol = PROTOCOL_AMQP;
     } else {
         *protocol = PROTOCOL_UNKNOWN;
     }
 
-    log_debug("[protocol_dispatcher_classifier]: Classified protocol as %d %d; %s\n", *protocol, size, buf);
+    log_debug("[classify_protocol_for_dispatcher]: Classified protocol as %d (buffer size:%d, contents: %s)\n", *protocol, size, buf);
 }
 
 static __always_inline void dispatcher_delete_protocol_stack(conn_tuple_t *tuple, protocol_stack_t *stack) {
