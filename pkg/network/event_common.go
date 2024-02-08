@@ -15,6 +15,7 @@ import (
 
 	"github.com/DataDog/datadog-agent/pkg/network/dns"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/amqp"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/kafka"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/mongo"
@@ -138,6 +139,7 @@ type Connections struct {
 	HTTP2                       map[http.Key]*http.RequestStats
 	Kafka                       map[kafka.Key]*kafka.RequestStat
 	Mongo                       map[mongo.Key]*mongo.RequestStat
+	AMQP                        map[amqp.Key]*amqp.RequestStat
 	HTTPObservations            []http.TransactionObservation
 	DNSStats                    dns.StatsByKeyByNameByType
 }
