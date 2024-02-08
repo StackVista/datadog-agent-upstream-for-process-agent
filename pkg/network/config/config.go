@@ -83,6 +83,9 @@ type Config struct {
 	// EnableMongoMonitoring specifies whether the tracer should monitor Mongo traffic
 	EnableMongoMonitoring bool
 
+	// EnableAMQPMonitoring specifies whether the tracer should monitor AMQP traffic
+	EnableAMQPMonitoring bool
+
 	// EnableNativeTLSMonitoring specifies whether the USM should monitor HTTPS traffic via native libraries.
 	// Supported libraries: OpenSSL, GnuTLS, LibCrypto.
 	EnableNativeTLSMonitoring bool
@@ -180,6 +183,10 @@ type Config struct {
 	// MaxMongoStatsBuffered represents the maximum number of MongoDB stats we'll buffer in memory. These stats
 	// get flushed on every client request (default 30s check interval)
 	MaxMongoStatsBuffered int
+
+	// MaxAMQPStatsBuffered represents the maximum number of AMQP stats we'll buffer in memory. These stats
+	// get flushed on every client request (default 30s check interval)
+	MaxAMQPStatsBuffered int
 
 	// EnableHTTPTracing enables distributed tracing by reading the X-Request-Id header and reporting that for distributed tracing
 	EnableHTTPTracing bool
@@ -341,6 +348,7 @@ func New() *Config {
 		MaxHTTPStatsBuffered:      cfg.GetInt(join(smNS, "max_http_stats_buffered")),
 		MaxKafkaStatsBuffered:     cfg.GetInt(join(smNS, "max_kafka_stats_buffered")),
 		MaxMongoStatsBuffered:     cfg.GetInt(join(smNS, "max_mongo_stats_buffered")),
+		MaxAMQPStatsBuffered:      cfg.GetInt(join(smNS, "max_amqp_stats_buffered")),
 
 		EnableHTTPTracing:           cfg.GetBool(join(netNS, "enable_http_tracing")),
 		MaxHTTPObservationsBuffered: cfg.GetInt(join(smNS, "max_http_observations_buffered")),

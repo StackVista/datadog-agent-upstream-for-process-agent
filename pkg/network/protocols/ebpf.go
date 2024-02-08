@@ -44,6 +44,7 @@ const (
 	// ProgramKafka is the Golang representation of the C.PROG_KAFKA enum
 	ProgramKafka ProgramType = C.PROG_KAFKA
 	ProgramMongo ProgramType = C.PROG_MONGO
+	ProgramAMQP  ProgramType = C.PROG_AMQP
 )
 
 // Application layer of the protocol stack.
@@ -117,4 +118,6 @@ const (
 	ProgramTLSHTTP2Termination TLSProgramType = C.TLS_HTTP2_TERMINATION
 	// ProgramTLSMongoProcess is tail call to process mongo traffic over a TLS connection.
 	ProgramTLSMongoProcess ProgramType = C.TLS_MONGO_PROCESS
+	// ProgramTLSAMQPProcess is tail call to process AMQP traffic over a TLS connection.
+	ProgramTLSAMQPProcess ProgramType = C.TLS_AMQP_PROCESS
 )
