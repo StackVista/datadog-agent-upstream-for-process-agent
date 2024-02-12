@@ -66,7 +66,6 @@ static __always_inline conn_tuple_t* conn_tup_from_tls_conn(tls_offsets_data_t* 
     // so we ensure it is always 0 here so that both paths produce the same `conn_tuple_t` value.
     // `netns` is not used in the userspace program part that binds http information to `ConnectionStats`,
     // so this is isn't a problem.
-    conn_tuple.netns = 0;
     conn_tuple.pid = 0;
 
     if (!is_ephemeral_port(conn_tuple.sport)) {
