@@ -136,12 +136,13 @@ func (tx *EbpfTx) Incomplete() bool {
 // ConnTuple returns the connections tuple of the transaction.
 func (tx *EbpfTx) ConnTuple() types.ConnectionKey {
 	return types.ConnectionKey{
-		SrcIPHigh: tx.Tuple.Saddr_h,
-		SrcIPLow:  tx.Tuple.Saddr_l,
-		DstIPHigh: tx.Tuple.Daddr_h,
-		DstIPLow:  tx.Tuple.Daddr_l,
-		SrcPort:   tx.Tuple.Sport,
-		DstPort:   tx.Tuple.Dport,
+		SrcIPHigh: tx.Tup.Saddr_h,
+		SrcIPLow:  tx.Tup.Saddr_l,
+		DstIPHigh: tx.Tup.Daddr_h,
+		DstIPLow:  tx.Tup.Daddr_l,
+		SrcPort:   tx.Tup.Sport,
+		DstPort:   tx.Tup.Dport,
+		NetNs:     tx.Tup.Netns,
 	}
 }
 

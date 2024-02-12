@@ -1057,7 +1057,7 @@ int tracepoint__net__net_dev_queue(struct net_dev_queue_ctx* ctx) {
     if (!read_conn_tuple(&sock_tup, sk, 0, CONN_TYPE_TCP)) {
         return 0;
     }
-    sock_tup.netns = 0;
+
     sock_tup.pid = 0;
 
     if (!is_equal(&skb_tup, &sock_tup)) {
