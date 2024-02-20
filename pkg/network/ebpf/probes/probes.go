@@ -146,6 +146,9 @@ const (
 	// TCPRetransmitRet traces the return value for the tcp_retransmit_skb() system call
 	TCPRetransmitRet ProbeFuncName = "kretprobe__tcp_retransmit_skb"
 
+	// Used for capturing the synack packet when a connection gets accepted
+	IpBuildAndSendPkt ProbeFuncName = "kprobe__ip_build_and_send_pkt"
+
 	// InetCskAcceptReturn traces the return value for the inet_csk_accept syscall
 	InetCskAcceptReturn ProbeFuncName = "kretprobe__inet_csk_accept"
 

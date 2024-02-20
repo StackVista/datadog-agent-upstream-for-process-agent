@@ -58,6 +58,9 @@ typedef struct {
     __u32 rtt;
     __u32 rtt_var;
 
+    __u32 initial_seq; // The seq value communicated as the synack response
+    __u32 initial_ack_seq; // The ack_seq value communicated as the synack response
+
     // Bit mask containing all TCP state transitions tracked by our tracer
     __u16 state_transitions;
 } tcp_stats_t;

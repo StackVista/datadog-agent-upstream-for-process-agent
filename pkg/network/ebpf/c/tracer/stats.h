@@ -156,6 +156,11 @@ static __always_inline void update_tcp_stats(conn_tuple_t *t, tcp_stats_t stats)
     if (stats.state_transitions > 0) {
         val->state_transitions |= stats.state_transitions;
     }
+
+    if (stats.initial_seq > 0) {
+        val->initial_seq = stats.initial_seq;
+        val->initial_ack_seq = stats.initial_ack_seq;
+    }
 }
 
 static __always_inline int handle_message(conn_tuple_t *t, size_t sent_bytes, size_t recv_bytes, conn_direction_t dir,

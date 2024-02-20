@@ -265,6 +265,9 @@ type ConnectionStats struct {
 	RTT    uint32 // Stored in µs
 	RTTVar uint32
 
+	Initial_seq     uint32
+	Initial_ack_seq uint32
+
 	Pid   uint32
 	NetNS uint32
 

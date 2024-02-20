@@ -878,6 +878,8 @@ int kprobe__tcp_finish_connect(struct pt_regs *ctx) {
         return 0;
     }
 
+    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM2(ctx);
+
     u64 pid_tgid = *pid_tgid_p;
     bpf_map_delete_elem(&tcp_ongoing_connect_pid, &skp);
     log_debug("kprobe/tcp_finish_connect: tgid: %u, pid: %u\n", pid_tgid >> 32, pid_tgid & 0xFFFFFFFF);
@@ -887,10 +889,59 @@ int kprobe__tcp_finish_connect(struct pt_regs *ctx) {
         return 0;
     }
 
+    tcp_stats_t seq_stats = { };
+
+    if (!sk_buff_get_tcp_transport(skb, NULL, &(seq_stats.initial_seq), &(seq_stats.initial_ack_seq))) {
+        update_tcp_stats(&t, seq_stats);   
+    }
+
     handle_tcp_stats(&t, skp, TCP_ESTABLISHED);
     handle_message(&t, 0, 0, CONN_DIRECTION_OUTGOING, 0, 0, PACKET_COUNT_NONE, skp);
 
     log_debug("kprobe/tcp_connect: netns: %u, sport: %u, dport: %u\n", t.netns, t.sport, t.dport);
+
+    return 0;
+}
+
+// [STS]: We capture this function because it catches the 'synack' connection accept packet,
+// which we want to get the seq/ack for the initial connection
+SEC("kprobe/ip_build_and_send_pkt")
+int kprobe__ip_build_and_send_pkt(struct pt_regs *ctx) {
+    struct sk_buff *skb = (struct sk_buff *)(PT_REGS_PARM1(ctx));
+    if (!skb) {
+        return 0;
+    }
+
+    struct sock *sk = (struct sock *)(PT_REGS_PARM2(ctx));
+    if (!sk) {
+        return 0;
+    }
+
+    conn_tuple_t t = {};
+    bpf_memset(&t, 0, sizeof(conn_tuple_t));
+
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    log_debug("kprobe/ip_build_and_send_pkt: tgid: %u, pid: %u\n", pid_tgid >> 32, pid_tgid & 0xFFFFFFFF);
+
+    // Pick source and address from function invocation
+    t.saddr_l = PT_REGS_PARM3(ctx);
+    t.daddr_l = PT_REGS_PARM4(ctx);
+    t.metadata |= CONN_TYPE_TCP;
+
+    tcp_stats_t stats = { };
+
+    if (sk_buff_get_tcp_transport(skb, &t, &stats.initial_seq, &stats.initial_ack_seq)) {
+        return 0;
+    }
+
+    t.pid = pid_tgid >> 32;
+    // This is a bit tricky: The socket we get here is not a tcp sock but a request_sock. This has the common_sock structure aswell,
+    // so netns should be possibple to retrieve, however layout might be slightly different dfailing offset guesssing?
+    // Fingers crossed.
+    t.netns = get_netns_from_sock(sk); 
+
+    update_tcp_stats(&t, stats);
+    log_debug("kprobe/ip_build_and_send_pkt: created stats: seq=%u, seq_ack=%u\n", stats.initial_seq, stats.initial_ack_seq);
 
     return 0;
 }

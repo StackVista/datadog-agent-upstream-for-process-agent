@@ -133,13 +133,18 @@ static __always_inline void flush_conn_close_if_full(void *ctx) {
         // Here we copy the batch data to a variable allocated in the eBPF stack
         // This is necessary for older Kernel versions only (we validated this behavior on 4.4.0),
         // since you can't directly write a map entry to the perf buffer.
-        batch_t batch_copy = {};
-        bpf_memcpy(&batch_copy, batch_ptr, sizeof(batch_copy));
+        // [STS] We do not care for kernels older than 4.4, so we'll get rid of this copy (which broke when extending the tcp_stats_t structure)
+        // batch_t batch_copy = {};
+        // bpf_memcpy(&batch_copy, batch_ptr, sizeof(batch_copy));
+        // batch_ptr->len = 0;
+        // batch_ptr->id++;
+
+        // we cannot use the telemetry macro here because of stack size constraints
+        bpf_perf_event_output(ctx, &conn_close_event, cpu, batch_ptr, sizeof(*batch_ptr));
+
         batch_ptr->len = 0;
         batch_ptr->id++;
 
-        // we cannot use the telemetry macro here because of stack size constraints
-        bpf_perf_event_output(ctx, &conn_close_event, cpu, &batch_copy, sizeof(batch_copy));
     }
 }
 

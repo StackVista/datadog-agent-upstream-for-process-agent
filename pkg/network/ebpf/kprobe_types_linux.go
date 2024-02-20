@@ -17,6 +17,8 @@ type ConnTuple struct {
 type TCPStats struct {
 	Rtt               uint32
 	Rtt_var           uint32
+	Initial_seq       uint32
+	Initial_ack_seq   uint32
 	State_transitions uint16
 	Pad_cgo_0         [2]byte
 }
@@ -103,9 +105,9 @@ const (
 )
 
 const BatchSize = 0x4
-const SizeofBatch = 0x1f0
+const SizeofBatch = 0x210
 
-const SizeofConn = 0x78
+const SizeofConn = 0x80
 
 type ClassificationProgram = uint32
 

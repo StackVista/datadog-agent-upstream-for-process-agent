@@ -53,6 +53,7 @@ var mainProbes = []probes.ProbeFuncName{
 	probes.TCPRetransmit,
 	probes.TCPRetransmitRet,
 	probes.InetCskAcceptReturn,
+	probes.IpBuildAndSendPkt,
 	probes.InetCskListenStop,
 	probes.UDPDestroySock,
 	probes.UDPDestroySockReturn,
