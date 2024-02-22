@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __AMQP_TYPES_H
+#define __AMQP_TYPES_H
 
 #pragma pack(push, 1)
 
@@ -43,3 +44,5 @@ typedef struct {
 } amqp_protocol_identifier;
 
 #pragma pack(pop)
+
+#endif

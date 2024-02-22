@@ -19,7 +19,6 @@
 
 static __always_inline void clean_protocol_classification(conn_tuple_t *tup) {
     conn_tuple_t conn_tuple = *tup;
-    conn_tuple.pid = 0;
     conn_tuple.netns = 0;
     normalize_tuple(&conn_tuple);
     delete_protocol_stack(&conn_tuple, NULL, FLAG_TCP_CLOSE_DELETION);
@@ -52,13 +51,11 @@ static __always_inline void cleanup_conn(void *ctx, conn_tuple_t *tup, struct so
             bpf_map_delete_elem(&tcp_stats, &(conn.tup));
         }
 
-        conn.tup.pid = 0;
         retrans = bpf_map_lookup_elem(&tcp_retransmits, &(conn.tup));
         if (retrans) {
             conn.tcp_retransmits = *retrans;
             bpf_map_delete_elem(&tcp_retransmits, &(conn.tup));
         }
-        conn.tup.pid = tup->pid;
 
         conn.tcp_stats.state_transitions |= (1 << TCP_CLOSE);
     }

@@ -26,6 +26,9 @@ BPF_HASH_MAP(tcp_retransmits, conn_tuple_t, __u32, 0)
 /* Will hold the PIDs initiating TCP connections */
 BPF_HASH_MAP(tcp_ongoing_connect_pid, struct sock *, __u64, 1024)
 
+/* Will store the seq/ack number that were seen while accepting a connection */
+BPF_HASH_MAP(tcp_accept_seq, conn_tuple_t, tcp_seq_t, 1024)
+
 /* Will hold the tcp/udp close events
  * The keys are the cpu number and the values a perf file descriptor for a perf event
  */

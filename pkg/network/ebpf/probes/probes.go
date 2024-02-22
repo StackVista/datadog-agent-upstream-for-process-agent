@@ -187,6 +187,7 @@ const (
 	TCPStatsMap                       BPFMapName = "tcp_stats"
 	TCPRetransmitsMap                 BPFMapName = "tcp_retransmits"
 	TCPConnectSockPidMap              BPFMapName = "tcp_ongoing_connect_pid"
+	TCPAcceptSeqMap                   BPFMapName = "tcp_accept_seq"
 	ConnCloseEventMap                 BPFMapName = "conn_close_event"
 	TracerStatusMap                   BPFMapName = "tracer_status"
 	ConntrackStatusMap                BPFMapName = "conntrack_status"

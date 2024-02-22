@@ -294,7 +294,7 @@ func (s *TracerSuite) TestTCPRTT() {
 	assert.EqualValues(t, int(tcpInfo.Rttvar), int(conn.RTTVar))
 }
 
-func (s *TracerSuite) TestTCPInitialSeq() {
+func (s *TracerSuite) TestTCPInitialSeqActive() {
 	t := s.T()
 	// Enable BPF-based system probe
 	tr := setupTracer(t, testConfig())
@@ -309,6 +309,43 @@ func (s *TracerSuite) TestTCPInitialSeq() {
 	c, err := net.DialTimeout("tcp", server.address, time.Second)
 	require.NoError(t, err)
 	defer c.Close()
+
+	// Fetch connection matching source and target address
+	allConnections := getConnections(t, tr)
+	outConn, ok := findConnection(c.LocalAddr(), c.RemoteAddr(), allConnections)
+	require.True(t, ok)
+
+	inConn, ok := findConnection(c.RemoteAddr(), c.LocalAddr(), allConnections)
+	require.True(t, ok)
+
+	// Make sure seq/ack etc are set and equal
+	assert.NotEqualValues(t, 0, int(inConn.Initial_seq))
+	assert.NotEqualValues(t, 0, int(outConn.Initial_seq))
+	assert.NotEqualValues(t, 0, int(inConn.Initial_ack_seq))
+	assert.NotEqualValues(t, 0, int(outConn.Initial_ack_seq))
+	assert.EqualValues(t, int(inConn.Initial_seq), int(outConn.Initial_seq))
+	assert.EqualValues(t, int(inConn.Initial_ack_seq), int(outConn.Initial_ack_seq))
+}
+
+func (s *TracerSuite) TestTCPInitialSeqClosed() {
+	t := s.T()
+	// Enable BPF-based system probe
+	tr := setupTracer(t, testConfig())
+	// Create TCP Server that simply "drains" connection until receiving an EOF
+	server := NewTCPServerOnAddress("127.0.0.1:9050", func(c net.Conn) {
+		io.Copy(io.Discard, c)
+		c.Close()
+	})
+	t.Cleanup(server.Shutdown)
+	require.NoError(t, server.Run())
+
+	c, err := net.DialTimeout("tcp", server.address, time.Second)
+	require.NoError(t, err)
+	err = c.Close()
+	require.NoError(t, err)
+
+	// Wait for the close to happen
+	time.Sleep(1 * time.Second)
 
 	// Fetch connection matching source and target address
 	allConnections := getConnections(t, tr)

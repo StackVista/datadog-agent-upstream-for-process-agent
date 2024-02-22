@@ -1,4 +1,6 @@
-#pragma once
+#ifndef __AMQP_PARSING_H
+#define __AMQP_PARSING_H
+
 
 #include "bpf_endian.h"
 
@@ -215,4 +217,6 @@ int socket__amqp_process(struct __sk_buff* skb) {
     }
 
     return amqp_process(&tup, NULL, skb, skb_info.data_end - skb_info.data_off, skb_info.data_off);
- }
+}
+
+#endif

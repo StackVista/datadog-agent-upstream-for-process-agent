@@ -4,15 +4,15 @@
 package ebpf
 
 type ConnTuple struct {
-	Saddr_h  uint64
-	Saddr_l  uint64
-	Daddr_h  uint64
-	Daddr_l  uint64
-	Sport    uint16
-	Dport    uint16
-	Netns    uint32
-	Pid      uint32
-	Metadata uint32
+	Saddr_h   uint64
+	Saddr_l   uint64
+	Daddr_h   uint64
+	Daddr_l   uint64
+	Sport     uint16
+	Dport     uint16
+	Netns     uint32
+	Metadata  uint32
+	Pad_cgo_0 [4]byte
 }
 type TCPStats struct {
 	Rtt               uint32
@@ -21,6 +21,10 @@ type TCPStats struct {
 	Initial_ack_seq   uint32
 	State_transitions uint16
 	Pad_cgo_0         [2]byte
+}
+type TCPSeq struct {
+	Seq     uint32
+	Ack_seq uint32
 }
 type ConnStats struct {
 	Sent_bytes     uint64
@@ -32,7 +36,8 @@ type ConnStats struct {
 	Recv_packets   uint64
 	Direction      uint8
 	Protocol_stack ProtocolStack
-	Pad_cgo_0      [3]byte
+	Pid            uint32
+	Pad_cgo_0      [4]byte
 }
 type Conn struct {
 	Tup             ConnTuple
@@ -105,9 +110,9 @@ const (
 )
 
 const BatchSize = 0x4
-const SizeofBatch = 0x210
+const SizeofBatch = 0x230
 
-const SizeofConn = 0x80
+const SizeofConn = 0x88
 
 type ClassificationProgram = uint32
 

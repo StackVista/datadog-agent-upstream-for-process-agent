@@ -117,6 +117,15 @@ func dumpMapsHandler(manager *manager.Manager, mapName string, currentMap *ebpf.
 			output.WriteString(spew.Sdump(key, value))
 		}
 
+	case probes.TCPAcceptSeqMap: // maps/tcp_accept_seq (BPF_MAP_TYPE_HASH), key ConnTuple, value TCPSeq
+		output.WriteString("Map: '" + mapName + "', key: 'ConnTuple', value: 'TCPSeq'\n")
+		iter := currentMap.Iterate()
+		var key ddebpf.ConnTuple
+		var value ddebpf.TCPSeq
+		for iter.Next(unsafe.Pointer(&key), unsafe.Pointer(&value)) {
+			output.WriteString(spew.Sdump(key, value))
+		}
+
 	case probes.ConnCloseBatchMap: // maps/conn_close_batch (BPF_MAP_TYPE_HASH), key C.__u32, value batch
 		output.WriteString("Map: '" + mapName + "', key: 'C.__u32', value: 'batch'\n")
 		iter := currentMap.Iterate()

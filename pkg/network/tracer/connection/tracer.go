@@ -440,7 +440,6 @@ func (t *tracer) Remove(conn *network.ConnectionStats) error {
 	t.removeTuple.Sport = conn.SPort
 	t.removeTuple.Dport = conn.DPort
 	t.removeTuple.Netns = conn.NetNS
-	t.removeTuple.Pid = conn.Pid
 	t.removeTuple.Saddr_l, t.removeTuple.Saddr_h = util.ToLowHigh(conn.Source)
 	t.removeTuple.Daddr_l, t.removeTuple.Daddr_h = util.ToLowHigh(conn.Dest)
 
@@ -467,8 +466,6 @@ func (t *tracer) Remove(conn *network.ConnectionStats) error {
 
 	removeConnection(conn)
 
-	// We have to remove the PID to remove the element from the TCP Map since we don't use the pid there
-	t.removeTuple.Pid = 0
 	if conn.Type == network.TCP {
 		// We can ignore the error for this map since it will not always contain the entry
 		_ = t.tcpStats.Delete(unsafe.Pointer(t.removeTuple))
@@ -603,10 +600,6 @@ func (t *tracer) getTCPRetransmits(tuple *netebpf.ConnTuple, seen map[netebpf.Co
 		return 0, false
 	}
 
-	// The PID isn't used as a key in the stats map, we will temporarily set it to 0 here and reset it when we're done
-	pid := tuple.Pid
-	tuple.Pid = 0
-
 	var retransmits uint32
 	if err := t.tcpRetransmits.Lookup(unsafe.Pointer(tuple), unsafe.Pointer(&retransmits)); err == nil {
 		// This is required to avoid (over)reporting retransmits for connections sharing the same socket.
@@ -618,7 +611,6 @@ func (t *tracer) getTCPRetransmits(tuple *netebpf.ConnTuple, seen map[netebpf.Co
 		}
 	}
 
-	tuple.Pid = pid
 	return retransmits, true
 }
 
@@ -633,7 +625,7 @@ func (t *tracer) getTCPStats(stats *netebpf.TCPStats, tuple *netebpf.ConnTuple) 
 
 func populateConnStats(stats *network.ConnectionStats, t *netebpf.ConnTuple, s *netebpf.ConnStats, ch *cookieHasher) {
 	*stats = network.ConnectionStats{
-		Pid:    t.Pid,
+		Pid:    s.Pid,
 		NetNS:  t.Netns,
 		Source: t.SourceAddress(),
 		Dest:   t.DestAddress(),
@@ -677,7 +669,7 @@ func populateConnStats(stats *network.ConnectionStats, t *netebpf.ConnTuple, s *
 	case netebpf.Outgoing:
 		stats.Direction = network.OUTGOING
 	default:
-		stats.Direction = network.OUTGOING
+		stats.Direction = network.NONE
 	}
 
 	if ch != nil {
@@ -696,7 +688,7 @@ func updateTCPStats(conn *network.ConnectionStats, tcpStats *netebpf.TCPStats, r
 		conn.Monotonic.TCPClosed = uint32(tcpStats.State_transitions >> netebpf.Close & 1)
 		conn.RTT = tcpStats.Rtt
 		conn.RTTVar = tcpStats.Rtt_var
-		if tcpStats.Initial_seq != 0 {
+		if tcpStats.Initial_seq != 0 || tcpStats.Initial_ack_seq != 0 {
 			conn.Initial_seq = tcpStats.Initial_seq
 			conn.Initial_ack_seq = tcpStats.Initial_ack_seq
 		}

@@ -407,12 +407,13 @@ func ConnectionSummary(c *ConnectionStats, names map[util.Address][]dns.Hostname
 
 	if c.Type == TCP {
 		str += fmt.Sprintf(
-			", %d retransmits (+%d), RTT %s (± %s), %d established (+%d), %d closed (+%d)",
+			", %d retransmits (+%d), RTT %s (± %s), %d established (+%d), %d closed (+%d), %d seq, %d ack",
 			c.Monotonic.Retransmits, c.Last.Retransmits,
 			time.Duration(c.RTT)*time.Microsecond,
 			time.Duration(c.RTTVar)*time.Microsecond,
 			c.Monotonic.TCPEstablished, c.Last.TCPEstablished,
 			c.Monotonic.TCPClosed, c.Last.TCPClosed,
+			c.Initial_seq, c.Initial_ack_seq,
 		)
 	}
 

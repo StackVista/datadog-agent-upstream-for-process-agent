@@ -44,6 +44,7 @@ typedef struct {
     __u64 recv_packets;
     __u8 direction;
     protocol_stack_t protocol_stack;
+    __u32 pid;
 } conn_stats_ts_t;
 
 // Connection flags
@@ -64,6 +65,11 @@ typedef struct {
     // Bit mask containing all TCP state transitions tracked by our tracer
     __u16 state_transitions;
 } tcp_stats_t;
+
+typedef struct {
+    __u32 initial_seq; // The seq value communicated as the synack response
+    __u32 initial_ack_seq; // The ack_seq value communicated as the synack response
+} tcp_seq_t;
 
 // Full data for a tcp connection
 typedef struct {

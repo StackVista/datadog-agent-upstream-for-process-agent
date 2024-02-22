@@ -216,17 +216,17 @@ static __always_inline int sk_buff_get_tcp_transport(struct sk_buff *skb, conn_t
         tup->dport = bpf_ntohs(tcph.dest);
     }
 
-    __u8 tcp_flags = *(((__u8*)(&tcph)) + TCP_FLAGS_OFFSET);
+    // __u8 tcp_flags = *(((__u8*)(&tcph)) + TCP_FLAGS_OFFSET);
 
-    if (tcp_flags & TCPHDR_SYN && tcp_flags & TCPHDR_ACK) {
+    // if (tcp_flags & TCPHDR_SYN && tcp_flags & TCPHDR_ACK) {
         *seq = bpf_ntohl(tcph.seq);
         *ack_seq = bpf_ntohl(tcph.ack_seq);
         return 0;
-    }
+    // }
 
 
-    log_debug("tcp flags did not match SYN and ACK flags");
-    return -1;
+    // log_debug("tcp flags did not match SYN and ACK flags");
+    // return -1;
 }
 
 
