@@ -57,10 +57,10 @@ func NewClientWithClientOptions(clientOptions *options.ClientOptions, timeout ti
 func NewClient(opts Options) (*Client, error) {
 	clientOptions := options.Client().ApplyURI(fmt.Sprintf("mongodb://%s", opts.ServerAddress))
 	if opts.Username == "" {
-		opts.Username = "user"
+		opts.Username = User
 	}
 	if opts.Password == "" {
-		opts.Password = "pass"
+		opts.Password = Pass
 	}
 	creds := options.Credential{
 		Username:   opts.Username,
