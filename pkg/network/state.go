@@ -1206,9 +1206,8 @@ func (a *connectionAggregator) Aggregate(c *ConnectionStats) bool {
 		}
 		aggrConn.ProtocolStack.MergeWith(c.ProtocolStack)
 
-		if c.Initial_seq != 0 || c.Initial_ack_seq != 0 {
-			aggrConn.Initial_seq = c.Initial_seq
-			aggrConn.Initial_ack_seq = c.Initial_ack_seq
+		if c.InitialTCPSeq.Seq != 0 || c.InitialTCPSeq.Ack_seq != 0 {
+			aggrConn.InitialTCPSeq = c.InitialTCPSeq
 		}
 
 		return true
@@ -1256,9 +1255,8 @@ func (ns *networkState) mergeConnectionStats(a, b *ConnectionStats) (collision b
 
 	a.ProtocolStack.MergeWith(b.ProtocolStack)
 
-	if b.Initial_seq != 0 || b.Initial_ack_seq != 0 {
-		a.Initial_seq = b.Initial_seq
-		a.Initial_ack_seq = b.Initial_ack_seq
+	if b.InitialTCPSeq.Seq != 0 || b.InitialTCPSeq.Ack_seq != 0 {
+		a.InitialTCPSeq = b.InitialTCPSeq
 	}
 
 	return false

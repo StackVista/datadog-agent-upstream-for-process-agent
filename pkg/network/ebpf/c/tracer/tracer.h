@@ -56,20 +56,19 @@ typedef enum
 } conn_flags_t;
 
 typedef struct {
+    __u32 seq; // The seq value communicated as the synack response
+    __u32 ack_seq; // The ack_seq value communicated as the synack response
+} tcp_seq_t;
+
+typedef struct {
     __u32 rtt;
     __u32 rtt_var;
 
-    __u32 initial_seq; // The seq value communicated as the synack response
-    __u32 initial_ack_seq; // The ack_seq value communicated as the synack response
+    tcp_seq_t initial_tcp_seq;
 
     // Bit mask containing all TCP state transitions tracked by our tracer
     __u16 state_transitions;
 } tcp_stats_t;
-
-typedef struct {
-    __u32 initial_seq; // The seq value communicated as the synack response
-    __u32 initial_ack_seq; // The ack_seq value communicated as the synack response
-} tcp_seq_t;
 
 // Full data for a tcp connection
 typedef struct {

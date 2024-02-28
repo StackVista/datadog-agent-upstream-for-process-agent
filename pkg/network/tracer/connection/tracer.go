@@ -688,9 +688,9 @@ func updateTCPStats(conn *network.ConnectionStats, tcpStats *netebpf.TCPStats, r
 		conn.Monotonic.TCPClosed = uint32(tcpStats.State_transitions >> netebpf.Close & 1)
 		conn.RTT = tcpStats.Rtt
 		conn.RTTVar = tcpStats.Rtt_var
-		if tcpStats.Initial_seq != 0 || tcpStats.Initial_ack_seq != 0 {
-			conn.Initial_seq = tcpStats.Initial_seq
-			conn.Initial_ack_seq = tcpStats.Initial_ack_seq
+		if tcpStats.Initial_tcp_seq.Seq != 0 || tcpStats.Initial_tcp_seq.Ack_seq != 0 {
+			conn.InitialTCPSeq.Seq = tcpStats.Initial_tcp_seq.Seq
+			conn.InitialTCPSeq.Ack_seq = tcpStats.Initial_tcp_seq.Ack_seq
 		}
 	}
 }

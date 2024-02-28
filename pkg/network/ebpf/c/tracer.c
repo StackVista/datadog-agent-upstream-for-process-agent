@@ -891,7 +891,7 @@ int kprobe__tcp_finish_connect(struct pt_regs *ctx) {
 
     tcp_stats_t seq_stats = { };
 
-    if (!sk_buff_get_tcp_transport(skb, NULL, &(seq_stats.initial_seq), &(seq_stats.initial_ack_seq))) {
+    if (!sk_buff_get_tcp_transport(skb, NULL, &(seq_stats.initial_tcp_seq))) {
         update_tcp_stats(&t, seq_stats);   
     }
 
@@ -931,13 +931,13 @@ int kprobe__ip_build_and_send_pkt(struct pt_regs *ctx) {
 
     tcp_seq_t stats = { };
 
-    if (sk_buff_get_tcp_transport(skb, &t, &stats.initial_seq, &stats.initial_ack_seq)) {
+    if (sk_buff_get_tcp_transport(skb, &t, &stats)) {
         return 0;
     }
 
     bpf_map_update_with_telemetry(tcp_accept_seq, &t, &stats, BPF_ANY);
 
-    log_debug("kprobe/ip_build_and_send_pkt: seq=%d, ack = %d\n", stats.initial_seq, stats.initial_ack_seq);
+    log_debug("kprobe/ip_build_and_send_pkt: seq=%d, ack = %d\n", stats.seq, stats.ack_seq);
 
     return 0;
 }
@@ -963,7 +963,7 @@ int kretprobe__inet_csk_accept(struct pt_regs *ctx) {
     log_debug("found seq: %p", tcp_seq);
 
     if (tcp_seq) {
-        tcp_stats_t seq_stats = { .initial_seq = tcp_seq->initial_seq, .initial_ack_seq = tcp_seq->initial_ack_seq };
+        tcp_stats_t seq_stats = { .initial_tcp_seq = *tcp_seq };
         update_tcp_stats(&t, seq_stats);   
     }
     

@@ -17,8 +17,7 @@ type ConnTuple struct {
 type TCPStats struct {
 	Rtt               uint32
 	Rtt_var           uint32
-	Initial_seq       uint32
-	Initial_ack_seq   uint32
+	Initial_tcp_seq   TCPSeq
 	State_transitions uint16
 	Pad_cgo_0         [2]byte
 }

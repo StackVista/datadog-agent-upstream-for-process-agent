@@ -319,12 +319,12 @@ func (s *TracerSuite) TestTCPInitialSeqActive() {
 	require.True(t, ok)
 
 	// Make sure seq/ack etc are set and equal
-	assert.NotEqualValues(t, 0, int(inConn.Initial_seq))
-	assert.NotEqualValues(t, 0, int(outConn.Initial_seq))
-	assert.NotEqualValues(t, 0, int(inConn.Initial_ack_seq))
-	assert.NotEqualValues(t, 0, int(outConn.Initial_ack_seq))
-	assert.EqualValues(t, int(inConn.Initial_seq), int(outConn.Initial_seq))
-	assert.EqualValues(t, int(inConn.Initial_ack_seq), int(outConn.Initial_ack_seq))
+	assert.NotEqualValues(t, 0, int(inConn.InitialTCPSeq.Seq))
+	assert.NotEqualValues(t, 0, int(outConn.InitialTCPSeq.Seq))
+	assert.NotEqualValues(t, 0, int(inConn.InitialTCPSeq.Ack_seq))
+	assert.NotEqualValues(t, 0, int(outConn.InitialTCPSeq.Ack_seq))
+	assert.EqualValues(t, int(inConn.InitialTCPSeq.Seq), int(outConn.InitialTCPSeq.Seq))
+	assert.EqualValues(t, int(inConn.InitialTCPSeq.Ack_seq), int(outConn.InitialTCPSeq.Ack_seq))
 }
 
 func (s *TracerSuite) TestTCPInitialSeqClosed() {
@@ -356,12 +356,12 @@ func (s *TracerSuite) TestTCPInitialSeqClosed() {
 	require.True(t, ok)
 
 	// Make sure seq/ack etc are set and equal
-	assert.NotEqualValues(t, 0, int(inConn.Initial_seq))
-	assert.NotEqualValues(t, 0, int(outConn.Initial_seq))
-	assert.NotEqualValues(t, 0, int(inConn.Initial_ack_seq))
-	assert.NotEqualValues(t, 0, int(outConn.Initial_ack_seq))
-	assert.EqualValues(t, int(inConn.Initial_seq), int(outConn.Initial_seq))
-	assert.EqualValues(t, int(inConn.Initial_ack_seq), int(outConn.Initial_ack_seq))
+	assert.NotEqualValues(t, 0, int(inConn.InitialTCPSeq.Seq))
+	assert.NotEqualValues(t, 0, int(outConn.InitialTCPSeq.Seq))
+	assert.NotEqualValues(t, 0, int(inConn.InitialTCPSeq.Ack_seq))
+	assert.NotEqualValues(t, 0, int(outConn.InitialTCPSeq.Ack_seq))
+	assert.EqualValues(t, int(inConn.InitialTCPSeq.Seq), int(outConn.InitialTCPSeq.Seq))
+	assert.EqualValues(t, int(inConn.InitialTCPSeq.Ack_seq), int(outConn.InitialTCPSeq.Ack_seq))
 }
 
 func (s *TracerSuite) TestTCPMiscount() {

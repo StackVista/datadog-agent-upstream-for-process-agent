@@ -160,12 +160,12 @@ static __always_inline void update_tcp_stats(conn_tuple_t *t, tcp_stats_t stats)
         val->state_transitions |= stats.state_transitions;
     }
 
-    if (stats.initial_seq != 0) {
-        val->initial_seq = stats.initial_seq;
+    if (stats.initial_tcp_seq.seq != 0) {
+        val->initial_tcp_seq.seq = stats.initial_tcp_seq.seq;
     }
 
-    if (stats.initial_ack_seq != 0) {
-        val->initial_ack_seq = stats.initial_ack_seq;
+    if (stats.initial_tcp_seq.ack_seq != 0) {
+        val->initial_tcp_seq.ack_seq = stats.initial_tcp_seq.ack_seq;
     }
 }
 

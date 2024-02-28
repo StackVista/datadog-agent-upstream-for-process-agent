@@ -120,6 +120,12 @@ func (e EphemeralPortType) String() string {
 	}
 }
 
+// TCPSeq represnts tcp sequence information (seq/ack)
+type TCPSeq struct {
+	Seq     uint32
+	Ack_seq uint32
+}
+
 // BufferedData encapsulates data whose underlying memory can be recycled
 type BufferedData struct {
 	Conns  []ConnectionStats
@@ -265,8 +271,7 @@ type ConnectionStats struct {
 	RTT    uint32 // Stored in µs
 	RTTVar uint32
 
-	Initial_seq     uint32
-	Initial_ack_seq uint32
+	InitialTCPSeq TCPSeq
 
 	Pid   uint32
 	NetNS uint32
@@ -413,7 +418,7 @@ func ConnectionSummary(c *ConnectionStats, names map[util.Address][]dns.Hostname
 			time.Duration(c.RTTVar)*time.Microsecond,
 			c.Monotonic.TCPEstablished, c.Last.TCPEstablished,
 			c.Monotonic.TCPClosed, c.Last.TCPClosed,
-			c.Initial_seq, c.Initial_ack_seq,
+			c.InitialTCPSeq.Seq, c.InitialTCPSeq.Ack_seq,
 		)
 	}
 

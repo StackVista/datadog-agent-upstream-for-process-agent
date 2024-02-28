@@ -6,6 +6,7 @@
 #include "bpf_helpers_custom.h"
 #include "bpf_endian.h"
 #include "bpf_builtins.h"
+#include "tracer/tracer.h"
 
 #ifndef COMPILE_CORE
 #include <linux/skbuff.h>
@@ -190,7 +191,7 @@ static __always_inline int sk_buff_to_tuple(struct sk_buff *skb, conn_tuple_t *t
 }
 
 // parse a kernel skb which has transport set into a conn tuple
-static __always_inline int sk_buff_get_tcp_transport(struct sk_buff *skb, conn_tuple_t *tup, __u32 *seq, __u32 *ack_seq) {
+static __always_inline int sk_buff_get_tcp_transport(struct sk_buff *skb, conn_tuple_t *tup, tcp_seq_t *tcp_seq) {
     unsigned char *head = sk_buff_head(skb);
     if (!head) {
         log_debug("ERR reading head\n");
@@ -219,8 +220,8 @@ static __always_inline int sk_buff_get_tcp_transport(struct sk_buff *skb, conn_t
     __u8 tcp_flags = *(((__u8*)(&tcph)) + TCP_FLAGS_OFFSET);
 
     if (tcp_flags & TCPHDR_SYN && tcp_flags & TCPHDR_ACK) {
-        *seq = bpf_ntohl(tcph.seq);
-        *ack_seq = bpf_ntohl(tcph.ack_seq);
+        tcp_seq->seq = bpf_ntohl(tcph.seq);
+        tcp_seq->ack_seq = bpf_ntohl(tcph.ack_seq);
         return 0;
     }
 
