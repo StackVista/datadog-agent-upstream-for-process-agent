@@ -847,10 +847,11 @@ func (ns *networkState) mergeConnections(id string, active []ConnectionStats) (_
 
 		ns.updateConnWithStats(client, cookie, closedConn)
 
-		if closedConn.Last.IsZero() {
-			// not reporting an "empty" connection
-			return false
-		}
+		// [STS]: Disabled this because we always want all connection info
+		// if closedConn.Last.IsZero() {
+		// 	// not reporting an "empty" connection
+		// 	return false
+		// }
 
 		return true
 	})
@@ -868,10 +869,11 @@ func (ns *networkState) mergeConnections(id string, active []ConnectionStats) (_
 
 		newStats[c.Cookie] = client.stats[c.Cookie]
 
-		if c.Last.IsZero() {
-			// not reporting an "empty" connection
-			return false
-		}
+		// [STS]: Disabled this because we always want all connection info
+		// if c.Last.IsZero() {
+		// 	// not reporting an "empty" connection
+		// 	return false
+		// }
 
 		return true
 	})
@@ -1168,6 +1170,8 @@ func (a *connectionAggregator) canAggregateProtocolStack(p1, p2 protocols.Stack)
 //   - the protocol stack is all unknown OR
 //   - the other connection's protocol stack is unknown
 //   - the other connection's protocol stack is not unknown AND equal
+//
+// [STS] - the initial_seq or initial_ack_seq are different
 func (a *connectionAggregator) Aggregate(c *ConnectionStats) bool {
 	key := string(c.ByteKey(a.buf))
 	aggrConns, ok := a.conns[key]
@@ -1201,6 +1205,10 @@ func (a *connectionAggregator) Aggregate(c *ConnectionStats) bool {
 			aggrConn.IPTranslation = c.IPTranslation
 		}
 		aggrConn.ProtocolStack.MergeWith(c.ProtocolStack)
+
+		if c.InitialTCPSeq.Seq != 0 || c.InitialTCPSeq.Ack_seq != 0 {
+			aggrConn.InitialTCPSeq = c.InitialTCPSeq
+		}
 
 		return true
 	}
@@ -1246,6 +1254,10 @@ func (ns *networkState) mergeConnectionStats(a, b *ConnectionStats) (collision b
 	}
 
 	a.ProtocolStack.MergeWith(b.ProtocolStack)
+
+	if b.InitialTCPSeq.Seq != 0 || b.InitialTCPSeq.Ack_seq != 0 {
+		a.InitialTCPSeq = b.InitialTCPSeq
+	}
 
 	return false
 }

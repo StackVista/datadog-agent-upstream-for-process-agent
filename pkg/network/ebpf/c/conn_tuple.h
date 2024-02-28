@@ -29,8 +29,13 @@ typedef struct {
     __u16 sport;
     __u16 dport;
     __u32 netns;
-    __u32 pid;
-    // Metadata description:
+    // [STS] We dropped the pid from here, there is a practical reason and fundamental:
+    // We found connections being passed around between processes (forking) which was causing multiple connetions with the same tuple,
+    // and incoing/outgoing and seq/ack/seq being lost.
+    // Fundamentally speaking: a conn_tuple does not need a pid for uniqueness. A tuple is unique within the netns, and can be passed around,
+    // so the pid info should not be in the key.
+
+    // Metadata des\cription:
     // First bit indicates if the connection is TCP (1) or UDP (0)
     // Second bit indicates if the connection is V6 (1) or V4 (0)
     __u32 metadata; // This is that big because it seems that we atleast need a 32-bit aligned struct

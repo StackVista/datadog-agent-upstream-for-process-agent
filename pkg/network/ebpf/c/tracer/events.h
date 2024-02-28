@@ -19,7 +19,6 @@
 
 static __always_inline void clean_protocol_classification(conn_tuple_t *tup) {
     conn_tuple_t conn_tuple = *tup;
-    conn_tuple.pid = 0;
     conn_tuple.netns = 0;
     normalize_tuple(&conn_tuple);
     delete_protocol_stack(&conn_tuple, NULL, FLAG_TCP_CLOSE_DELETION);
@@ -49,16 +48,13 @@ static __always_inline void cleanup_conn(void *ctx, conn_tuple_t *tup, struct so
         tst = bpf_map_lookup_elem(&tcp_stats, &(conn.tup));
         if (tst) {
             conn.tcp_stats = *tst;
-            bpf_map_delete_elem(&tcp_stats, &(conn.tup));
         }
 
-        conn.tup.pid = 0;
         retrans = bpf_map_lookup_elem(&tcp_retransmits, &(conn.tup));
         if (retrans) {
             conn.tcp_retransmits = *retrans;
             bpf_map_delete_elem(&tcp_retransmits, &(conn.tup));
         }
-        conn.tup.pid = tup->pid;
 
         conn.tcp_stats.state_transitions |= (1 << TCP_CLOSE);
     }
@@ -133,13 +129,18 @@ static __always_inline void flush_conn_close_if_full(void *ctx) {
         // Here we copy the batch data to a variable allocated in the eBPF stack
         // This is necessary for older Kernel versions only (we validated this behavior on 4.4.0),
         // since you can't directly write a map entry to the perf buffer.
-        batch_t batch_copy = {};
-        bpf_memcpy(&batch_copy, batch_ptr, sizeof(batch_copy));
+        // [STS] We do not care for kernels older than 4.4, so we'll get rid of this copy (which broke when extending the tcp_stats_t structure)
+        // batch_t batch_copy = {};
+        // bpf_memcpy(&batch_copy, batch_ptr, sizeof(batch_copy));
+        // batch_ptr->len = 0;
+        // batch_ptr->id++;
+
+        // we cannot use the telemetry macro here because of stack size constraints
+        bpf_perf_event_output(ctx, &conn_close_event, cpu, batch_ptr, sizeof(*batch_ptr));
+
         batch_ptr->len = 0;
         batch_ptr->id++;
 
-        // we cannot use the telemetry macro here because of stack size constraints
-        bpf_perf_event_output(ctx, &conn_close_event, cpu, &batch_copy, sizeof(batch_copy));
     }
 }
 

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __MONGO_MAPS_H
+#define __MONGO_MAPS_H
 
 #include "map-defs.h"
 
@@ -18,3 +19,5 @@ BPF_LRU_MAP(mongo_request_timestamps, mongo_key, __u64, 1)
 // This map can be pretty small. Its may happen then that we drop an entry during 
 // classification, but this is fine, the affected connection will just get more tries.
 BPF_LRU_MAP(mongo_connection_classification_tries, conn_tuple_t, __u32, 1)
+
+#endif

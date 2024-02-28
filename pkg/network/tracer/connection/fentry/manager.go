@@ -22,6 +22,7 @@ func initManager(mgr *manager.Manager, config *config.Config, closedHandler *ebp
 		{Name: probes.ConnMap},
 		{Name: probes.TCPStatsMap},
 		{Name: probes.TCPConnectSockPidMap},
+		{Name: probes.TCPAcceptSeqMap},
 		{Name: probes.ConnCloseBatchMap},
 		{Name: "udp_recv_sock"},
 		{Name: "udpv6_recv_sock"},

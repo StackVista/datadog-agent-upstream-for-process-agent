@@ -66,7 +66,6 @@ static __always_inline void update_protocol_classification_information(conn_tupl
     // The classifier is a socket filter and there we are not accessible for pid and netns.
     // The key is based of the source & dest addresses and ports, and the metadata.
     conn_tuple_copy.netns = 0;
-    conn_tuple_copy.pid = 0;
     normalize_tuple(&conn_tuple_copy);
 
     protocol_stack_t *protocol_stack = __get_protocol_stack(&conn_tuple_copy);
@@ -86,7 +85,7 @@ static __always_inline void update_protocol_classification_information(conn_tupl
 
 // update_conn_stats update the connection metadata : protocol, tags, timestamp, direction, packets, bytes sent and received
 static __always_inline void update_conn_stats(conn_tuple_t *t, size_t sent_bytes, size_t recv_bytes, u64 ts, conn_direction_t dir,
-    __u32 packets_out, __u32 packets_in, packet_count_increment_t segs_type, struct sock *sk) {
+    __u32 packets_out, __u32 packets_in, packet_count_increment_t segs_type, struct sock *sk, u64 pid_tgid) {
     conn_stats_ts_t *val = NULL;
     val = get_conn_stats(t, sk);
     if (!val) {
@@ -118,6 +117,10 @@ static __always_inline void update_conn_stats(conn_tuple_t *t, size_t sent_bytes
         }
     }
     val->timestamp = ts;
+
+    if (!val->pid) {
+        val->pid = pid_tgid >> 32;
+    }
 
     if (dir != CONN_DIRECTION_UNKNOWN) {
         val->direction = dir;
@@ -156,19 +159,26 @@ static __always_inline void update_tcp_stats(conn_tuple_t *t, tcp_stats_t stats)
     if (stats.state_transitions > 0) {
         val->state_transitions |= stats.state_transitions;
     }
+
+    if (stats.initial_tcp_seq.seq != 0) {
+        val->initial_tcp_seq.seq = stats.initial_tcp_seq.seq;
+    }
+
+    if (stats.initial_tcp_seq.ack_seq != 0) {
+        val->initial_tcp_seq.ack_seq = stats.initial_tcp_seq.ack_seq;
+    }
 }
 
 static __always_inline int handle_message(conn_tuple_t *t, size_t sent_bytes, size_t recv_bytes, conn_direction_t dir,
-    __u32 packets_out, __u32 packets_in, packet_count_increment_t segs_type, struct sock *sk) {
+    __u32 packets_out, __u32 packets_in, packet_count_increment_t segs_type, struct sock *sk, __u64 pid_tgid) {
     u64 ts = bpf_ktime_get_ns();
-    update_conn_stats(t, sent_bytes, recv_bytes, ts, dir, packets_out, packets_in, segs_type, sk);
+    update_conn_stats(t, sent_bytes, recv_bytes, ts, dir, packets_out, packets_in, segs_type, sk, pid_tgid);
     return 0;
 }
 
 static __always_inline int handle_retransmit(struct sock *sk, int count) {
     conn_tuple_t t = {};
-    u64 zero = 0;
-    if (!read_conn_tuple(&t, sk, zero, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&t, sk, CONN_TYPE_TCP)) {
         return 0;
     }
 
@@ -225,14 +235,13 @@ static __always_inline int handle_skb_consume_udp(struct sock *sk, struct sk_buf
     flip_tuple(&t);
 
     log_debug("skb_consume_udp: bytes=%d\n", data_len);
-    t.pid = pid_tgid >> 32;
     t.netns = get_netns_from_sock(sk);
-    return handle_message(&t, 0, data_len, CONN_DIRECTION_UNKNOWN, 0, 1, PACKET_COUNT_INCREMENT, sk);
+    return handle_message(&t, 0, data_len, CONN_DIRECTION_UNKNOWN, 0, 1, PACKET_COUNT_INCREMENT, sk, pid_tgid);
 }
 
 static __always_inline int handle_tcp_recv(u64 pid_tgid, struct sock *skp, int recv) {
     conn_tuple_t t = {};
-    if (!read_conn_tuple(&t, skp, pid_tgid, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&t, skp, CONN_TYPE_TCP)) {
         return 0;
     }
 
@@ -242,7 +251,7 @@ static __always_inline int handle_tcp_recv(u64 pid_tgid, struct sock *skp, int r
     __u32 packets_out = 0;
     get_tcp_segment_counts(skp, &packets_in, &packets_out);
 
-    return handle_message(&t, 0, recv, CONN_DIRECTION_UNKNOWN, packets_out, packets_in, PACKET_COUNT_ABSOLUTE, skp);
+    return handle_message(&t, 0, recv, CONN_DIRECTION_UNKNOWN, packets_out, packets_in, PACKET_COUNT_ABSOLUTE, skp, pid_tgid);
 }
 
 #endif // __TRACER_STATS_H
