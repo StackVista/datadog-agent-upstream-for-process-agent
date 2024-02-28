@@ -48,7 +48,6 @@ static __always_inline void cleanup_conn(void *ctx, conn_tuple_t *tup, struct so
         tst = bpf_map_lookup_elem(&tcp_stats, &(conn.tup));
         if (tst) {
             conn.tcp_stats = *tst;
-            bpf_map_delete_elem(&tcp_stats, &(conn.tup));
         }
 
         retrans = bpf_map_lookup_elem(&tcp_retransmits, &(conn.tup));

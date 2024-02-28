@@ -14,7 +14,7 @@ BPF_HASH_MAP(conn_stats, conn_tuple_t, conn_stats_ts_t, 0)
 /* This is a key/value store with the keys being a conn_tuple_t
  * and the values being a tcp_stats_t *.
  */
-BPF_HASH_MAP(tcp_stats, conn_tuple_t, tcp_stats_t, 0)
+BPF_LRU_MAP(tcp_stats, conn_tuple_t, tcp_stats_t, 0)
 
 /*
  * Hash map to store conn_tuple_t to retransmits. We use a separate map

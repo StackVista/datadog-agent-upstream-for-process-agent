@@ -847,10 +847,11 @@ func (ns *networkState) mergeConnections(id string, active []ConnectionStats) (_
 
 		ns.updateConnWithStats(client, cookie, closedConn)
 
-		if closedConn.Last.IsZero() {
-			// not reporting an "empty" connection
-			return false
-		}
+		// [STS]: Disabled this because we always want all connection info
+		// if closedConn.Last.IsZero() {
+		// 	// not reporting an "empty" connection
+		// 	return false
+		// }
 
 		return true
 	})
@@ -868,10 +869,11 @@ func (ns *networkState) mergeConnections(id string, active []ConnectionStats) (_
 
 		newStats[c.Cookie] = client.stats[c.Cookie]
 
-		if c.Last.IsZero() {
-			// not reporting an "empty" connection
-			return false
-		}
+		// [STS]: Disabled this because we always want all connection info
+		// if c.Last.IsZero() {
+		// 	// not reporting an "empty" connection
+		// 	return false
+		// }
 
 		return true
 	})
@@ -1206,7 +1208,7 @@ func (a *connectionAggregator) Aggregate(c *ConnectionStats) bool {
 
 		if c.Initial_seq != 0 || c.Initial_ack_seq != 0 {
 			aggrConn.Initial_seq = c.Initial_seq
-			aggrConn.Initial_ack_seq = c.Initial_seq
+			aggrConn.Initial_ack_seq = c.Initial_ack_seq
 		}
 
 		return true
