@@ -10,16 +10,6 @@
 #include "protocols/amqp/parsing-maps.h"
 #include "protocols/classification/common.h"
 
-// Generalized function to load data from either a packet or a user-space buffer.
-// Only set either skb or from, not both.
-static __always_inline int amqp_load_data(struct __sk_buff* skb, const void *from, __u32 offset, void *to, __u32 len) {
-    if (skb) {
-        return bpf_skb_load_bytes_with_telemetry(skb, offset, to, len);
-    } else {
-        return bpf_probe_read_user(to, len, from + offset);
-    }
-}
-
 static __always_inline int amqp_process(conn_tuple_t *tup, const char *buf, struct __sk_buff* skb, __u32 size, __u32 offset) {
     // Here is the idea:
     // Since AMQP messages can be very small, we must assume multiple messages can be in the same packet.
