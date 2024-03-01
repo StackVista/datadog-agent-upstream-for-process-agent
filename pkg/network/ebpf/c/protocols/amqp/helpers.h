@@ -51,26 +51,37 @@ static __always_inline bool is_amqp(conn_tuple_t *tup, const char* buf, __u32 bu
     // We will use the following heuristic to determine if the packet is an AMQP message:
     // The first bytes of the packet will be parsed as an AMQP frame header, then we check for the frame end marker.
     // If the frame end marker is found, we assume that the packet is an AMQP message.
+    //
+    // For random data to accidentally pass the test, it must
+    // 1. Specify a 32bit length within the package size (very unlikely, chance of 1500/2^32)
+    // 2. Have the frame end marker at that particular location (unlikely, 1/256)
+
     if (buf_size < sizeof(amqp_frame_header_t)) {
-        log_debug("is_amqp: buffer is too small to contain an AMQP frame header\n");
         return false;
     }
 
     amqp_frame_header_t *header = (amqp_frame_header_t *)buf;
-    __u32 frame_size = bpf_ntohl(header->length) + sizeof(amqp_frame_header_t);
-
-    if (frame_size > 1500) {
-        // This may still be a valid AMQP message, but we cannot check that here.
-        log_debug("is_amqp: frame size %d is too large for TCP packet\n", frame_size);
-        return false;
-    }
+    __maybe_unused __u32 frame_size = bpf_ntohl(header->length) + sizeof(amqp_frame_header_t);
 
     if (frame_size > buf_size) {
-        log_debug("is_amqp: buffer is too small to check for frame end marker\n");
+        // This is not necessarily an error, as we may have received a partial frame, but we
+        // cannot look into the next TCP packet to search for the frame end marker.
         return false;
     }
 
-    return buf[frame_size] == '\xce';
+    log_debug("is_amqp: frame size %u", frame_size);
+
+    const unsigned char frame_end_marker = '\xCE';
+    unsigned char last_byte = 0;
+    long read_error = bpf_probe_read_user(&last_byte, sizeof(last_byte), buf + frame_size);
+
+    if (read_error != 0) {
+        log_debug("is_amqp: failed to read the frame end marker. Error: %d\n", read_error);
+    } else {
+        log_debug("is_amqp: last byte %x", last_byte);
+    }
+
+    return last_byte == frame_end_marker;
 }
 
 #endif
