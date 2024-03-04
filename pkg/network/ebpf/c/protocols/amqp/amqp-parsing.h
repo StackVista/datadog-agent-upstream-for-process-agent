@@ -3,6 +3,7 @@
 
 
 #include "bpf_endian.h"
+#include "bpf_unified_buffer_access.h"
 
 #include "protocols/amqp/defs.h"
 #include "protocols/amqp/types.h"
@@ -10,7 +11,8 @@
 #include "protocols/amqp/parsing-maps.h"
 #include "protocols/classification/common.h"
 
-static __always_inline int amqp_process(conn_tuple_t *tup, const char *buf, struct __sk_buff* skb, __u32 size, __u32 offset) {
+
+static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc_t *buf) {
     // Here is the idea:
     // Since AMQP messages can be very small, we must assume multiple messages can be in the same packet.
     // There are different frame types, of which we are only interested in type 1, the method frame.
@@ -23,7 +25,7 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const char *buf, stru
     //  5. If it is not, skip to the next frame by advancing the offset by the length of the frame.
     //  6. If we are at the end of the packet, we are done.
 
-    __u32 current_frame_offset = offset;
+    __u32 current_frame_offset = 0;
     __u32 current_offset = current_frame_offset;
     __u32 size_to_load = sizeof(amqp_frame_header_t);
     const u32 zero = 0;
@@ -46,18 +48,22 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const char *buf, stru
     // We need to limit ourselves here as the eBPF verifier will otherwise go crazy.
     __u16 number_of_frames_processed = 0;
 
-    while (current_frame_offset + size_to_load < size && number_of_frames_processed < 200) {
+    while (number_of_frames_processed < 200) {
         current_offset = current_frame_offset;
         number_of_frames_processed++;
 
-        if (amqp_load_data(skb, buf, current_offset, &heap->header, size_to_load) != 0) {
+        if (bpf_load_data(buf, current_offset, &heap->header, size_to_load) != 0) {
             log_debug("process_amqp: unable to load %d bytes from header\n", size_to_load);
-            return 0;
+            break;
         }
 
         __u32 frame_length = bpf_ntohl(heap->header.length) + sizeof(amqp_frame_header_t);
         __u8 end_of_frame = 0;
-        amqp_load_data(skb, buf, current_offset + frame_length, &end_of_frame, 1);
+        
+        if (bpf_load_data(buf, current_offset + frame_length, &end_of_frame, 1) != 0) {
+            log_debug("process_amqp: unable to load 1 byte from end of frame\n");
+            break;
+        }
 
         if (end_of_frame != 0xce) {
             log_debug("process_amqp: No 0xce marker after frame\n");
@@ -74,7 +80,7 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const char *buf, stru
         }
 
         // Load more data to get class and method
-        if (amqp_load_data(skb, buf, current_offset, &heap->method, sizeof(amqp_method_identifier_t)) != 0) {
+        if (bpf_load_data(buf, current_offset, &heap->method, sizeof(amqp_method_identifier_t)) != 0) {
             log_debug("process_amqp: unable to load method identifier\n", size_to_load);
             current_frame_offset += frame_length;
             continue;
@@ -89,7 +95,7 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const char *buf, stru
         if (class == AMQP_BASIC_CLASS && method == AMQP_METHOD_DELIVER) { 
             // The basic.deliver method, which is used to send messages to consumers.
             // This message type has a variable-length consumer tag, delivery tag, and flags we need to skip.
-            amqp_load_data(skb, buf, current_offset, &heap->string, 1);
+            bpf_load_data(buf, current_offset, &heap->string, 1);
             current_offset += 1 + heap->string.length; // Jump over the consumer tag
             current_offset += sizeof(__u64); // Jump over the delivery tag
             current_offset += sizeof(__u8); // Jump over the flags
@@ -110,7 +116,7 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const char *buf, stru
             // From this message, we extract the reply code only.
             // There will only ever be one reply code per connection, as the connection will be closed after this message.
             // Therefore, we can safely set it here without checking for previous values on the same connection.
-            amqp_load_data(skb, buf, current_offset, &heap->transaction.reply_code, 1);
+            bpf_load_data(buf, current_offset, &heap->transaction.reply_code, 1);
             current_frame_offset += frame_length;
             continue;
         } else {
@@ -122,20 +128,20 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const char *buf, stru
         // We are interested in this message, load the exchange name and routing key.
         // The offset is now at the exchange name.
         bpf_memset(heap->string.data, 0, 256);
-        amqp_load_data(skb, buf, current_offset, &heap->string, 1);
+        bpf_load_data(buf, current_offset, &heap->string, 1);
 
         // If we have an exchange name, use that to identify the metrics.
         // If not, use the routing_key, which will then be a queue name.
         bool is_exchange = 0;
         if (heap->string.length != 0) {
             is_exchange = 1;
-            amqp_load_data(skb, buf, current_offset, &heap->string, heap->string.length + 1);
+            bpf_load_data(buf, current_offset, &heap->string, heap->string.length + 1);
         } else {
             is_exchange = 0;
             current_offset += 1 + heap->string.length; // Jump over the exchange name
-            amqp_load_data(skb, buf, current_offset, &heap->string, 1);
+            bpf_load_data(buf, current_offset, &heap->string, 1);
             bpf_memset(heap->string.data, 0, 256);
-            amqp_load_data(skb, buf, current_offset, &heap->string, heap->string.length + 1);
+            bpf_load_data(buf, current_offset, &heap->string, heap->string.length + 1);
         }
 
         if (heap->transaction.exchange_or_queue[0] == 0) {
@@ -167,10 +173,6 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const char *buf, stru
         amqp_batch_enqueue(&heap->transaction);
     }
 
-    if (current_frame_offset < size) {
-        log_debug("process_amqp: processed %d frames, but there is still data left in the packet.\n", number_of_frames_processed);
-    }
-
     return 0;
 }
 
@@ -188,7 +190,13 @@ int uprobe__amqp_process(struct pt_regs *ctx) {
         return 0;
     }
 
-    return amqp_process(&args->tup, args->buffer_ptr, NULL, args->len, 0);
+    bpf_buffer_desc_t buf = {
+        .type = BPF_BUFFER_TYPE_USER,
+        .ptr = args->buffer_ptr,
+        .data_offset = 0
+    };
+
+    return amqp_process(&args->tup, &buf);
 }
 
 
@@ -206,7 +214,13 @@ int socket__amqp_process(struct __sk_buff* skb) {
         return 0;
     }
 
-    return amqp_process(&tup, NULL, skb, skb_info.data_end - skb_info.data_off, skb_info.data_off);
+    bpf_buffer_desc_t buf = {
+        .type = BPF_BUFFER_TYPE_SKB,
+        .ptr = skb,
+        .data_offset = skb_info.data_off
+    };
+
+    return amqp_process(&tup, &buf);
 }
 
 #endif

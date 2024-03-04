@@ -4,8 +4,12 @@
 // For protocol detection.
 #define AMQP_PREFACE "AMQP"
 
-// Frame types we care about.
+// All valid AMQP frame types.
+// Used for detection and parsing.
 #define AMQP_FRAME_TYPE_METHOD 1
+#define AMQP_FRAME_TYPE_CONTENT_HEADER 2
+#define AMQP_FRAME_TYPE_CONTENT_BODY 3
+#define AMQP_FRAME_TYPE_HEARTBEAT 8
 
 // RabbitMQ supported classes.
 // Ref: https://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf

@@ -3,6 +3,7 @@
 
 #include "bpf_builtins.h"
 #include "bpf_telemetry.h"
+#include "bpf_unified_buffer_access.h"
 #include "ip.h"
 #include "port_range.h"
 
@@ -123,7 +124,12 @@ static __always_inline protocol_t classify_db_protocols(conn_tuple_t *tup, const
 
 // Checks if a given buffer is amqp, and soon - kafka..
 static __always_inline protocol_t classify_queue_protocols(struct __sk_buff *skb, skb_info_t *skb_info, const char *buf, __u32 size) {
-    if (is_amqp(NULL, buf, size)) {
+    bpf_buffer_desc_t buf_desc = {
+        .type = BPF_BUFFER_TYPE_SKB,
+        .ptr = skb,
+        .data_offset = 0,
+    };
+    if (is_amqp(NULL, &buf_desc)) {
         return PROTOCOL_AMQP;
     }
     if (is_kafka(skb, skb_info, buf, size)) {

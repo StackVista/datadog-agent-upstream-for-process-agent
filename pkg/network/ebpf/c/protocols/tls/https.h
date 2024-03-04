@@ -43,8 +43,13 @@ static __always_inline void classify_decrypted_payload(protocol_stack_t *stack, 
         return;
     }
 
+    bpf_buffer_desc_t buf_desc = { 
+        .type = BPF_BUFFER_TYPE_USER, 
+        .ptr = buffer,
+        .data_offset = 0
+    };
     protocol_t proto = PROTOCOL_UNKNOWN;
-    classify_protocol_for_dispatcher(&proto, t, buffer, len);
+    classify_protocol_for_dispatcher(&proto, t, buffer, len, &buf_desc);
     if (proto == PROTOCOL_UNKNOWN) {
         return;
     }

@@ -161,6 +161,7 @@ func TestAMQPStatsOnExistingConnection(t *testing.T) {
 	cfg.EnableNativeTLSMonitoring = true
 	cfg.EnableAMQPMonitoring = true
 	cfg.MaxAMQPStatsBuffered = 1000
+	cfg.MaxUSMConcurrentRequests = 1000
 	cfg.BPFDebug = true
 	tr := setupTracer(t, cfg)
 	time.Sleep(1 * time.Second)
