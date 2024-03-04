@@ -145,16 +145,10 @@ func TestAMQPStatsOnExistingConnection(t *testing.T) {
 	require.NoError(t, err)
 	defer client.Terminate()
 
-	// Make a queue, send some messages.
-	// It is important to send many messages to properly test the many-frames-in-a-single-packet case.
+	// Start consuming and send one message to make sure the connection is established.
 	client.DeclareQueue("queue-name", client.PublishChannel)
-	// for i := range 500 { // Requires Go 1.22
-	for i := 0; i < 500; i++ {
-		client.Publish("queue-name", fmt.Sprintf("message-%d", i))
-	}
-
-	// Consume one message to make sure the connection is established.
-	// client.Consume("queue-name", 1)
+	go client.Consume("queue-name", 501)
+	client.Publish("queue-name", "my-first-message")
 
 	// Only now start the tracer
 	cfg := testConfig()
@@ -164,19 +158,17 @@ func TestAMQPStatsOnExistingConnection(t *testing.T) {
 	cfg.MaxUSMConcurrentRequests = 1000
 	cfg.BPFDebug = true
 	tr := setupTracer(t, cfg)
-	time.Sleep(1 * time.Second)
 
-	// Now consume the rest of the messages.
-	client.Consume("queue-name", 499)
+	// Now generate data on the existing connection
+	// We will not see exactly 500 messages in the stats, because we need to collect evidence of the connection first.
+	for i := 0; i < 500; i++ {
+		client.Publish("queue-name", fmt.Sprintf("message-%d", i))
+	}
 
 	require.Eventually(t, func() bool {
 		payload, err := tr.GetActiveConnections("amqp-testing-client")
 		if err != nil {
 			t.Fatal(err)
-		}
-
-		for tup, metrics := range payload.AMQP {
-			log.Errorf("AMQP metrics %v:%v", tup, metrics)
 		}
 
 		return len(payload.AMQP) > 0

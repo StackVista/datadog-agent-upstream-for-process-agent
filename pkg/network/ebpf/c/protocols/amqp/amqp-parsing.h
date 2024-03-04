@@ -53,7 +53,7 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
         number_of_frames_processed++;
 
         if (bpf_load_data(buf, current_offset, &heap->header, size_to_load) != 0) {
-            log_debug("process_amqp: unable to load %d bytes from header\n", size_to_load);
+            // Unable to load more data, probably because we are at the end of the packet.
             break;
         }
 
@@ -157,7 +157,6 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
         } else {
             // The exchange/queue name does not match the previously seen one, but there is already a name set.
             // Send off the previous transaction and set the new name, reset the counters.
-            log_debug("process_amqp: in processed/delivered/published: %d/%d/%d\n", number_of_frames_processed, heap->transaction.messages_delivered, heap->transaction.messages_published);
             amqp_batch_enqueue(&heap->transaction);
             bpf_memcpy(heap->transaction.exchange_or_queue, heap->string.data, 256);
             heap->transaction.is_exchange = is_exchange;
@@ -169,7 +168,6 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
     } // End of frame loop
       
     if (heap->transaction.exchange_or_queue[0] != 0) {
-        log_debug("process_amqp: ex processed/delivered/published: %d/%d/%d\n", number_of_frames_processed, heap->transaction.messages_delivered, heap->transaction.messages_published);
         amqp_batch_enqueue(&heap->transaction);
     }
 
