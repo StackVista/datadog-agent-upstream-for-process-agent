@@ -28,10 +28,11 @@ type protocol struct {
 }
 
 const (
-	eventStreamName    = "amqp"
-	processTailCall    = "socket__amqp_process"
-	tlsProcessTailCall = "uprobe__amqp_process"
-	amqpHeapMap        = "amqp_heap"
+	eventStreamName          = "amqp"
+	processTailCall          = "socket__amqp_process"
+	tlsProcessTailCall       = "uprobe__amqp_process"
+	amqpHeapMap              = "amqp_heap"
+	amqpDetectionEvidenceMap = "amqp_detection_evidence"
 )
 
 var Spec = &protocols.ProtocolSpec{
@@ -39,6 +40,9 @@ var Spec = &protocols.ProtocolSpec{
 	Maps: []*manager.Map{
 		{
 			Name: amqpHeapMap,
+		},
+		{
+			Name: amqpDetectionEvidenceMap,
 		},
 	},
 	TailCalls: []manager.TailCallRoute{
@@ -76,8 +80,13 @@ func (p *protocol) Name() string {
 
 // ConfigureOptions add the necessary options for the AMQP monitoring to work,
 // to be used by the manager. These are:
+// - Set the `amqp_detection_evidence` map size to the value of the `max_tracked_connection` configuration variable.
 // We also configure the AMQP event stream with the manager and its options.
 func (p *protocol) ConfigureOptions(mgr *manager.Manager, opts *manager.Options) {
+	opts.MapSpecEditors[amqpDetectionEvidenceMap] = manager.MapSpecEditor{
+		MaxEntries: p.cfg.MaxUSMConcurrentRequests,
+		EditorFlag: manager.EditMaxEntries,
+	}
 	events.Configure(eventStreamName, mgr, opts)
 	utils.EnableOption(opts, "amqp_monitoring_enabled")
 }

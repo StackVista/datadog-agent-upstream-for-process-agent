@@ -138,6 +138,44 @@ func TestAMQPStats(t *testing.T) {
 
 }
 
+func TestAMQPStatsOnExistingConnection(t *testing.T) {
+	require.NoError(t, amqp.RunServer(t, "0.0.0.0", "5672"))
+
+	client, err := amqp.NewClient(amqp.Options{ServerAddress: "localhost:5672"})
+	require.NoError(t, err)
+	defer client.Terminate()
+
+	// Start consuming and send one message to make sure the connection is established.
+	client.DeclareQueue("queue-name", client.PublishChannel)
+	go client.Consume("queue-name", 501)
+	client.Publish("queue-name", "my-first-message")
+
+	// Only now start the tracer
+	cfg := testConfig()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableAMQPMonitoring = true
+	cfg.MaxAMQPStatsBuffered = 1000
+	cfg.MaxUSMConcurrentRequests = 1000
+	cfg.BPFDebug = true
+	tr := setupTracer(t, cfg)
+
+	// Now generate data on the existing connection
+	// We will not see exactly 500 messages in the stats, because we need to collect evidence of the connection first.
+	for i := 0; i < 500; i++ {
+		client.Publish("queue-name", fmt.Sprintf("message-%d", i))
+	}
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("amqp-testing-client")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return len(payload.AMQP) > 0
+	}, time.Second*30, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
+
+}
+
 func TestAMQPOverTLSStats(t *testing.T) {
 	// This test fails because AMQP over GoTLS is not properly detected for unknown reasons.
 	// To see AMQP over TLS working, run this test whilst running another AMQP client using OpenSSL or similar.

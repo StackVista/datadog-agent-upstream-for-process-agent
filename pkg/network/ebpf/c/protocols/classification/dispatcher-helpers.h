@@ -70,7 +70,7 @@ static __always_inline bool has_sequence_seen_before(conn_tuple_t *tup, skb_info
 
 // Determines the protocols of the given buffer. If we already classified the payload (a.k.a protocol out param
 // has a known protocol), then we do nothing.
-static __always_inline void classify_protocol_for_dispatcher(protocol_t *protocol, conn_tuple_t *tup, const char *buf, __u32 size) {
+static __always_inline void classify_protocol_for_dispatcher(protocol_t *protocol, conn_tuple_t *tup, const char *buf, __u32 size, bpf_buffer_desc_t *buffer_desc) {
     if (protocol == NULL || *protocol != PROTOCOL_UNKNOWN) {
         return;
     }
@@ -81,7 +81,7 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
         *protocol = PROTOCOL_HTTP2;
     } else if (is_mongo_monitoring_enabled() && is_mongo(tup, buf, size)) {
         *protocol = PROTOCOL_MONGO;
-    } else if (is_amqp_monitoring_enabled() && is_amqp(tup, buf, size)) {
+    } else if (is_amqp_monitoring_enabled() && is_amqp(tup, buffer_desc)) {
         *protocol = PROTOCOL_AMQP;
     } else {
         *protocol = PROTOCOL_UNKNOWN;
@@ -158,7 +158,12 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
         read_into_buffer_for_classification((char *)request_fragment, skb, skb_info.data_off);
         const size_t payload_length = skb_info.data_end - skb_info.data_off;
         const size_t final_fragment_size = payload_length < CLASSIFICATION_MAX_BUFFER ? payload_length : CLASSIFICATION_MAX_BUFFER;
-        classify_protocol_for_dispatcher(&cur_fragment_protocol, &skb_tup, request_fragment, final_fragment_size);
+        bpf_buffer_desc_t buffer_desc = {
+            .type = BPF_BUFFER_TYPE_SKB,
+            .ptr = skb,
+            .data_offset = skb_info.data_off,
+        };
+        classify_protocol_for_dispatcher(&cur_fragment_protocol, &skb_tup, request_fragment, final_fragment_size, &buffer_desc);
 
         if (is_kafka_monitoring_enabled() && cur_fragment_protocol == PROTOCOL_UNKNOWN) {
             bpf_tail_call_compat(skb, &dispatcher_classification_progs, DISPATCHER_KAFKA_PROG);
