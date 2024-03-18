@@ -11,15 +11,18 @@
 
 // The method checks if the given buffer includes the protocol header which must be sent in the start of a new connection.
 // Ref: https://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf.
-static __always_inline bool is_amqp_protocol_header(const bpf_buffer_desc_t *buf_desc) {
+static __always_inline amqp_version_t is_amqp_protocol_header(const bpf_buffer_desc_t *buf_desc) {
     amqp_protocol_identifier identifier;
     __maybe_unused int error = bpf_load_data(buf_desc, 0, &identifier, sizeof(amqp_protocol_identifier));
     bool match = !bpf_memcmp(AMQP_PREFACE, identifier.preamble, sizeof(AMQP_PREFACE));
     if (match) {
         if (identifier.major == 0 && identifier.minor == 9 && identifier.revision == 1) {
-            return true;
+            return AMQP_VERSION_0_9_1;
+        } else if (identifier.major == 1 && identifier.minor == 0 && identifier.revision == 0) {
+            return AMQP_VERSION_1_0_0;
         } else {
-            log_debug("is_amqp_protocol_header: Detected protocol %d.%d.%d, this package only supports 0.9.1", identifier.major, identifier.minor, identifier.revision);
+            log_debug("is_amqp_protocol_header: Detected unsupported AMQP version %d.%d.%d.", identifier.major, identifier.minor, identifier.revision);
+            return AMQP_VERSION_UNSUPPORTED;
         }
     }
     return false;
@@ -28,11 +31,11 @@ static __always_inline bool is_amqp_protocol_header(const bpf_buffer_desc_t *buf
 // The method checks if the given buffer is an AMQP message.
 // Ref: https://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf
 // This method will do multiple reads from the buffer to determine if the buffer is an AMQP message.
-static __always_inline bool is_amqp(conn_tuple_t *tup, const bpf_buffer_desc_t *buf_desc) {   
-    bool found = is_amqp_protocol_header(buf_desc);
+static __always_inline amqp_version_t is_amqp(conn_tuple_t *tup, const bpf_buffer_desc_t *buf_desc) {   
+    amqp_version_t version = is_amqp_protocol_header(buf_desc);
 
-    if (found) {
-        return true;
+    if (version != AMQP_VERSION_UNKNOWN && version != AMQP_VERSION_UNSUPPORTED) {
+        return version;
     }
 
     if (tup == NULL)
@@ -57,7 +60,7 @@ static __always_inline bool is_amqp(conn_tuple_t *tup, const bpf_buffer_desc_t *
     __u8 *evidence_ptr = bpf_map_lookup_elem(&amqp_detection_evidence, tup);
     if (evidence_ptr == NULL) {
         log_debug("is_amqp: could not load evidence for %u -> %u from map", tup->sport, tup->dport);
-        return false;
+        return AMQP_VERSION_UNKNOWN;
     }
     evidence = *evidence_ptr;
 
@@ -96,11 +99,11 @@ static __always_inline bool is_amqp(conn_tuple_t *tup, const bpf_buffer_desc_t *
     if (evidence > 90) {
         log_debug("is_amqp: %u -> %u evidence after update: %u%%. Labeling as AMQP.", tup->sport, tup->dport, evidence);
         bpf_map_delete_elem(&amqp_detection_evidence, tup); // No longer needed.
-        return true;
+        return AMQP_VERSION_0_9_1;
     }
 
     bpf_map_update_elem(&amqp_detection_evidence, tup, &evidence, BPF_ANY);
-    return false;
+    return AMQP_VERSION_UNKNOWN;
 }
 
 #endif

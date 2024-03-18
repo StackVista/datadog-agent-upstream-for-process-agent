@@ -81,7 +81,7 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
         *protocol = PROTOCOL_HTTP2;
     } else if (is_mongo_monitoring_enabled() && is_mongo(tup, buf, size)) {
         *protocol = PROTOCOL_MONGO;
-    } else if (is_amqp_monitoring_enabled() && is_amqp(tup, buffer_desc)) {
+    } else if (is_amqp_monitoring_enabled() && is_amqp(tup, buffer_desc) != AMQP_VERSION_UNKNOWN) {
         *protocol = PROTOCOL_AMQP;
     } else {
         *protocol = PROTOCOL_UNKNOWN;

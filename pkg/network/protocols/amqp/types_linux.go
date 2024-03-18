@@ -20,6 +20,6 @@ type EbpfTx struct {
 	Messages_delivered uint32
 	Messages_published uint32
 	Reply_code         uint8
-	Exchange_or_queue  [256]uint8
-	Is_exchange        uint8
+	Identifier         [256]uint8
+	Pad_cgo_0          [1]byte
 }
