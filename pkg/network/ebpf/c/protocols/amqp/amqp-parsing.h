@@ -42,7 +42,7 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
     heap->transaction.reply_code = 0;
     heap->transaction.messages_delivered = 0;
     heap->transaction.messages_published = 0;
-    bpf_memset(heap->transaction.exchange_or_queue, 0, 256);
+    bpf_memset(heap->transaction.identifier, 0, 256);
     bpf_memset(heap->string.data, 0, 256);
 
     // We need to limit ourselves here as the eBPF verifier will otherwise go crazy.
@@ -144,13 +144,13 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
             bpf_load_data(buf, current_offset, &heap->string, heap->string.length + 1);
         }
 
-        if (heap->transaction.exchange_or_queue[0] == 0) {
+        if (heap->transaction.identifier[0] == 0) {
             // No exchange or queue name yet, set it, and we are done.
-            bpf_memcpy(heap->transaction.exchange_or_queue, heap->string.data, 256);
-            heap->transaction.is_exchange = is_exchange;
+            bpf_memcpy(heap->transaction.identifier, heap->string.data, 256);
+            heap->transaction.identifier_type = is_exchange ? AMQP_IDENTIFIER_TYPE_EXCHANGE : AMQP_IDENTIFIER_TYPE_QUEUE;
             heap->transaction.messages_delivered += new_messages_delivered;
             heap->transaction.messages_published += new_messages_published;
-        } else if (bpf_memcmp(heap->transaction.exchange_or_queue, heap->string.data, 256) == 0) {
+        } else if (bpf_memcmp(heap->transaction.identifier, heap->string.data, 256) == 0) {
             // The exchange/queue name matches the previously seen one, keep tallying the messages.
             heap->transaction.messages_delivered += new_messages_delivered;
             heap->transaction.messages_published += new_messages_published;
@@ -158,8 +158,8 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
             // The exchange/queue name does not match the previously seen one, but there is already a name set.
             // Send off the previous transaction and set the new name, reset the counters.
             amqp_batch_enqueue(&heap->transaction);
-            bpf_memcpy(heap->transaction.exchange_or_queue, heap->string.data, 256);
-            heap->transaction.is_exchange = is_exchange;
+            bpf_memcpy(heap->transaction.identifier, heap->string.data, 256);
+            heap->transaction.identifier_type = is_exchange ? AMQP_IDENTIFIER_TYPE_EXCHANGE : AMQP_IDENTIFIER_TYPE_QUEUE;
             heap->transaction.messages_delivered = new_messages_delivered;
             heap->transaction.messages_published = new_messages_published;
         }
@@ -167,7 +167,7 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
         current_frame_offset += frame_length;
     } // End of frame loop
       
-    if (heap->transaction.exchange_or_queue[0] != 0) {
+    if (heap->transaction.identifier[0] != 0) {
         amqp_batch_enqueue(&heap->transaction);
     }
 

@@ -34,7 +34,7 @@ static __always_inline amqp_version_t is_amqp_protocol_header(const bpf_buffer_d
 static __always_inline amqp_version_t is_amqp(conn_tuple_t *tup, const bpf_buffer_desc_t *buf_desc) {   
     amqp_version_t version = is_amqp_protocol_header(buf_desc);
 
-    if (version != AMQP_VERSION_UNKNOWN && version != AMQP_VERSION_UNSUPPORTED) {
+    if (version != AMQP_VERSION_UNKNOWN) {
         return version;
     }
 

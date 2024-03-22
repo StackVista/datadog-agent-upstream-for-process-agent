@@ -26,6 +26,6 @@
 
 // Since the AMQP transction entries contain the exchange name or routing key,
 // each indiviual batch entry is rather large, so the batch has to be smaller.
-#define AMQP_BATCH_SIZE 13
+#define AMQP_BATCH_SIZE 12
 
 #endif

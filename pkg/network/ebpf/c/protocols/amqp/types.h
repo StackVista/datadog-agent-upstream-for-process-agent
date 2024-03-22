@@ -3,6 +3,13 @@
 
 #pragma pack(push, 1)
 
+// THIS NEEDS TO BE MANUALLY SYNCHRONIZED WITH THE GO IMPLEMENTATION IN pkg/network/ebpf/types.go
+typedef enum {
+	AMQP_IDENTIFIER_TYPE_QUEUE = 0,
+	AMQP_IDENTIFIER_TYPE_EXCHANGE = 1,
+	AMQP_IDENTIFIER_TYPE_ADDRESS = 2,
+} amqp_identifier_type_t;
+
 typedef enum {
   AMQP_VERSION_UNKNOWN = 0,
   AMQP_VERSION_0_9_1 = 1,
@@ -36,19 +43,13 @@ typedef struct {
   __u16 method;
 } amqp_method_identifier_t;
 
-typedef enum {
-  AMQP_IDENTIFIER_TYPE_QUEUE = 0, // identifier is an AMQP 0.9.1 queue name
-  AMQP_IDENTIFIER_TYPE_EXCHANGE = 1, // identifier is an AMQP 0.9.1 exchange name
-  AMQP_IDENTIFIER_TYPE_ADDRESS = 2, // identifier is an AMQP 1.0 address
-} amqp_identifier_t;
-
 typedef struct {
     conn_tuple_t tup;
     __u32 messages_delivered; // Messages delivered to the client on this connection. This is the count of messages traveling from the server to the client.
     __u32 messages_published; // Messages published on this connection. This is the count of messages traveling from the client to the server.
     __u8 reply_code; // AMQP reply code. Only transmitted when a connection is closed, 0 otherwise.
     __u8 identifier[256]; // Name of the exchange, queue (for AMQP 0.9.1) or address (for AMQP 1.0.0)
-    amqp_identifier_t identifier_type:8; // 1 if the name above is for an exchange, 0 if it is for a queue
+    __u8 identifier_type; // This should be an enum, but cgo does not handle that. Use values from amqp_identifier_type_t only.
 } amqp_transaction_batch_entry_t;
 
 typedef struct {

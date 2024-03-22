@@ -15,7 +15,7 @@ const (
 	TLS
 	Mongo
 	Postgres
-	AMQP
+	AMQP // Both 0.9.1 and 1.0.0
 	Redis
 	MySQL
 	GRPC

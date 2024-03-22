@@ -30,8 +30,10 @@ __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protoc
         return PROG_KAFKA;
     case PROTOCOL_MONGO:
         return PROG_MONGO;
-    case PROTOCOL_AMQP:
-        return PROG_AMQP;
+    case PROTOCOL_AMQP_0_9_1:
+        return PROG_AMQP_0_9_1;
+    case PROTOCOL_AMQP_1_0_0:
+        return PROG_AMQP_1_0_0;
     default:
         if (proto != PROTOCOL_UNKNOWN) {
             log_debug("protocol doesn't have a matching program: %d\n", proto);
@@ -81,8 +83,13 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
         *protocol = PROTOCOL_HTTP2;
     } else if (is_mongo_monitoring_enabled() && is_mongo(tup, buf, size)) {
         *protocol = PROTOCOL_MONGO;
-    } else if (is_amqp_monitoring_enabled() && is_amqp(tup, buffer_desc) != AMQP_VERSION_UNKNOWN) {
-        *protocol = PROTOCOL_AMQP;
+    } else if (is_amqp_monitoring_enabled()) {
+        amqp_version_t amqp_version = is_amqp(tup, buffer_desc);
+        if (amqp_version == AMQP_VERSION_0_9_1) {
+            *protocol = PROTOCOL_AMQP_0_9_1;
+        } else if (amqp_version == AMQP_VERSION_1_0_0) {
+            *protocol = PROTOCOL_AMQP_1_0_0;
+        }
     } else {
         *protocol = PROTOCOL_UNKNOWN;
     }

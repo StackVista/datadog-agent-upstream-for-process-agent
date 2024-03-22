@@ -16,3 +16,11 @@ import "C"
 type ConnTuple C.conn_tuple_t
 
 type EbpfTx C.amqp_transaction_batch_entry_t
+
+type AMQPIdentifierType int
+
+const (
+	AMQP_IDENTIFIER_TYPE_QUEUE AMQPIdentifierType = iota
+	AMQP_IDENTIFIER_TYPE_EXCHANGE
+	AMQP_IDENTIFIER_TYPE_ADDRESS
+)

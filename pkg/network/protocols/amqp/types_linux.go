@@ -21,5 +21,13 @@ type EbpfTx struct {
 	Messages_published uint32
 	Reply_code         uint8
 	Identifier         [256]uint8
-	Pad_cgo_0          [1]byte
+	Identifier_type    uint8
 }
+
+type AMQPIdentifierType int
+
+const (
+	AMQP_IDENTIFIER_TYPE_QUEUE AMQPIdentifierType = iota
+	AMQP_IDENTIFIER_TYPE_EXCHANGE
+	AMQP_IDENTIFIER_TYPE_ADDRESS
+)

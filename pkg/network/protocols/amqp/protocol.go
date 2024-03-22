@@ -48,14 +48,14 @@ var Spec = &protocols.ProtocolSpec{
 	TailCalls: []manager.TailCallRoute{
 		{
 			ProgArrayName: protocols.ProtocolDispatcherProgramsMap,
-			Key:           uint32(protocols.ProgramAMQP),
+			Key:           uint32(protocols.ProgramAMQP091),
 			ProbeIdentificationPair: manager.ProbeIdentificationPair{
 				EBPFFuncName: processTailCall,
 			},
 		},
 		{
 			ProgArrayName: protocols.TLSDispatcherProgramsMap,
-			Key:           uint32(protocols.ProgramTLSAMQPProcess),
+			Key:           uint32(protocols.ProgramTLSAMQP091Process),
 			ProbeIdentificationPair: manager.ProbeIdentificationPair{
 				EBPFFuncName: tlsProcessTailCall,
 			},

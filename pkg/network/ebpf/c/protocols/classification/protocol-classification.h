@@ -129,8 +129,11 @@ static __always_inline protocol_t classify_queue_protocols(struct __sk_buff *skb
         .ptr = skb,
         .data_offset = 0,
     };
-    if (is_amqp(NULL, &buf_desc) != AMQP_VERSION_UNKNOWN) {
-        return PROTOCOL_AMQP;
+    amqp_version_t amqp_version = is_amqp(NULL, &buf_desc);
+    if (amqp_version == AMQP_VERSION_0_9_1) {
+        return PROTOCOL_AMQP_0_9_1;
+    } else if (amqp_version == AMQP_VERSION_1_0_0) {
+        return PROTOCOL_AMQP_1_0_0;
     }
     if (is_kafka(skb, skb_info, buf, size)) {
         return PROTOCOL_KAFKA;

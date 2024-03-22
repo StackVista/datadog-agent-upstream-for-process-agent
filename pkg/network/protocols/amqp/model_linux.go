@@ -33,9 +33,20 @@ func (tx *EbpfTx) MessagesPublished() uint32 {
 	return tx.Messages_published
 }
 
+// EntityIdentifier returns the entity identifier for the transaction
+// This can be a queue name, exchange name, address, etc.
+func (tx *EbpfTx) EntityIdentifier() string {
+	n := bytes.IndexByte(tx.Identifier[:], 0)
+	return string(tx.Identifier[:n])
+}
+
+func (tx *EbpfTx) IdentifierType() AMQPIdentifierType {
+	return AMQPIdentifierType(tx.Identifier_type)
+}
+
+// Kept for backwards compatibility
 func (tx *EbpfTx) ExchangeOrQueueName() string {
-	n := bytes.IndexByte(tx.Exchange_or_queue[:], 0)
-	return string(tx.Exchange_or_queue[:n])
+	return tx.EntityIdentifier()
 }
 
 func (tx *EbpfTx) ReplyCode() uint8 {

@@ -18,8 +18,9 @@ const RelativeAccuracy = 0.01
 // Many requests and responses will generally be observed over a single connection
 type Key struct {
 	types.ConnectionKey
-	ExchangeName string
-	QueueName    string
+	ExchangeName string // AMQP 0.9.1 exchange name
+	QueueName    string // AMQP 0.9.1 queue name
+	Address      string // AMQP 1.0.0 address
 }
 
 // RequestStat stores stats for a given Mongo connection

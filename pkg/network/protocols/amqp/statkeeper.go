@@ -36,10 +36,13 @@ func (statKeeper *StatKeeper) Process(tx *EbpfTx) {
 		ConnectionKey: tx.ConnTuple(),
 	}
 
-	if tx.Is_exchange == 1 {
-		key.ExchangeName = tx.ExchangeOrQueueName()
-	} else {
-		key.QueueName = tx.ExchangeOrQueueName()
+	switch tx.IdentifierType() {
+	case AMQP_IDENTIFIER_TYPE_EXCHANGE:
+		key.ExchangeName = tx.EntityIdentifier()
+	case AMQP_IDENTIFIER_TYPE_QUEUE:
+		key.QueueName = tx.EntityIdentifier()
+	case AMQP_IDENTIFIER_TYPE_ADDRESS:
+		key.Address = tx.EntityIdentifier()
 	}
 
 	requestStats, ok := statKeeper.stats[key]
