@@ -89,12 +89,12 @@ type USMSuite struct {
 }
 
 func TestAMQPTracerSetup(t *testing.T) {
-
 	cfg := testConfig()
 	cfg.EnableNativeTLSMonitoring = true
 	cfg.EnableAMQPMonitoring = true
 	cfg.BPFDebug = true
 	_ = setupTracer(t, cfg)
+	time.Sleep(21 * time.Second)
 }
 
 func TestAMQPStats(t *testing.T) {

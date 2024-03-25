@@ -22,9 +22,16 @@ typedef struct {
 
 typedef struct {
   __u8 map_type; // Always 0xd0
+  __u8 size; // Total size of the elements
+  __u8 count; // Number of elements
+} amqp_1_0_0_list8;
+
+typedef struct {
+  __u8 map_type; // Always 0xc0
   __u32 size; // Total size of the elements
   __u32 count; // Number of elements
 } amqp_1_0_0_list32;
+
 
 #pragma pack(pop)
 

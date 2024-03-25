@@ -64,23 +64,46 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
 
         current_offset += 3; // Skip the performative
 
-        amqp_1_0_0_list32 arguments = {};
-        if (bpf_load_data(buf, current_offset, &arguments, sizeof(amqp_1_0_0_list32)) != 0) {
+        __u8 list_identifier = 0;
+        __u8 argument_count = 0;
+        if (bpf_load_data(buf, current_offset, &list_identifier, 1) != 0) {
             log_debug("amqp_1_0_0_process: unable to load arguments list header\n");
             current_frame_offset += frame_length;
             continue;
         }
 
-        log_debug("amqp_1_0_0_process: arguments.size=%u, arguments.count=%u\n", arguments.size, arguments.count);
+        if (list_identifier == 0xd0) {
+            amqp_1_0_0_list32 arguments = {};
+            if (bpf_load_data(buf, current_offset, &arguments, sizeof(arguments)) != 0) {
+                log_debug("amqp_1_0_0_process: unable to load arguments list\n");
+                current_frame_offset += frame_length;                
+                continue;
+            }
+            argument_count = bpf_ntohl(arguments.count);
+            current_offset += sizeof(arguments);
+        } else if (list_identifier == 0xc0) {
+            amqp_1_0_0_list8 arguments = {};
+            if (bpf_load_data(buf, current_offset, &arguments, sizeof(arguments)) != 0) {
+                log_debug("amqp_1_0_0_process: unable to load arguments list\n");
+                current_frame_offset += frame_length;                
+                continue;
+            }
+            argument_count = arguments.count;
+            current_offset += sizeof(arguments);
+        } else {
+            log_debug("amqp_1_0_0_process: unexpected map type\n");
+            current_frame_offset += frame_length;
+            continue;
+        }
 
-        if (arguments.count != 9) {
+        log_debug("amqp_1_0_0_process: arguments.map_type=0x%x, argument_count=%u\n", list_identifier, argument_count);
+
+        if (argument_count < 9) {
             log_debug("amqp_1_0_0_process: unexpected number of arguments\n");
             current_frame_offset += frame_length;
             continue;
         }
 
-        current_offset += sizeof(amqp_1_0_0_list32);
-        /* 
         // We are interested in the delivery count, which is the 5th argument.
         // Since the arguments are variable-length, we need to parse them one by one.
         __u8 current_argument = 0;
@@ -130,7 +153,7 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
             current_argument++;
         }
 
-        if (current_argument != 5) {
+        if (current_argument != 6) {
             log_debug("amqp_1_0_0_process: failed to parse arguments\n");
             current_frame_offset += frame_length;
             continue;
@@ -138,18 +161,33 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
 
         // We are now at the delivery count argument
         current_offset -= argument_size - 1; // Go back to the start of the delivery count argument
-        __u64 delivery_count = 0;
-        if (bpf_load_data(buf, current_offset, &delivery_count, argument_size - 1) != 0) {
+        __u8 raw_delivery_count[4] = {};
+        if (bpf_load_data(buf, current_offset, raw_delivery_count, sizeof(raw_delivery_count)) != 0) {
             log_debug("amqp_1_0_0_process: unable to load constructor for argument %u\n", current_argument);
             current_frame_offset += frame_length;
             break;
         }
 
-        // If we read less than 8 bytes, we need to shift the value to the right to get the actual value.
+        __u32 delivery_count = 0;
+        switch (argument_size)
+        {
+        case 2:
+            delivery_count = raw_delivery_count[0];
+            break;
+        case 3:
+            delivery_count = (raw_delivery_count);
+            break;
+        case 5:
+            delivery_count = raw_delivery_count[3];
+            break;
+        default:
+            break;
+        }
+
+        // If we read less than 4 bytes, we need to shift the value to the right to get the actual value.
+        log_debug("amqp_1_0_0_process: raw delivery_count=%08x\n", delivery_count);
         delivery_count = delivery_count >> (sizeof(delivery_count) - (argument_size - 1)) * 8;
-        delivery_count = bpf_ntohll(delivery_count);
         log_debug("amqp_1_0_0_process: delivery_count=%u\n", delivery_count);
-        */
 
         current_frame_offset += frame_length;
     } // End of frame loop
