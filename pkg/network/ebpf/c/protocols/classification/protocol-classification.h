@@ -8,6 +8,7 @@
 #include "port_range.h"
 
 #include "protocols/amqp/helpers.h"
+#include "protocols/amqp-1-0-0/helpers.h"
 #include "protocols/classification/common.h"
 #include "protocols/classification/defs.h"
 #include "protocols/classification/maps.h"
@@ -131,6 +132,9 @@ static __always_inline protocol_t classify_queue_protocols(struct __sk_buff *skb
     };
     if (is_amqp(NULL, &buf_desc)) {
         return PROTOCOL_AMQP;
+    }
+    if (is_amqp_1_0_0(NULL, &buf_desc)) {
+        return PROTOCOL_AMQP_1_0_0;
     }
     if (is_kafka(skb, skb_info, buf, size)) {
         return PROTOCOL_KAFKA;

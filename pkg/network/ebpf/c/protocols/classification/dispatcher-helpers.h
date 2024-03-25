@@ -19,6 +19,8 @@
 #include "protocols/mongo/usm-events.h"
 #include "protocols/amqp/helpers.h"
 #include "protocols/amqp/usm-events.h"
+#include "protocols/amqp-1-0-0/helpers.h"
+#include "protocols/amqp-1-0-0/usm-events.h"
 
 __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protocol_t proto) {
     switch(proto) {
@@ -32,6 +34,8 @@ __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protoc
         return PROG_MONGO;
     case PROTOCOL_AMQP:
         return PROG_AMQP;
+    case PROTOCOL_AMQP_1_0_0:
+        return PROG_AMQP_1_0_0;
     default:
         if (proto != PROTOCOL_UNKNOWN) {
             log_debug("protocol doesn't have a matching program: %d\n", proto);
@@ -83,6 +87,8 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
         *protocol = PROTOCOL_MONGO;
     } else if (is_amqp_monitoring_enabled() && is_amqp(tup, buffer_desc)) {
         *protocol = PROTOCOL_AMQP;
+    } else if (is_amqp_monitoring_enabled() && is_amqp_1_0_0(tup, buffer_desc)) {
+        *protocol = PROTOCOL_AMQP_1_0_0;
     } else {
         *protocol = PROTOCOL_UNKNOWN;
     }

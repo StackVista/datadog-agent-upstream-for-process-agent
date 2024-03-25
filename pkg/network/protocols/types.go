@@ -16,6 +16,7 @@ const (
 	Mongo
 	Postgres
 	AMQP
+	AMQP_1_0_0
 	Redis
 	MySQL
 	GRPC
@@ -39,6 +40,8 @@ func (p ProtocolType) String() string {
 		return "Postgres"
 	case AMQP:
 		return "AMPQ"
+	case AMQP_1_0_0:
+		return "AMPQ 1.0.0"
 	case Redis:
 		return "Redis"
 	case MySQL:

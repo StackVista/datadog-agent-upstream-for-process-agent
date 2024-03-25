@@ -1,0 +1,140 @@
+// Unless explicitly stated otherwise all files in this repository are licensed
+// under the Apache License Version 2.0.
+// This product includes software developed at Datadog (https://www.datadoghq.com/).
+// Copyright 2016-present Datadog, Inc.
+
+//go:build linux_bpf
+
+package amqp_1_0_0
+
+import (
+	"strings"
+	"unsafe"
+
+	manager "github.com/DataDog/ebpf-manager"
+	"github.com/cilium/ebpf"
+
+	"github.com/DataDog/datadog-agent/pkg/network/config"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/events"
+	"github.com/DataDog/datadog-agent/pkg/network/usm/utils"
+)
+
+type protocol struct {
+	cfg            *config.Config
+	telemetry      *Telemetry
+	statkeeper     *StatKeeper
+	eventsConsumer *events.Consumer
+}
+
+const (
+	eventStreamName          = "amqp_1_0_0"
+	processTailCall          = "socket__amqp_1_0_0_process"
+	tlsProcessTailCall       = "uprobe__amqp_1_0_0_process"
+	amqpHeapMap              = "amqp_1_0_0_heap"
+	amqpDetectionEvidenceMap = "amqp_1_0_0_detection_evidence"
+)
+
+var Spec = &protocols.ProtocolSpec{
+	Factory: newAMQPProtocol,
+	Maps: []*manager.Map{
+		{
+			Name: amqpHeapMap,
+		},
+		{
+			Name: amqpDetectionEvidenceMap,
+		},
+	},
+	TailCalls: []manager.TailCallRoute{
+		{
+			ProgArrayName: protocols.ProtocolDispatcherProgramsMap,
+			Key:           uint32(protocols.ProgramAMQP_1_0_0),
+			ProbeIdentificationPair: manager.ProbeIdentificationPair{
+				EBPFFuncName: processTailCall,
+			},
+		},
+		{
+			ProgArrayName: protocols.TLSDispatcherProgramsMap,
+			Key:           uint32(protocols.ProgramTLSAMQP_1_0_0Process),
+			ProbeIdentificationPair: manager.ProbeIdentificationPair{
+				EBPFFuncName: tlsProcessTailCall,
+			},
+		},
+	},
+}
+
+func newAMQPProtocol(cfg *config.Config) (protocols.Protocol, error) {
+	if !cfg.EnableAMQPMonitoring {
+		return nil, nil
+	}
+
+	return &protocol{
+		cfg:       cfg,
+		telemetry: NewTelemetry(),
+	}, nil
+}
+
+func (p *protocol) Name() string {
+	return "AMQP 1.0.0"
+}
+
+// ConfigureOptions add the necessary options for the AMQP monitoring to work,
+// to be used by the manager. These are:
+// - Set the `amqp_detection_evidence` map size to the value of the `max_tracked_connection` configuration variable.
+// We also configure the AMQP event stream with the manager and its options.
+func (p *protocol) ConfigureOptions(mgr *manager.Manager, opts *manager.Options) {
+	opts.MapSpecEditors[amqpDetectionEvidenceMap] = manager.MapSpecEditor{
+		MaxEntries: p.cfg.MaxUSMConcurrentRequests,
+		EditorFlag: manager.EditMaxEntries,
+	}
+	events.Configure(eventStreamName, mgr, opts)
+
+	// Using combined switch for both AMQP 0.9.1 and AMQP 1.0.0
+	utils.EnableOption(opts, "amqp_monitoring_enabled")
+}
+
+func (p *protocol) PreStart(mgr *manager.Manager) error {
+	var err error
+	p.eventsConsumer, err = events.NewConsumer(
+		eventStreamName,
+		mgr,
+		p.processAMQPTransactionData,
+	)
+	if err != nil {
+		return err
+	}
+
+	p.statkeeper = NewStatkeeper(p.cfg, p.telemetry)
+	p.eventsConsumer.Start()
+
+	return nil
+}
+
+func (p *protocol) PostStart(_ *manager.Manager) error {
+	return nil
+}
+
+func (p *protocol) Stop(_ *manager.Manager) {
+	if p.eventsConsumer != nil {
+		p.eventsConsumer.Stop()
+	}
+}
+
+func (p *protocol) DumpMaps(_ *strings.Builder, _ string, _ *ebpf.Map) {}
+
+func (p *protocol) processAMQPTransactionData(data []byte) {
+	tx := (*EbpfTx)(unsafe.Pointer(&data[0]))
+	p.telemetry.Count(tx)
+	p.statkeeper.Process(tx)
+}
+
+// GetStats returns a map of AMQP stats stored in the following format:
+// [source, dest tuple, request path] -> RequestStats object
+func (p *protocol) GetStats() *protocols.ProtocolStats {
+	p.eventsConsumer.Sync()
+	p.telemetry.Log()
+	return &protocols.ProtocolStats{
+		Type:  protocols.AMQP_1_0_0,
+		Stats: p.statkeeper.GetAndResetAllStats(),
+	}
+}

@@ -58,7 +58,8 @@ typedef enum {
     PROTOCOL_KAFKA,
     PROTOCOL_MONGO,
     PROTOCOL_POSTGRES,
-    PROTOCOL_AMQP,
+    PROTOCOL_AMQP, // This is AMQP 0.9.1
+    PROTOCOL_AMQP_1_0_0,
     PROTOCOL_REDIS,
     PROTOCOL_MYSQL,
     __LAYER_APPLICATION_MAX = LAYER_APPLICATION_MAX,
@@ -138,6 +139,7 @@ typedef enum {
     PROG_KAFKA,
     PROG_MONGO,
     PROG_AMQP,
+    PROG_AMQP_1_0_0,
     PROG_GRPC,
     // Add before this value.
     PROG_MAX,
@@ -149,6 +151,7 @@ typedef enum {
     TLS_HTTP_TERMINATION,
     TLS_MONGO_PROCESS,
     TLS_AMQP_PROCESS,
+    TLS_AMQP_1_0_0_PROCESS,
     TLS_PROG_MAX,
 } tls_prog_t;
 

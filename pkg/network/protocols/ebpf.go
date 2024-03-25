@@ -34,6 +34,7 @@ const (
 	ProgramKafka            ProgramType = C.PROG_KAFKA
 	ProgramMongo            ProgramType = C.PROG_MONGO
 	ProgramAMQP             ProgramType = C.PROG_AMQP
+	ProgramAMQP_1_0_0       ProgramType = C.PROG_AMQP_1_0_0
 )
 
 func Application(protoNum uint8) ProtocolType {
@@ -73,6 +74,8 @@ func toProtocolType(protoNum uint8, layerBit uint16) ProtocolType {
 		return Postgres
 	case C.PROTOCOL_AMQP:
 		return AMQP
+	case C.PROTOCOL_AMQP_1_0_0:
+		return AMQP_1_0_0
 	case C.PROTOCOL_REDIS:
 		return Redis
 	case C.PROTOCOL_MYSQL:
@@ -95,5 +98,6 @@ const (
 	// ProgramTLSMongoProcess is tail call to process mongo traffic over a TLS connection.
 	ProgramTLSMongoProcess ProgramType = C.TLS_MONGO_PROCESS
 	// ProgramTLSAMQPProcess is tail call to process AMQP traffic over a TLS connection.
-	ProgramTLSAMQPProcess ProgramType = C.TLS_AMQP_PROCESS
+	ProgramTLSAMQPProcess       ProgramType = C.TLS_AMQP_PROCESS
+	ProgramTLSAMQP_1_0_0Process ProgramType = C.TLS_AMQP_1_0_0_PROCESS
 )
