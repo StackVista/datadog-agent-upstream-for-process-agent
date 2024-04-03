@@ -45,13 +45,13 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
         }
 
         // Load more data to get the performative.
-        // The first to bytes here are actually the constructor, but since we are interested in the flow performative only,
+        // The first two bytes here are actually the constructor, but since we are interested in the flow performative only,
         // we can just match the whole 3-byte pattern.
         static const __u8 flow_performative_identifer[] = {0x00, 0x53, 0x13};
         __u8 performative[3] = {};
 
         if (bpf_load_data(buf, current_offset, performative, 3) != 0) {
-            log_debug("amqp_1_0_0_process: unable to load performative\n");
+            log_debug("amqp_1_0_0_process: unable to load performative identifier\n");
             current_frame_offset += frame_length;
             continue;
         }
@@ -62,13 +62,15 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
             continue;
         }
 
-        for (int i = 0; i < 256; i += 64) {
+        /*
+        for (int i = 0; i < 32; i += 8) {
             __u64 data = 0;
             bpf_load_data(buf, current_offset + i, &data, sizeof(data));
-            log_debug("amqp_1_0_0_process: frame %u [%u]=0x%llx\n", number_of_frames_processed, i, data);
+            log_debug("amqp_1_0_0_process: frame %u [%u]=0x%llx\n", number_of_frames_processed, i, bpf_ntohll(data));
         }
+        */
 
-        current_offset += 3; // Skip the performative
+        current_offset += 3; // Skip the performative identifier
 
         __u8 list_identifier = 0;
         __u8 argument_count = 0;
@@ -105,7 +107,7 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
             continue;
         }
 
-        log_debug("amqp_1_0_0_process: arguments.map_type=0x%x, argument_count=%u, argument_size=%u \n", list_identifier, argument_count, argument_size);
+        // log_debug("amqp_1_0_0_process: arguments.map_type=0x%x, argument_count=%u, argument_size=%u \n", list_identifier, argument_count, argument_size);
 
         if (argument_count < 9) {
             log_debug("amqp_1_0_0_process: unexpected number of arguments\n");
@@ -176,13 +178,15 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
             break;
         }
 
+        /*
         log_debug("amqp_1_0_0_process: argument_size=%u\n", argument_size);
         log_debug("amqp_1_0_0_process: raw_delivery_count[0]=%x raw_delivery_count[1]=%x\n", raw_delivery_count[0], raw_delivery_count[1]);
         log_debug("amqp_1_0_0_process: raw_delivery_count[1]=%x raw_delivery_count[2]=%x\n", raw_delivery_count[2], raw_delivery_count[3]);
+        */ 
 
         __u32 delivery_count = 0;
-        __u8 *delivery_count_8 = raw_delivery_count + 3;
-        __u16 *delivery_count_16 = (__u16 *)(raw_delivery_count + 2);
+        __u8 *delivery_count_8 = raw_delivery_count;
+        __u16 *delivery_count_16 = (__u16 *)(raw_delivery_count);
         __u32 *delivery_count_32 = (__u32 *)(raw_delivery_count);
 
         switch (argument_size)
@@ -200,9 +204,7 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
             break;
         }
 
-        // If we read less than 4 bytes, we need to shift the value to the right to get the actual value.
         log_debug("amqp_1_0_0_process: delivery_count=%u\n", delivery_count);
-
         current_frame_offset += frame_length;
     } // End of frame loop
       

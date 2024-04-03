@@ -1,0 +1,19 @@
+00 53 13 - List 
+c0 - List 8 (1 byte for count, size)
+ 1f - Size:  31
+ 0b - Count: 11
+70 - 4 byte value follows   
+  00 00 07 63               # next-incoming-id	
+70 - 4 byte value follows   
+  00 00 f8 9c               # incoming-window
+52 - 1 byte value follows   
+  13                        # next-outgoing-id
+70 - 4 byte value follows   
+  00 00 ff ec               # outgoing-window
+43 - The zero value         # handle
+52 - 1 byte value follows   
+  13                        # delivery-count
+52 - 1 byte value follows   
+ 09                         # link-credit
+70 - 4 byte value follows   
+  00 05 79 [...]            # available
