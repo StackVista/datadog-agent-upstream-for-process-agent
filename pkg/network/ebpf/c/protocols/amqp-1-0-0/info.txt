@@ -17,3 +17,41 @@ c0 - List 8 (1 byte for count, size)
  09                         # link-credit
 70 - 4 byte value follows   
   00 05 79 [...]            # available
+
+
+00 53 13 - List
+c0 - List 8 (1 byte for count, size)
+ 22 - Size: 34
+ 0b - Count: 11
+70  - 4 byte value follows
+ 00 01 80 00
+70
+ 00 00 ff ff
+52 
+ 6d 
+70 
+ 00 00 ff 92
+52
+ 17 
+00 00 18 00 07 00 00
+=98304 (argument size: 5)
+
+
+00 53 13
+c0
+ 22
+ 0b
+70
+ 00 02 00 00               # next-incoming-id
+70 
+ 00 00 ff ff               # incoming-window
+52 
+ 76                        # next-outgoing-id
+70 
+ 00 00 ff 89               # outgoing-window 
+52
+ 01                        # handle
+70
+ 00 02 00 00               # delivery-count
+70 
+ 00

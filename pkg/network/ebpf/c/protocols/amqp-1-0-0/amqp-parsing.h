@@ -36,7 +36,7 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
         }
 
         __u32 frame_length = bpf_ntohl(header.length);
-        current_offset += sizeof(amqp_1_0_0_frame_header_t);
+        current_offset += header.doff * 4; // Skip the header
 
         if (header.type != 0x00) {
             // Not an AMQP frame frame, skip to the next frame
@@ -62,18 +62,16 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
             continue;
         }
 
-        /*
         for (int i = 0; i < 32; i += 8) {
             __u64 data = 0;
             bpf_load_data(buf, current_offset + i, &data, sizeof(data));
             log_debug("amqp_1_0_0_process: frame %u [%u]=0x%llx\n", number_of_frames_processed, i, bpf_ntohll(data));
         }
-        */
 
         current_offset += 3; // Skip the performative identifier
 
         __u8 list_identifier = 0;
-        __u8 argument_count = 0;
+        __u16 argument_count = 0;
         __u16 argument_size = 0;
         if (bpf_load_data(buf, current_offset, &list_identifier, 1) != 0) {
             log_debug("amqp_1_0_0_process: unable to load arguments list header\n");
@@ -119,7 +117,7 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
         // Since the arguments are variable-length, we need to parse them one by one.
         __u8 current_argument = 0;
         __u8 constructor = 0;
-        while (current_argument <= 5) {
+        while (current_argument <= 2) {
             if (bpf_load_data(buf, current_offset, &constructor, 1) != 0) {
                 log_debug("amqp_1_0_0_process: unable to load constructor for argument %u\n", current_argument);
                 current_frame_offset += frame_length;
@@ -163,7 +161,7 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
             current_argument++;
         }
 
-        if (current_argument != 6) {
+        if (current_argument != 3) {
             log_debug("amqp_1_0_0_process: failed to parse arguments\n");
             current_frame_offset += frame_length;
             continue;
@@ -177,12 +175,6 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
             current_frame_offset += frame_length;
             break;
         }
-
-        /*
-        log_debug("amqp_1_0_0_process: argument_size=%u\n", argument_size);
-        log_debug("amqp_1_0_0_process: raw_delivery_count[0]=%x raw_delivery_count[1]=%x\n", raw_delivery_count[0], raw_delivery_count[1]);
-        log_debug("amqp_1_0_0_process: raw_delivery_count[1]=%x raw_delivery_count[2]=%x\n", raw_delivery_count[2], raw_delivery_count[3]);
-        */ 
 
         __u32 delivery_count = 0;
         __u8 *delivery_count_8 = raw_delivery_count;
@@ -204,7 +196,21 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
             break;
         }
 
-        log_debug("amqp_1_0_0_process: delivery_count=%u\n", delivery_count);
+        log_debug("amqp_1_0_0_process: delivery_count=%u (argument size: %u)\n", delivery_count, argument_size);
+        
+        if (batch_entry.delivery_count != 0) {
+            if (batch_entry.tup != *tup || batch_entry.channel != header.channel || batch_entry.handle != 0) {
+                // We have a batch entry, but the connection tuple or channel number has changed.
+                // Enqueue the current batch entry.
+                amqp_1_0_0_batch_enqueue(&batch_entry);
+            }
+        }
+
+        batch_entry.tup = *tup;
+        batch_entry.channel = header.channel;
+        batch_entry.handle = 0;
+        batch_entry.delivery_count = delivery_count;
+
         current_frame_offset += frame_length;
     } // End of frame loop
       

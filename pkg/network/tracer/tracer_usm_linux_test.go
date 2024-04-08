@@ -94,7 +94,7 @@ func TestAMQPTracerSetup(t *testing.T) {
 	cfg.EnableAMQPMonitoring = true
 	cfg.BPFDebug = true
 	_ = setupTracer(t, cfg)
-	time.Sleep(21 * time.Second)
+	time.Sleep(23 * time.Second)
 }
 
 func TestAMQPStats(t *testing.T) {
