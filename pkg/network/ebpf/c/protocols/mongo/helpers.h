@@ -106,7 +106,8 @@ static __always_inline bool try_parse_mongo_header(conn_tuple_t *raw_tup, const 
 // Returning false will give us another chance for classification with the next packet.
 static __always_inline bool is_mongo(conn_tuple_t *tup, const char *buf, __u32 size) {
     __u32 tries = 0;
-    __u32 *tries_ptr = bpf_map_lookup_elem(&mongo_connection_classification_tries, tup);
+    conn_tuple_t tup_copy = &tup;
+    __u32 *tries_ptr = bpf_map_lookup_elem(&mongo_connection_classification_tries, &tup_copy);
     if (tries_ptr != NULL) {
         tries = *tries_ptr;
     }
