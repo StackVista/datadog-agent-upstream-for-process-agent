@@ -106,7 +106,8 @@ static __always_inline bool try_parse_mongo_header(conn_tuple_t *raw_tup, const 
 // Returning false will give us another chance for classification with the next packet.
 static __always_inline bool is_mongo(conn_tuple_t *tup, const char *buf, __u32 size) {
     __u32 tries = 0;
-    __u32 *tries_ptr = bpf_map_lookup_elem(&mongo_connection_classification_tries, tup);
+    conn_tuple_t key = *tup; // Older Linux kernels require the key for bpf_map_lookup_elem to be on the stack. 
+    __u32 *tries_ptr = bpf_map_lookup_elem(&mongo_connection_classification_tries, &key);
     if (tries_ptr != NULL) {
         tries = *tries_ptr;
     }
@@ -119,7 +120,7 @@ static __always_inline bool is_mongo(conn_tuple_t *tup, const char *buf, __u32 s
     }
 
     tries++;
-    bpf_map_update_elem(&mongo_connection_classification_tries, tup, &tries, BPF_ANY);
+    bpf_map_update_elem(&mongo_connection_classification_tries, &key, &tries, BPF_ANY);
 
     return try_parse_mongo_header(tup, buf, size);
 }
