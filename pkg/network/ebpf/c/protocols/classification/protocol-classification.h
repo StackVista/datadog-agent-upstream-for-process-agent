@@ -129,7 +129,8 @@ static __always_inline protocol_t classify_queue_protocols(struct __sk_buff *skb
         .ptr = skb,
         .data_offset = 0,
     };
-    if (is_amqp(NULL, &buf_desc)) {
+    // The full is_amqp function requires a connection tuple, but we can still check the protocol header.
+    if (is_amqp_protocol_header(&buf_desc)) {
         return PROTOCOL_AMQP;
     }
     if (is_kafka(skb, skb_info, buf, size)) {
