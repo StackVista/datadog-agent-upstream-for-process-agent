@@ -65,7 +65,7 @@ var Spec = &protocols.ProtocolSpec{
 
 func newAMQPProtocol(cfg *config.Config) (protocols.Protocol, error) {
 	if !Supported() {
-		return nil, ErrNotSupported
+		return nil, nil
 	}
 
 	if !cfg.EnableAMQPMonitoring {
