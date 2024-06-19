@@ -88,6 +88,14 @@ type USMSuite struct {
 	suite.Suite
 }
 
+func TestPostgresTracerSetup(t *testing.T) {
+	cfg := testConfig()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.ProtocolClassificationEnabled = true // We hook into the existing is_postgres function
+	cfg.BPFDebug = true
+	_ = setupTracer(t, cfg)
+}
+
 func TestAMQPTracerSetup(t *testing.T) {
 
 	cfg := testConfig()

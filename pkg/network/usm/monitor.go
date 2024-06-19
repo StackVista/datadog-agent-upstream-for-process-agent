@@ -24,6 +24,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http2"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/kafka"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/mongo"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/postgres"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/telemetry"
 	errtelemetry "github.com/DataDog/datadog-agent/pkg/network/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/process/monitor"
@@ -49,6 +50,7 @@ var (
 		kafka.Spec,
 		mongo.Spec,
 		amqp.Spec,
+		postgres.Spec,
 		javaTLSSpec,
 		// opensslSpec is unique, as we're modifying its factory during runtime to allow getting more parameters in the
 		// factory.

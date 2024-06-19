@@ -34,6 +34,7 @@ const (
 	ProgramKafka            ProgramType = C.PROG_KAFKA
 	ProgramMongo            ProgramType = C.PROG_MONGO
 	ProgramAMQP             ProgramType = C.PROG_AMQP
+	ProgramPostgres         ProgramType = C.PROG_POSTGRES
 )
 
 func Application(protoNum uint8) ProtocolType {
@@ -96,4 +97,6 @@ const (
 	ProgramTLSMongoProcess ProgramType = C.TLS_MONGO_PROCESS
 	// ProgramTLSAMQPProcess is tail call to process AMQP traffic over a TLS connection.
 	ProgramTLSAMQPProcess ProgramType = C.TLS_AMQP_PROCESS
+	// ProgramTLSPostgresProcess is tail call to process Postgres traffic over a TLS connection.
+	ProgramTLSPostgresProcess ProgramType = C.TLS_POSTGRES_PROCESS
 )

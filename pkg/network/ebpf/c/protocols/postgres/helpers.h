@@ -14,6 +14,8 @@ static __always_inline bool is_postgres_connect(const char *buf, __u32 buf_size)
         return false;
     }
 
+    log_debug("is_postgres_connect: version=%u, ", bpf_ntohl(hdr->version));
+
     // Check if we can find the user param. Postgres uses C-style strings, so
     // we also check for the terminating null byte.
     return !bpf_memcmp(buf + sizeof(*hdr), PG_STARTUP_USER_PARAM, sizeof(PG_STARTUP_USER_PARAM));
@@ -34,6 +36,8 @@ static __always_inline bool is_postgres_query(const char *buf, __u32 buf_size) {
     if (message_len < POSTGRES_MIN_PAYLOAD_LEN || message_len > POSTGRES_MAX_PAYLOAD_LEN) {
         return false;
     }
+
+    log_debug("is_postgres_query: message_len=%u, ", message_len);
 
     return is_sql_command(buf + sizeof(*hdr), buf_size - sizeof(*hdr));
 }

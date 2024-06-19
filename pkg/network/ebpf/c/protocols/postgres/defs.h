@@ -47,4 +47,6 @@ struct pg_startup_header {
     __u32 version; // Big-endian: use bpf_ntohl to read this field
 };
 
+#define POSTGRES_BATCH_SIZE 20
+
 #endif // __POSTGRES_DEFS_H

@@ -19,6 +19,7 @@
 #include "protocols/mongo/usm-events.h"
 #include "protocols/amqp/helpers.h"
 #include "protocols/amqp/usm-events.h"
+#include "protocols/postgres/helpers.h"
 
 __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protocol_t proto) {
     switch(proto) {
@@ -83,6 +84,8 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
         *protocol = PROTOCOL_MONGO;
     } else if (is_amqp_monitoring_enabled() && is_amqp(tup, buffer_desc)) {
         *protocol = PROTOCOL_AMQP;
+    } else if (is_postgres(buf, size)) {
+        *protocol = PROTOCOL_POSTGRES;
     } else {
         *protocol = PROTOCOL_UNKNOWN;
     }

@@ -139,6 +139,7 @@ typedef enum {
     PROG_MONGO,
     PROG_AMQP,
     PROG_GRPC,
+    PROG_POSTGRES,
     // Add before this value.
     PROG_MAX,
 } protocol_prog_t;
@@ -149,6 +150,7 @@ typedef enum {
     TLS_HTTP_TERMINATION,
     TLS_MONGO_PROCESS,
     TLS_AMQP_PROCESS,
+    TLS_POSTGRES_PROCESS,
     TLS_PROG_MAX,
 } tls_prog_t;
 

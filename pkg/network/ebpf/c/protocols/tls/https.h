@@ -86,6 +86,9 @@ static __always_inline void tls_process(struct pt_regs *ctx, conn_tuple_t *t, vo
     case PROTOCOL_AMQP:
         prog = TLS_AMQP_PROCESS;
         break;
+    case PROTOCOL_POSTGRES:
+        prog = TLS_POSTGRES_PROCESS;
+        break;
     default:
         return;
     }
