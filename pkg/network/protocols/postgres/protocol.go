@@ -23,6 +23,8 @@ import (
 type protocol struct {
 	cfg            *config.Config
 	eventsConsumer *events.Consumer
+	telemetry      *Telemetry
+	statkeeper     *StatKeeper
 }
 
 const (
@@ -111,9 +113,8 @@ func (p *protocol) DumpMaps(_ *strings.Builder, _ string, _ *ebpf.Map) {}
 
 func (p *protocol) processPostgresTransactionData(data []byte) {
 	tx := (*EbpfTx)(unsafe.Pointer(&data[0]))
-
+	p.telemetry.Count(tx)
 	/*
-		p.telemetry.Count(tx)
 		p.statkeeper.Process(tx)
 	*/
 }

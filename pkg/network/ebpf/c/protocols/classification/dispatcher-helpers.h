@@ -20,6 +20,7 @@
 #include "protocols/amqp/helpers.h"
 #include "protocols/amqp/usm-events.h"
 #include "protocols/postgres/helpers.h"
+#include "protocols/postgres/usm-events.h"
 
 __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protocol_t proto) {
     switch(proto) {

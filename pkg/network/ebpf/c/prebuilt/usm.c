@@ -12,6 +12,7 @@
 #include "protocols/kafka/kafka-parsing.h"
 #include "protocols/mongo/mongo-parsing.h"
 #include "protocols/amqp/amqp-parsing.h"
+#include "protocols/postgres/postgres-parsing.h"
 #include "protocols/tls/java/erpc_dispatcher.h"
 #include "protocols/tls/java/erpc_handlers.h"
 #include "protocols/tls/https.h"
@@ -51,6 +52,7 @@ int tracepoint__net__netif_receive_skb(struct pt_regs* ctx) {
     kafka_batch_flush(ctx);
     mongo_batch_flush(ctx);
     amqp_batch_flush(ctx);
+    postgres_batch_flush(ctx);
     return 0;
 }
 
