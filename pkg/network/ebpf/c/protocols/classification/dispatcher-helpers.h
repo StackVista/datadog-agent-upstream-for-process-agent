@@ -34,6 +34,8 @@ __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protoc
         return PROG_MONGO;
     case PROTOCOL_AMQP:
         return PROG_AMQP;
+    case PROTOCOL_POSTGRES:
+        return PROG_POSTGRES;
     default:
         if (proto != PROTOCOL_UNKNOWN) {
             log_debug("protocol doesn't have a matching program: %d\n", proto);
@@ -89,10 +91,6 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
         *protocol = PROTOCOL_POSTGRES;
     } else {
         *protocol = PROTOCOL_UNKNOWN;
-    }
-
-    if (tup->sport == 5432 || tup->dport == 5432) {
-        log_debug("postgres_debug classify_protocol_for_dispatcher: %u -> %u: protocol=%u\n", tup->sport, tup->dport, *protocol);
     }
 
     log_debug("[classify_protocol_for_dispatcher]: Classified protocol as %d (buffer size:%d, contents: %s)\n", *protocol, size, buf);

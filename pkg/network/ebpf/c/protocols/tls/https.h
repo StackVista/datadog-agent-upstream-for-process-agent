@@ -76,10 +76,6 @@ static __always_inline void tls_process(struct pt_regs *ctx, conn_tuple_t *t, vo
         protocol = get_protocol_from_stack(stack, LAYER_APPLICATION);
     }
 
-    if (t->sport == 5432 || t->dport == 5432) {
-        log_debug("postgres_debug tls_process: %u -> %u: protocol=%u\n", t->sport, t->dport, protocol);
-    }
-
     tls_prog_t prog;
     switch (protocol) {
     case PROTOCOL_HTTP:

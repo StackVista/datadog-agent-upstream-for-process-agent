@@ -89,6 +89,11 @@ type USMSuite struct {
 }
 
 func TestPostgresTracerSetup(t *testing.T) {
+	// FIXME: How to set up test environment?
+	// sudo -u postgres pgbench --connect --client 2 --time 6000 --rate 10 --debug --host localhost testdb
+
+	// FIXME: Make it fail if not data is observed (which is now always the case)
+
 	cfg := testConfig()
 	cfg.EnableNativeTLSMonitoring = true
 	cfg.ProtocolClassificationEnabled = true // We hook into the existing is_postgres function

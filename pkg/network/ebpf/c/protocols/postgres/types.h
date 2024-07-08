@@ -5,7 +5,6 @@
 
 typedef struct {
     __u64 request_timestamp; // 0 if no request in flight.
-    __u16 client_port; // Compare with the port in the connection tuple to determine if this is a client or server connection.
 } postgres_connection_state_t;
 
 typedef struct {

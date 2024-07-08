@@ -17,10 +17,15 @@ static __always_inline int postgres_process(conn_tuple_t *tup, const bpf_buffer_
     __u32 current_offset = current_frame_offset;
     postgres_message_header_t header = {};
     __u32 size_to_load = sizeof(postgres_message_header_t);
-    log_debug("postgres_process: Processing Postgres message from %u to %u\n", tup->sport, tup->dport);
 
-    // Normalize the connection tuple so that the direction is always from client to server.
-    // We call it backend, because thats what the PostgreSQL documentation calls it.
+    // If the destination port was ephemeral, we are either witnessing incoming traffic on the client side
+    // or outgoing traffic on the server side. In both cases, the content of the message originates from the backend (= server). 
+    bool backend_message = normalize_tuple(tup);
+    bool frontend_message = !backend_message;
+
+    log_debug("postgres_process: Processing %s message\n", frontend_message ? "frontend" : "backend");
+
+
     postgres_connection_state_t state = {};
     postgres_connection_state_t *saved_state = bpf_map_lookup_elem(&postgres_connection_states, tup);
 
@@ -29,9 +34,7 @@ static __always_inline int postgres_process(conn_tuple_t *tup, const bpf_buffer_
         log_debug("postgres_process: Connection state loaded\n");
     }
 
-    bool frontend_message = state.client_port == tup->sport;
-    bool backend_message = !frontend_message;
-
+    // FIXME: Generate event
     /*
     heap->transaction.tup = *tup;
     heap->transaction.reply_code = 0;
@@ -62,7 +65,6 @@ static __always_inline int postgres_process(conn_tuple_t *tup, const bpf_buffer_
             bpf_load_data(buf, current_offset, &startup_message, sizeof(startup_message));
             if (bpf_ntohl(startup_message.version) == PG_STARTUP_VERSION) {
                 // This is a startup message. Just hop to the next message.
-                state.client_port = tup->sport;
                 current_frame_offset += sizeof(startup_message);
                 continue;
             }
@@ -99,7 +101,7 @@ static __always_inline int postgres_process(conn_tuple_t *tup, const bpf_buffer_
     
     /*
     if (heap->transaction.exchange_or_queue[0] != 0) {
-        amqp_batch_enqueue(&heap->transaction);
+        postgres_batch_enqueue(&heap->transaction);
     }
     */
 

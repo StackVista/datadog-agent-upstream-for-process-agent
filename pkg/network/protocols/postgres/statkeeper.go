@@ -23,7 +23,7 @@ type StatKeeper struct {
 func NewStatkeeper(c *config.Config, telemetry *Telemetry) *StatKeeper {
 	return &StatKeeper{
 		stats:      make(map[Key]*RequestStat),
-		maxEntries: c.MaxAMQPStatsBuffered,
+		maxEntries: c.MaxAMQPStatsBuffered, // FIXME
 		telemetry:  telemetry,
 	}
 }
