@@ -3,6 +3,7 @@
 
 #include "defs.h"
 #include "protocols/sql/helpers.h"
+#include "protocols/postgres/maps.h"
 
 // is_postgres_connect checks if the buffer is a Postgres startup message.
 static __always_inline bool is_postgres_connect(const char *buf, __u32 buf_size) {
@@ -42,7 +43,22 @@ static __always_inline bool is_postgres_query(const char *buf, __u32 buf_size) {
     return is_sql_command(buf + sizeof(*hdr), buf_size - sizeof(*hdr));
 }
 
-static __always_inline bool is_postgres(const char *buf, __u32 buf_size) {
+static __always_inline bool is_postgres(conn_tuple_t *tup, const char *buf, __u32 buf_size) {
+    void *data = bpf_map_lookup_elem(&postgres_connection_states, tup);
+    if (data != NULL) {
+        // If the connection is in the map, it has to be a Postgres connection.
+        // We do not care about the actual state, as we only need to know if it is a Postgres connection.
+        return true;
+    }
+
+    // If the reverse tuple is a Postgres connection, we can assume that this is a Postgres connection as well.
+    flip_tuple(tup);
+    data = bpf_map_lookup_elem(&postgres_connection_states, tup);
+    flip_tuple(tup);
+    if (data != NULL) {
+        return true;
+    }
+ 
     return is_postgres_query(buf, buf_size) || is_postgres_connect(buf, buf_size);
 }
 

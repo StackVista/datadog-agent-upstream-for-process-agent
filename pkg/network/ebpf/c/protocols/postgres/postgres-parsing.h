@@ -8,31 +8,38 @@
 #include "protocols/postgres/defs.h"
 #include "protocols/postgres/types.h"
 #include "protocols/postgres/helpers.h"
+#include "protocols/postgres/maps.h"
 #include "protocols/classification/common.h"
 
 
 static __always_inline int postgres_process(conn_tuple_t *tup, const bpf_buffer_desc_t *buf) {
-    log_debug("Hello from postgres_process\n");
-    /*
     __u32 current_frame_offset = 0;
     __u32 current_offset = current_frame_offset;
-    __u32 size_to_load = sizeof(amqp_frame_header_t);
-    const u32 zero = 0;
-    amqp_heap_helper_t *heap = bpf_map_lookup_elem(&amqp_heap, &zero);
-
-    if (!heap) {
-        log_debug("process_amqp: failed to lookup amqp_frame_header_heap\n");
-        return 0;
-    }
+    postgres_message_header_t header = {};
+    __u32 size_to_load = sizeof(postgres_message_header_t);
+    log_debug("postgres_process: Processing Postgres message from %u to %u\n", tup->sport, tup->dport);
 
     // Normalize the connection tuple so that the direction is always from client to server.
-    normalize_tuple(tup);
+    // We call it backend, because thats what the PostgreSQL documentation calls it.
+    postgres_connection_state_t state = {};
+    postgres_connection_state_t *saved_state = bpf_map_lookup_elem(&postgres_connection_states, tup);
+
+    if (saved_state != NULL) {
+        state = *saved_state;
+        log_debug("postgres_process: Connection state loaded\n");
+    }
+
+    bool frontend_message = state.client_port == tup->sport;
+    bool backend_message = !frontend_message;
+
+    /*
     heap->transaction.tup = *tup;
     heap->transaction.reply_code = 0;
     heap->transaction.messages_delivered = 0;
     heap->transaction.messages_published = 0;
     bpf_memset(heap->transaction.exchange_or_queue, 0, 256);
     bpf_memset(heap->string.data, 0, 256);
+    */
 
     // We need to limit ourselves here as the eBPF verifier will otherwise go crazy.
     __u16 number_of_frames_processed = 0;
@@ -41,125 +48,61 @@ static __always_inline int postgres_process(conn_tuple_t *tup, const bpf_buffer_
         current_offset = current_frame_offset;
         number_of_frames_processed++;
 
-        if (bpf_load_data(buf, current_offset, &heap->header, size_to_load) != 0) {
+        if (bpf_load_data(buf, current_offset, &header, size_to_load) != 0) {
             // Unable to load more data, probably because we are at the end of the packet.
             break;
         }
 
-        __u32 frame_length = bpf_ntohl(heap->header.length) + sizeof(amqp_frame_header_t);
-        __u8 end_of_frame = 0;
-        
-        if (bpf_load_data(buf, current_offset + frame_length, &end_of_frame, 1) != 0) {
-            log_debug("process_amqp: unable to load 1 byte from end of frame\n");
+        int frame_length = bpf_ntohl(header.length) + 1;
+
+        if (current_offset == 0) {
+            // This is the first message, which is a startup message and does not have the one-byte identifier.
+            // Check if the version matches.
+            postgres_startup_message_t startup_message = {};
+            bpf_load_data(buf, current_offset, &startup_message, sizeof(startup_message));
+            if (bpf_ntohl(startup_message.version) == PG_STARTUP_VERSION) {
+                // This is a startup message. Just hop to the next message.
+                state.client_port = tup->sport;
+                current_frame_offset += sizeof(startup_message);
+                continue;
+            }
+        }
+
+        if (header.identifier < '0' || header.identifier > 'z') {
+            // Out of range, this is not a valid message.
             break;
         }
 
-        if (end_of_frame != 0xce) {
-            log_debug("process_amqp: No 0xce marker after frame\n");
-            break;
+        if (frontend_message && (header.identifier == 'Q' || header.identifier == 'E')) {
+            // This is a query (either a simple query or the execution of a bound query).
+            // We record the timestamp and wait for a response to calculate the latency.
+            // We do not need to parse the query itself.
+            state.request_timestamp = bpf_ktime_get_boot_ns();
+        } else if (backend_message && (header.identifier == 'I' || header.identifier == 'C' || header.identifier == 'E')) {
+            // This is an answer to a query. We can calculate the latency.
+            // Note that E from the backend indicates an error response, while E from the frontend is an execute message.
+            if (state.request_timestamp != 0) {
+                __u64 current_time = bpf_ktime_get_boot_ns();
+                __maybe_unused __u64 latency = current_time - state.request_timestamp;
+                state.request_timestamp = 0; // Reset to not double-count when additional responses arrive.
+                log_debug("postgres_process: Latency: %llu ms\n", latency/1000);
+            } else {
+                log_debug("postgres_process: Could not find request timestamp for connection\n");
+            }
         }
 
-        frame_length++; // Include the 0xce marker, so we can use the frame length to jump to the next frame.
-        current_offset += sizeof(amqp_frame_header_t);
+        bpf_map_update_elem(&postgres_connection_states, tup, &state, BPF_ANY);
 
-        if (heap->header.frame_type != AMQP_FRAME_TYPE_METHOD) {
-            // Not a method frame, skip to the next frame
-            current_frame_offset += frame_length;
-            continue;
-        }
-
-        // Load more data to get class and method
-        if (bpf_load_data(buf, current_offset, &heap->method, sizeof(amqp_method_identifier_t)) != 0) {
-            log_debug("process_amqp: unable to load method identifier\n", size_to_load);
-            current_frame_offset += frame_length;
-            continue;
-        }
-
-        current_offset += sizeof(amqp_method_identifier_t);
-        __u16 class = bpf_ntohs(heap->method.class);
-        __u16 method = bpf_ntohs(heap->method.method);
-        __u8 new_messages_delivered = 0;
-        __u8 new_messages_published = 0;
-
-        if (class == AMQP_BASIC_CLASS && method == AMQP_METHOD_DELIVER) { 
-            // The basic.deliver method, which is used to send messages to consumers.
-            // This message type has a variable-length consumer tag, delivery tag, and flags we need to skip.
-            bpf_load_data(buf, current_offset, &heap->string, 1);
-            current_offset += 1 + heap->string.length; // Jump over the consumer tag
-            current_offset += sizeof(__u64); // Jump over the delivery tag
-            current_offset += sizeof(__u8); // Jump over the flags
-            new_messages_delivered++;
-        } else if (class == AMQP_BASIC_CLASS && method == AMQP_METHOD_PUBLISH) {
-            // The basic.publish method, which is used to send messages to the server.
-            // This messagge type only has the fixed-size ticket field in front of the exchange name and routing key.
-            current_offset += sizeof(__u16); // Jump over the ticket
-            new_messages_published++;
-        } else if (class == AMQP_BASIC_CLASS && method == AMQP_METHOD_GET_OK) {
-            // The basic.get-ok method, which is used to return a single message from a synchronous basic.get call.
-            // This message type has fixed-size delivery tag and flags fields in front of the exchange name and routing key.
-            current_offset += sizeof(__u64); // Jump over the delivery tag
-            current_offset += sizeof(__u8); // Jump over the flags
-            new_messages_delivered++;
-        } else if (class == AMQP_CONNECTION_CLASS && method == AMQP_METHOD_CONNECTION_CLOSE) {
-            // The connection.close method, which is used to close a connection.
-            // From this message, we extract the reply code only.
-            // There will only ever be one reply code per connection, as the connection will be closed after this message.
-            // Therefore, we can safely set it here without checking for previous values on the same connection.
-            bpf_load_data(buf, current_offset, &heap->transaction.reply_code, 1);
-            current_frame_offset += frame_length;
-            continue;
-        } else {
-            // A method frame we are not interested in, skip to the next frame
-            current_frame_offset += frame_length;
-            continue;
-        }
-
-        // We are interested in this message, load the exchange name and routing key.
-        // The offset is now at the exchange name.
-        bpf_memset(heap->string.data, 0, 256);
-        bpf_load_data(buf, current_offset, &heap->string, 1);
-
-        // If we have an exchange name, use that to identify the metrics.
-        // If not, use the routing_key, which will then be a queue name.
-        bool is_exchange = 0;
-        if (heap->string.length != 0) {
-            is_exchange = 1;
-            bpf_load_data(buf, current_offset, &heap->string, heap->string.length + 1);
-        } else {
-            is_exchange = 0;
-            current_offset += 1 + heap->string.length; // Jump over the exchange name
-            bpf_load_data(buf, current_offset, &heap->string, 1);
-            bpf_memset(heap->string.data, 0, 256);
-            bpf_load_data(buf, current_offset, &heap->string, heap->string.length + 1);
-        }
-
-        if (heap->transaction.exchange_or_queue[0] == 0) {
-            // No exchange or queue name yet, set it, and we are done.
-            bpf_memcpy(heap->transaction.exchange_or_queue, heap->string.data, 256);
-            heap->transaction.is_exchange = is_exchange;
-            heap->transaction.messages_delivered += new_messages_delivered;
-            heap->transaction.messages_published += new_messages_published;
-        } else if (bpf_memcmp(heap->transaction.exchange_or_queue, heap->string.data, 256) == 0) {
-            // The exchange/queue name matches the previously seen one, keep tallying the messages.
-            heap->transaction.messages_delivered += new_messages_delivered;
-            heap->transaction.messages_published += new_messages_published;
-        } else {
-            // The exchange/queue name does not match the previously seen one, but there is already a name set.
-            // Send off the previous transaction and set the new name, reset the counters.
-            amqp_batch_enqueue(&heap->transaction);
-            bpf_memcpy(heap->transaction.exchange_or_queue, heap->string.data, 256);
-            heap->transaction.is_exchange = is_exchange;
-            heap->transaction.messages_delivered = new_messages_delivered;
-            heap->transaction.messages_published = new_messages_published;
-        }
-
+        log_debug("postgres_process: Origin: %s, message type %c, length %d\n", frontend_message ? "Frontend" : "Backend", header.identifier, frame_length);     
         current_frame_offset += frame_length;
     } // End of frame loop
-      
+    
+    /*
     if (heap->transaction.exchange_or_queue[0] != 0) {
         amqp_batch_enqueue(&heap->transaction);
     }
-*/
+    */
+
     return 0;
 }
 
@@ -173,7 +116,7 @@ int uprobe__postgres_process(struct pt_regs *ctx) {
     tls_dispatcher_arguments_t *args = bpf_map_lookup_elem(&tls_dispatcher_arguments, &zero);
 
     if (args == NULL) {
-        log_debug("uprobe__postgres_process failed to fetch arguments for tail call\n");
+        log_debug("uprobe__postgres_process: failed to fetch arguments for tail call\n");
         return 0;
     }
 
@@ -193,7 +136,7 @@ int socket__postgres_process(struct __sk_buff* skb) {
     skb_info_t skb_info;
 
     if (!fetch_dispatching_arguments(&tup, &skb_info)) {
-        log_debug("process_postgres failed to fetch arguments for tail call\n");
+        log_debug("socket__postgres_process: failed to fetch arguments for tail call\n");
         return 0;
     }
 

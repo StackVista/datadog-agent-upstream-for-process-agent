@@ -85,10 +85,14 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
         *protocol = PROTOCOL_MONGO;
     } else if (is_amqp_monitoring_enabled() && is_amqp(tup, buffer_desc)) {
         *protocol = PROTOCOL_AMQP;
-    } else if (is_postgres(buf, size)) {
+    } else if (is_postgres(tup, buf, size)) {
         *protocol = PROTOCOL_POSTGRES;
     } else {
         *protocol = PROTOCOL_UNKNOWN;
+    }
+
+    if (tup->sport == 5432 || tup->dport == 5432) {
+        log_debug("postgres_debug classify_protocol_for_dispatcher: %u -> %u: protocol=%u\n", tup->sport, tup->dport, *protocol);
     }
 
     log_debug("[classify_protocol_for_dispatcher]: Classified protocol as %d (buffer size:%d, contents: %s)\n", *protocol, size, buf);
