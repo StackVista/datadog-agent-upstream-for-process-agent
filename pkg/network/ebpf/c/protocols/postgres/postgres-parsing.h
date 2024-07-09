@@ -34,16 +34,6 @@ static __always_inline int postgres_process(conn_tuple_t *tup, const bpf_buffer_
         log_debug("postgres_process: Connection state loaded\n");
     }
 
-    // FIXME: Generate event
-    /*
-    heap->transaction.tup = *tup;
-    heap->transaction.reply_code = 0;
-    heap->transaction.messages_delivered = 0;
-    heap->transaction.messages_published = 0;
-    bpf_memset(heap->transaction.exchange_or_queue, 0, 256);
-    bpf_memset(heap->string.data, 0, 256);
-    */
-
     // We need to limit ourselves here as the eBPF verifier will otherwise go crazy.
     __u16 number_of_frames_processed = 0;
 
@@ -57,6 +47,7 @@ static __always_inline int postgres_process(conn_tuple_t *tup, const bpf_buffer_
         }
 
         int frame_length = bpf_ntohl(header.length) + 1;
+        log_debug("postgres_process: Header loaded. Frame length: %d\n", frame_length);
 
         if (current_offset == 0) {
             // This is the first message, which is a startup message and does not have the one-byte identifier.
@@ -80,17 +71,54 @@ static __always_inline int postgres_process(conn_tuple_t *tup, const bpf_buffer_
             // We record the timestamp and wait for a response to calculate the latency.
             // We do not need to parse the query itself.
             state.request_timestamp = bpf_ktime_get_boot_ns();
-        } else if (backend_message && (header.identifier == 'I' || header.identifier == 'C' || header.identifier == 'E')) {
+        } else if (header.identifier == 'I' || header.identifier == 'C' || header.identifier == 'E') { // Needs an `&& backend_message`, but the detection does not work at the moment.
+            postgres_transaction_batch_entry_t entry = {
+                .tup = *tup,
+                .latency = 0,
+                .response_type = header.identifier,
+                .details = {0}
+            };
+
+            // For CommandComplete messages, we can extract the command type and number of rows affected.
+            // Format looks like <command> <rows>, with some exceptions.
+            // Can be used in user space to tally the number of rows affected by each command.
+            // See https://www.postgresql.org/docs/current/protocol-message-formats.html#PROTOCOL-MESSAGE-FORMATS-COMMANDCOMPLETE
+            // This is a text-based protocol, and for an arbitrary number of affected rows, it can become arbitraryly long.
+            // We limit ourselves to 32 bytes.
+            if (header.identifier == 'C') {
+                bpf_load_data(buf, current_offset + sizeof(postgres_message_header_t), entry.details, 32);
+            } 
+
+            // For ErrorResponse messages, additional error details are provided.
+            // The message can contain multiple fields, in no specific order, but we will just grab the first one.
+            // Format is <field identifier> <field value>, where <field identifier> is a single char and <field value> is a zero-terminated string. 
+            // Again, we limit ourselves to 32 bytes.
+            // (Currently does nothing, since there is also a front-end message with identifier 'E' and we will never reach this code until we fix the detection.)
+            if (header.identifier == 'E') {
+                bpf_load_data(buf, current_offset + sizeof(postgres_message_header_t), entry.details, 32);
+                // Yes, this is the same code as above for 'C', but parsing would go here.
+            } 
+
+            log_debug("postgres_process: Details for response type %c: %s\n", header.identifier, entry.details);
+
             // This is an answer to a query. We can calculate the latency.
             // Note that E from the backend indicates an error response, while E from the frontend is an execute message.
             if (state.request_timestamp != 0) {
                 __u64 current_time = bpf_ktime_get_boot_ns();
                 __maybe_unused __u64 latency = current_time - state.request_timestamp;
                 state.request_timestamp = 0; // Reset to not double-count when additional responses arrive.
+                entry.latency = latency;
                 log_debug("postgres_process: Latency: %llu ms\n", latency/1000);
             } else {
                 log_debug("postgres_process: Could not find request timestamp for connection\n");
             }
+
+            if (entry.latency > 0) {
+                // Only enqueue if we have a valid latency.
+                // Could add additional cases to carry errors, connection, authentication, etc.
+                postgres_batch_enqueue(&entry);
+            }
+
         }
 
         bpf_map_update_elem(&postgres_connection_states, tup, &state, BPF_ANY);
@@ -99,12 +127,6 @@ static __always_inline int postgres_process(conn_tuple_t *tup, const bpf_buffer_
         current_frame_offset += frame_length;
     } // End of frame loop
     
-    /*
-    if (heap->transaction.exchange_or_queue[0] != 0) {
-        postgres_batch_enqueue(&heap->transaction);
-    }
-    */
-
     return 0;
 }
 

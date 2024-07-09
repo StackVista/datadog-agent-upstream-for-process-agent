@@ -7,9 +7,12 @@ typedef struct {
     __u64 request_timestamp; // 0 if no request in flight.
 } postgres_connection_state_t;
 
+// Every batch entry represents a measurement of one query-response pair.
 typedef struct {
     conn_tuple_t tup;
-    __u32 commands_performed; // Number of commands performed. This is an approximation, see is_sql_command for limitations.
+    __u64 latency; // Latency in nanosconds.
+    char response_type; // Straight from the wire, see https://www.postgresql.org/docs/current/protocol-message-formats.html for values.
+    char details[32]; // Additional details, such as the command type and number of rows affected. May be truncated.
 } postgres_transaction_batch_entry_t;
 
 // All messages in Postgres start with a message header, except

@@ -16,6 +16,8 @@ type ConnTuple struct {
 }
 
 type EbpfTx struct {
-	Tup       ConnTuple
-	Performed uint32
+	Tup     ConnTuple
+	Latency uint64
+	Type    int8
+	Details [32]int8
 }
