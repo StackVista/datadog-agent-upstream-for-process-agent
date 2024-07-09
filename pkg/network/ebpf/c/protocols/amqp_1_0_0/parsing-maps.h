@@ -1,7 +1,7 @@
 #ifndef __AMQP_1_0_0_PARSING_MAPS_H
 #define __AMQP_1_0_0_PARSING_MAPS_H
 
-#include "protocols/amqp-1-0-0/types.h"
+#include "protocols/amqp_1_0_0/types.h"
 
 BPF_PERCPU_ARRAY_MAP(amqp_1_0_0_heap, __u32, amqp_1_0_0_transaction_batch_entry_t, 1)
 

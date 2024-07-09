@@ -19,7 +19,7 @@
 #include "protocols/kafka/kafka-parsing.h"
 #include "protocols/mongo/mongo-parsing.h"
 #include "protocols/amqp/amqp-parsing.h"
-#include "protocols/amqp-1-0-0/amqp-parsing.h"
+#include "protocols/amqp_1_0_0/amqp-parsing.h"
 #include "protocols/tls/java/erpc_dispatcher.h"
 #include "protocols/tls/java/erpc_handlers.h"
 #include "protocols/tls/go-tls-types.h"

@@ -378,9 +378,9 @@ def ninja_cgo_type_files(nw, windows):
                 "pkg/network/ebpf/c/tracer/tracer.h",
                 "pkg/network/ebpf/c/protocols/amqp/types.h",
             ],
-            "pkg/network/protocols/amqp-1-0-0/types.go": [
+            "pkg/network/protocols/amqp_1_0_0/types.go": [
                 "pkg/network/ebpf/c/tracer/tracer.h",
-                "pkg/network/ebpf/c/protocols/amqp-1-0-0/types.h",
+                "pkg/network/ebpf/c/protocols/amqp_1_0_0/types.h",
             ],
             "pkg/network/telemetry/telemetry_types.go": [
                 "pkg/ebpf/c/telemetry_types.h",

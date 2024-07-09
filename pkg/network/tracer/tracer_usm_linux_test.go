@@ -42,6 +42,7 @@ import (
 	netlink "github.com/DataDog/datadog-agent/pkg/network/netlink/testutil"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/amqp"
+	amqp_1_0_0 "github.com/DataDog/datadog-agent/pkg/network/protocols/amqp_1_0_0"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http/testutil"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/mongo"
@@ -219,6 +220,33 @@ func TestAMQPOverTLSStats(t *testing.T) {
 		}
 
 		return len(payload.AMQP) > 0
+	}, time.Second*30, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
+
+}
+
+func TestAMQP_1_0_0_Stats(t *testing.T) {
+	cfg := testConfig()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableAMQPMonitoring = true
+	cfg.MaxAMQPStatsBuffered = 1000
+	cfg.BPFDebug = true
+	tr := setupTracer(t, cfg)
+
+	require.NoError(t, amqp_1_0_0.RunServer(t, "0.0.0.0", "5672"))
+
+	// We do not have a suitable client for AMQP 1.0.0 yet.
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("amqp-testing-client")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for tup, metrics := range payload.AMQP_1_0_0 {
+			log.Errorf("AMQP 1.0.0 metrics %v:%v", tup, metrics)
+		}
+
+		return len(payload.AMQP_1_0_0) > 0
 	}, time.Second*30, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
 
 }

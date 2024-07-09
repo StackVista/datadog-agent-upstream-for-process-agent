@@ -19,8 +19,8 @@
 #include "protocols/mongo/usm-events.h"
 #include "protocols/amqp/helpers.h"
 #include "protocols/amqp/usm-events.h"
-#include "protocols/amqp-1-0-0/helpers.h"
-#include "protocols/amqp-1-0-0/usm-events.h"
+#include "protocols/amqp_1_0_0/helpers.h"
+#include "protocols/amqp_1_0_0/usm-events.h"
 
 __maybe_unused static __always_inline protocol_prog_t protocol_to_program(protocol_t proto) {
     switch(proto) {

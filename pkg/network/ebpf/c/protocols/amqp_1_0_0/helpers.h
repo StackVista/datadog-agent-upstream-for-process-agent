@@ -5,8 +5,8 @@
 #include "bpf_unified_buffer_access.h"
 
 #include "protocols/amqp/types.h" // For amqp_protocol_identifier
-#include "protocols/amqp-1-0-0/types.h"
-#include "protocols/amqp-1-0-0/parsing-maps.h"
+#include "protocols/amqp_1_0_0/types.h"
+#include "protocols/amqp_1_0_0/parsing-maps.h"
 #include "protocols/classification/common.h"
 
 // The method checks if the given buffer includes the protocol header which must be sent in the start of a new connection.

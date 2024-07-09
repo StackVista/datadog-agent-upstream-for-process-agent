@@ -20,7 +20,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/config"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/amqp"
-	amqp_1_0_0 "github.com/DataDog/datadog-agent/pkg/network/protocols/amqp-1-0-0"
+	amqp_1_0_0 "github.com/DataDog/datadog-agent/pkg/network/protocols/amqp_1_0_0"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http2"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/kafka"

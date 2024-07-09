@@ -5,9 +5,9 @@
 #include "bpf_endian.h"
 #include "bpf_unified_buffer_access.h"
 
-#include "protocols/amqp-1-0-0/types.h"
-#include "protocols/amqp-1-0-0/helpers.h"
-#include "protocols/amqp-1-0-0/parsing-maps.h"
+#include "protocols/amqp_1_0_0/types.h"
+#include "protocols/amqp_1_0_0/helpers.h"
+#include "protocols/amqp_1_0_0/parsing-maps.h"
 #include "protocols/classification/common.h"
 
 
@@ -199,7 +199,7 @@ static __always_inline int amqp_1_0_0_process(conn_tuple_t *tup, const bpf_buffe
         log_debug("amqp_1_0_0_process: delivery_count=%u (argument size: %u)\n", delivery_count, argument_size);
         
         if (batch_entry.delivery_count != 0) {
-            if (batch_entry.tup != *tup || batch_entry.channel != header.channel || batch_entry.handle != 0) {
+            if (bpf_memcmp(&batch_entry.tup, tup, sizeof(conn_tuple_t)) != 0 || batch_entry.channel != header.channel || batch_entry.handle != 0) {
                 // We have a batch entry, but the connection tuple or channel number has changed.
                 // Enqueue the current batch entry.
                 amqp_1_0_0_batch_enqueue(&batch_entry);

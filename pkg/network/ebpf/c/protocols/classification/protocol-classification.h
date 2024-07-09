@@ -8,7 +8,7 @@
 #include "port_range.h"
 
 #include "protocols/amqp/helpers.h"
-#include "protocols/amqp-1-0-0/helpers.h"
+#include "protocols/amqp_1_0_0/helpers.h"
 #include "protocols/classification/common.h"
 #include "protocols/classification/defs.h"
 #include "protocols/classification/maps.h"

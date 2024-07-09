@@ -9,7 +9,7 @@ package amqp_1_0_0
 
 /*
 #include "../../ebpf/c/conn_tuple.h"
-#include "../../ebpf/c/protocols/amqp-1-0-0/types.h"
+#include "../../ebpf/c/protocols/amqp_1_0_0/types.h"
 */
 import "C"
 
