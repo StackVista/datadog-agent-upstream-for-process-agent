@@ -15,8 +15,8 @@ typedef struct {
     char details[32]; // Additional details, such as the command type and number of rows affected. May be truncated.
 } postgres_transaction_batch_entry_t;
 
-// All messages in Postgres start with a message header, except
-// for the very first message, which is a startup message and does not have the one-byte identifier.
+// All messages in Postgres start with a message header, except for the very first message, 
+// which is a startup message and does not have the one-byte identifier.
 typedef struct {
     int length;
     int version; // We only support "196608" here.
