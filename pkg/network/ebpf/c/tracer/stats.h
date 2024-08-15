@@ -196,16 +196,18 @@ static __always_inline int handle_retransmit(struct sock *sk, int count) {
 }
 
 static __always_inline void handle_tcp_stats(conn_tuple_t* t, struct sock* sk, u8 state) {
-    u32 rtt = 0, rtt_var = 0;
-#ifdef COMPILE_PREBUILT
-    bpf_probe_read_kernel(&rtt, sizeof(rtt), (char*)sk + offset_rtt());
-    bpf_probe_read_kernel(&rtt_var, sizeof(rtt_var), (char*)sk + offset_rtt_var());
-#else
-    BPF_CORE_READ_INTO(&rtt, tcp_sk(sk), srtt_us);
-    BPF_CORE_READ_INTO(&rtt_var, tcp_sk(sk), mdev_us);
-#endif
+    // [STS] From 6.8 on offset guess for rtt is broken, due to the kernel not putting the srtt_us and mdev_us fields next to each other anymore.
+    // We do not use rtt anyway, so we set it to 0 here. Removing all fields would make too many conflicts
+//    u32 rtt = 0, rtt_var = 0;
+//#ifdef COMPILE_PREBUILT
+//    bpf_probe_read_kernel(&rtt, sizeof(rtt), (char*)sk + offset_rtt());
+//    bpf_probe_read_kernel(&rtt_var, sizeof(rtt_var), (char*)sk + offset_rtt_var());
+//#else
+//    BPF_CORE_READ_INTO(&rtt, tcp_sk(sk), srtt_us);
+//    BPF_CORE_READ_INTO(&rtt_var, tcp_sk(sk), mdev_us);
+//#endif
 
-    tcp_stats_t stats = { .rtt = rtt, .rtt_var = rtt_var };
+    tcp_stats_t stats = { .rtt = 0, .rtt_var = 0 };
     if (state > 0) {
         stats.state_transitions = (1 << state);
     }

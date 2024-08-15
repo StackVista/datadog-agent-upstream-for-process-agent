@@ -559,26 +559,32 @@ func (t *tracerOffsetGuesser) checkAndUpdateCurrentOffset(mp *ebpf.Map, expected
 			t.status.Offset_netns, _ = skipOverlaps(t.status.Offset_netns, t.sockRanges())
 		}
 	case GuessRTT:
-		t.status.Offset_rtt, overlapped = skipOverlaps(t.status.Offset_rtt, t.sockRanges())
-		if overlapped {
-			t.status.Offset_rtt_var = t.status.Offset_rtt + 4
-			// adjusted offset from eBPF overlapped with another field, we need to check new offset
-			break
-		}
+		// [STS] From 6.8 on offset guess for rtt is broken, due to the kernel not putting the srtt_us and mdev_us fields next to each other anymore.
+		// We do not use rtt anyway, so we set it to 0 here. Removing all fields would make too many conflicts
+		t.status.Offset_rtt = notApplicable
+		t.status.Offset_rtt_var = notApplicable
+		t.logAndAdvance(t.status.Offset_rtt, GuessSocketSK)
 
-		// For more information on the bit shift operations see:
-		// https://elixir.bootlin.com/linux/v4.6/source/net/ipv4/tcp.c#L2686
-		if t.status.Rtt>>3 == expected.rtt && t.status.Rtt_var>>2 == expected.rttVar {
-			t.logAndAdvance(t.status.Offset_rtt, GuessSocketSK)
-			break
-		}
-		// We know that these two fields are always next to each other, 4 bytes apart:
-		// https://elixir.bootlin.com/linux/v4.6/source/include/linux/tcp.h#L232
-		// rtt -> srtt_us
-		// rtt_var -> mdev_us
-		t.status.Offset_rtt++
-		t.status.Offset_rtt, _ = skipOverlaps(t.status.Offset_rtt, t.sockRanges())
-		t.status.Offset_rtt_var = t.status.Offset_rtt + 4
+		//t.status.Offset_rtt, overlapped = skipOverlaps(t.status.Offset_rtt, t.sockRanges())
+		//if overlapped {
+		//	t.status.Offset_rtt_var = t.status.Offset_rtt + 4
+		//	// adjusted offset from eBPF overlapped with another field, we need to check new offset
+		//	break
+		//}
+		//
+		//// For more information on the bit shift operations see:
+		//// https://elixir.bootlin.com/linux/v4.6/source/net/ipv4/tcp.c#L2686
+		//if t.status.Rtt>>3 == expected.rtt && t.status.Rtt_var>>2 == expected.rttVar {
+		//	t.logAndAdvance(t.status.Offset_rtt, GuessSocketSK)
+		//	break
+		//}
+		//// We know that these two fields are always next to each other, 4 bytes apart:
+		//// https://elixir.bootlin.com/linux/v4.6/source/include/linux/tcp.h#L232
+		//// rtt -> srtt_us
+		//// rtt_var -> mdev_us
+		//t.status.Offset_rtt++
+		//t.status.Offset_rtt, _ = skipOverlaps(t.status.Offset_rtt, t.sockRanges())
+		//t.status.Offset_rtt_var = t.status.Offset_rtt + 4
 	case GuessSocketSK:
 		if t.status.Sport_via_sk == htons(expected.sport) && t.status.Dport_via_sk == htons(expected.dport) {
 			// if we are on kernel version < 4.7, net_dev_queue tracepoint will not be activated, and thus we should skip
@@ -793,7 +799,10 @@ func (t *tracerOffsetGuesser) Guess(cfg *config.Config) ([]manager.ConstantEdito
 		if t.status.Offset_saddr >= threshold || t.status.Offset_daddr >= threshold ||
 			t.status.Offset_sport >= thresholdInetSock || t.status.Offset_dport >= threshold ||
 			t.status.Offset_netns >= threshold || t.status.Offset_family >= threshold ||
-			t.status.Offset_daddr_ipv6 >= threshold || t.status.Offset_rtt >= thresholdInetSock ||
+			t.status.Offset_daddr_ipv6 >= threshold ||
+			// [STS] From 6.8 on offset guess for rtt is broken, due to the kernel not putting the srtt_us and mdev_us fields next to each other anymore.
+			// We do not use rtt anyway, so we set it to 0 here. Removing all fields would make too many conflicts
+			// t.status.Offset_rtt >= thresholdInetSock ||
 			t.status.Offset_socket_sk >= threshold || t.status.Offset_sk_buff_sock >= threshold ||
 			t.status.Offset_sk_buff_transport_header >= threshold || t.status.Offset_sk_buff_head >= threshold {
 			return nil, fmt.Errorf("overflow while guessing %v, bailing out", whatString[GuessWhat(t.status.What)])
