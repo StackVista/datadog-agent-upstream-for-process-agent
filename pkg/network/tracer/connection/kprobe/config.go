@@ -46,7 +46,10 @@ func enabledProbes(c *config.Config, runtimeTracer, coreTracer bool) (map[probes
 		}
 		enableProbe(enabled, selectVersionBasedProbe(runtimeTracer, kv, probes.TCPSendMsg, probes.TCPSendMsgPre410, kv410))
 		enableProbe(enabled, probes.TCPSendMsgReturn)
-		if kv < kv650 {
+		// STS: SUSE linux backports the tcp_sendpage patches to lniux 6.4.0, this might hapen in other places
+		// aswell. For this reason we skip tcp_sendpage probe when it does not exist: https://bugzilla.suse.com/show_bug.cgi?id=1216396
+		sendPageMissing, err := ebpf.VerifyKernelFuncs("tcp_sendpage")
+		if kv < kv650 && err == nil && len(sendPageMissing) == 0 {
 			enableProbe(enabled, probes.TCPSendPage)
 			enableProbe(enabled, probes.TCPSendPageReturn)
 		}
