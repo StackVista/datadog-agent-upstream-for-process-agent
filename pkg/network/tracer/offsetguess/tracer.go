@@ -613,6 +613,14 @@ func (t *tracerOffsetGuesser) checkAndUpdateCurrentOffset(mp *ebpf.Map, expected
 		t.status.Offset_socket_sk++
 		// no overlaps because only field offset from `struct socket`
 	case GuessSKBuffSock:
+		log.Debugf("Trying sk_buff->sk at offset %d. sport found: %d, sport expected: %d. dport found: %d, dport expected: %d",
+			t.status.Offset_sk_buff_sock,
+			t.status.Sport_via_sk_via_sk_buf,
+			htons(expected.sportFl4),
+			t.status.Dport_via_sk_via_sk_buf,
+			htons(expected.dportFl4),
+		)
+
 		t.status.Offset_sk_buff_sock, overlapped = skipOverlaps(t.status.Offset_sk_buff_sock, t.skBuffRanges())
 		if overlapped {
 			// adjusted offset from eBPF overlapped with another field, we need to check new offset
