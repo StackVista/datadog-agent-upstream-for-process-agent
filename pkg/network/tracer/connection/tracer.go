@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/DataDog/datadog-agent/pkg/network/tracer/offsetguess"
 	"hash"
 	"math"
 	"sync"
@@ -191,6 +192,13 @@ func NewTracer(config *config.Config, bpfTelemetry *nettelemetry.EBPFTelemetry) 
 		manager.ConstantEditor{Name: "ephemeral_range_begin", Value: uint64(begin)},
 		manager.ConstantEditor{Name: "ephemeral_range_end", Value: uint64(end)})
 
+	netDevQueueOffset, err := offsetguess.GetNetDevQueueSkbOffset()
+	if err != nil {
+		return nil, fmt.Errorf("error finding offset for net_dev_queue skb field: %w", err)
+	}
+	mgrOptions.ConstantEditors = append(mgrOptions.ConstantEditors,
+		manager.ConstantEditor{Name: "offset_net_dev_queue_skb", Value: netDevQueueOffset})
+
 	closedChannelSize := defaultClosedChannelSize
 	if config.ClosedChannelSize > 0 {
 		closedChannelSize = config.ClosedChannelSize
@@ -199,7 +207,7 @@ func NewTracer(config *config.Config, bpfTelemetry *nettelemetry.EBPFTelemetry) 
 	var m *manager.Manager
 	var tracerType TracerType = TracerTypeFentry
 	var closeTracerFn func()
-	m, closeTracerFn, err := fentry.LoadTracer(config, mgrOptions, perfHandlerTCP)
+	m, closeTracerFn, err = fentry.LoadTracer(config, mgrOptions, perfHandlerTCP)
 	if err != nil && !errors.Is(err, fentry.ErrorNotSupported) {
 		// failed to load fentry tracer
 		return nil, err
