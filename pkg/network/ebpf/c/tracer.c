@@ -10,6 +10,7 @@
 #ifdef COMPILE_PREBUILT
 #include "prebuilt/offsets.h"
 #endif
+#include "tracer/tracepoint_offsets.h"
 #include "skb.h"
 #include "sockfd.h"
 #include "tracer/bind.h"
@@ -892,7 +893,7 @@ int kprobe__tcp_finish_connect(struct pt_regs *ctx) {
     tcp_stats_t seq_stats = { };
 
     if (!sk_buff_get_tcp_transport(skb, NULL, &(seq_stats.initial_tcp_seq))) {
-        update_tcp_stats(&t, seq_stats);   
+        update_tcp_stats(&t, seq_stats);
     }
 
     handle_tcp_stats(&t, skp, TCP_ESTABLISHED);
@@ -927,7 +928,7 @@ int kprobe__ip_build_and_send_pkt(struct pt_regs *ctx) {
     t.daddr_l = PT_REGS_PARM4(ctx);
     t.metadata |= CONN_TYPE_TCP;
 
-    t.netns = get_netns_from_sock(sk); 
+    t.netns = get_netns_from_sock(sk);
 
     tcp_seq_t stats = { };
 
@@ -956,7 +957,7 @@ int kretprobe__inet_csk_accept(struct pt_regs *ctx) {
     if (!read_conn_tuple(&t, sk, CONN_TYPE_TCP)) {
         return 0;
     }
-    
+
     tcp_seq_t *tcp_seq = bpf_map_lookup_elem(&tcp_accept_seq, &t);
     bpf_map_delete_elem(&tcp_accept_seq, &t);
 
@@ -964,9 +965,9 @@ int kretprobe__inet_csk_accept(struct pt_regs *ctx) {
 
     if (tcp_seq) {
         tcp_stats_t seq_stats = { .initial_tcp_seq = *tcp_seq };
-        update_tcp_stats(&t, seq_stats);   
+        update_tcp_stats(&t, seq_stats);
     }
-    
+
     handle_tcp_stats(&t, sk, TCP_ESTABLISHED);
     handle_message(&t, 0, 0, CONN_DIRECTION_INCOMING, 0, 0, PACKET_COUNT_NONE, sk, pid_tgid);
 
@@ -1158,11 +1159,6 @@ cleanup:
     bpf_map_delete_elem(&sockfd_lookup_args, &pid_tgid);
     return 0;
 }
-// Represents the parameters being passed to the tracepoint net/net_dev_queue
-struct net_dev_queue_ctx {
-    u64 unused;
-    struct sk_buff* skb;
-};
 
 static __always_inline struct sock* sk_buff_sk(struct sk_buff *skb) {
     struct sock * sk = NULL;
@@ -1176,8 +1172,8 @@ static __always_inline struct sock* sk_buff_sk(struct sk_buff *skb) {
 }
 
 SEC("tracepoint/net/net_dev_queue")
-int tracepoint__net__net_dev_queue(struct net_dev_queue_ctx* ctx) {
-    struct sk_buff* skb = ctx->skb;
+int tracepoint__net__net_dev_queue(char* ctx) {
+    struct sk_buff* skb = sk_buff_from_net_dev_queue_ctx(ctx);
     if (!skb) {
         return 0;
     }
