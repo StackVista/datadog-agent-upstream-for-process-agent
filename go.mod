@@ -65,7 +65,7 @@ require (
 	github.com/DataDog/sketches-go v1.4.2
 	github.com/DataDog/viper v1.12.0
 	github.com/DataDog/watermarkpodautoscaler v0.5.2
-	github.com/DataDog/zstd v1.5.5
+	github.com/DataDog/zstd v1.5.6
 	github.com/DataDog/zstd_0 v0.0.0-20210310093942-586c1286621f
 	github.com/Masterminds/semver v1.5.0
 	github.com/Masterminds/semver/v3 v3.2.1
@@ -594,6 +594,7 @@ require (
 	github.com/knadh/koanf/v2 v2.0.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/moby/sys/sequential v0.5.0 // indirect
+	github.com/onsi/ginkgo/v2 v2.11.0 // indirect
 	github.com/pjbgf/sha1cd v0.3.0 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/rs/zerolog v1.29.1 // indirect
