@@ -3,7 +3,7 @@ module github.com/DataDog/datadog-agent/pkg/obfuscate
 go 1.20
 
 require (
-	github.com/DataDog/datadog-go/v5 v5.1.1
+	github.com/DataDog/datadog-go/v5 v5.6.0
 	github.com/outcaste-io/ristretto v0.2.1
 	github.com/stretchr/testify v1.8.1
 	go.uber.org/atomic v1.10.0
