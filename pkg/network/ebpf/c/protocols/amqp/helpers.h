@@ -12,8 +12,11 @@
 // The method checks if the given buffer includes the protocol header which must be sent in the start of a new connection.
 // Ref: https://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf.
 static __always_inline bool is_amqp_protocol_header(const bpf_buffer_desc_t *buf_desc) {
-    amqp_protocol_identifier identifier;
+    amqp_protocol_identifier identifier = {};
     __maybe_unused int error = bpf_load_data(buf_desc, 0, &identifier, sizeof(amqp_protocol_identifier));
+    if(&identifier.preamble[0] == NULL) {
+        return false;
+    }
     bool match = !bpf_memcmp(AMQP_PREFACE, identifier.preamble, sizeof(AMQP_PREFACE));
     if (match) {
         if (identifier.major == 0 && identifier.minor == 9 && identifier.revision == 1) {

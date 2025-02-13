@@ -1175,7 +1175,12 @@ func TestStatsResetOnUnderflow(t *testing.T) {
 	conn.Monotonic.SentBytes--
 
 	conns = state.GetDelta(client, latestEpochTime(), []ConnectionStats{conn}, nil, nil).Conns
-	require.Len(t, conns, 0) // dropped because last stats are zero
+
+	// [STS] We always report connections even if there is no flow of data
+	// See commit here https://gitlab.com/stackvista/agent/datadog-agent-upstream-for-process-agent/-/commit/53f2a5cc598f322bdd09ea337210486fcb456863
+	conn.Monotonic.SentBytes = 3
+	conn.Last.SentBytes = 0
+	assert.Equal(t, conn, conns[0])
 }
 
 func TestDoubleCloseOnTwoClients(t *testing.T) {
