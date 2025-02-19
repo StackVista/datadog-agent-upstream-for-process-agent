@@ -12,8 +12,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/DataDog/datadog-agent/pkg/process/util"
-	"github.com/google/uuid"
 	"io"
 	"math/rand"
 	"net"
@@ -25,6 +23,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/DataDog/datadog-agent/pkg/process/util"
+	"github.com/google/uuid"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -47,7 +48,7 @@ import (
 	libtelemetry "github.com/DataDog/datadog-agent/pkg/network/protocols/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/network/tracer/testutil/grpc"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
-	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
 
 const (
@@ -99,7 +100,14 @@ type HTTPTestSuite struct {
 }
 
 func TestHTTP(t *testing.T) {
-	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt, ebpftest.RuntimeCompiled /* STS edit:, ebpftest.CORE */}, "", func(t *testing.T) {
+	modes := []ebpftest.BuildMode{ebpftest.Prebuilt}
+
+	if !stsutil.TestingInsideDockerBuilder() {
+		// [STS] we want to avoid issues with kernel headers
+		modes = append(modes, ebpftest.RuntimeCompiled)
+	}
+
+	ebpftest.TestBuildModes(t, modes, "", func(t *testing.T) {
 		suite.Run(t, new(HTTPTestSuite))
 	})
 }
@@ -501,7 +509,7 @@ func (s *HTTPTestSuite) TestHTTPMonitorAmbiguousId() {
 
 func (s *HTTPTestSuite) TestHTTPMonitorIntegrationWithNAT() {
 	t := s.T()
-	testutil2.SkipIfStackState(t, "Not running dnat test where iptables cannot be ran")
+	stsutil.SkipIfStackState(t, "Not running dnat test where iptables cannot be ran")
 
 	// SetupDNAT sets up a NAT translation from 2.2.2.2 to 1.1.1.1
 	netlink.SetupDNAT(t)
@@ -523,7 +531,7 @@ func (s *HTTPTestSuite) TestHTTPMonitorIntegrationWithNAT() {
 
 func (s *HTTPTestSuite) TestUnknownMethodRegression() {
 	t := s.T()
-	testutil2.SkipIfStackState(t, "Not running dnat test where iptables cannot be ran")
+	stsutil.SkipIfStackState(t, "Not running dnat test where iptables cannot be ran")
 
 	// SetupDNAT sets up a NAT translation from 2.2.2.2 to 1.1.1.1
 	netlink.SetupDNAT(t)

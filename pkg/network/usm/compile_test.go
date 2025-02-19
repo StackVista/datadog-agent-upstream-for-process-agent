@@ -16,9 +16,12 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/config"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
 
 func TestHttpCompile(t *testing.T) {
+	stsutil.SkipIfInsideDockerBuilder(t, "we need kernel headers to compile BPF programs")
+
 	ebpftest.TestBuildMode(t, ebpftest.RuntimeCompiled, "", func(t *testing.T) {
 		currKernelVersion, err := kernel.HostVersion()
 		require.NoError(t, err)

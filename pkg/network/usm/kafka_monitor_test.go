@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
-	testutil2 "github.com/DataDog/datadog-agent/pkg/util/testutil"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -80,7 +80,7 @@ func skipTestIfKernelNotSupported(t *testing.T) {
 }
 
 func TestKafkaProtocolParsing(t *testing.T) {
-	testutil2.SkipIfStackState(t, "We do not test this yet, it requires compos ein the environment")
+	stsutil.SkipIfStackState(t, "We do not test this yet, it requires compos ein the environment")
 	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt, ebpftest.RuntimeCompiled, ebpftest.CORE}, "", testKafkaProtocolParsing)
 }
 
@@ -505,8 +505,14 @@ func newKafkaMonitor(t *testing.T, cfg *config.Config) *Monitor {
 // This test will help us identify if there is any verifier problems while loading the Kafka binary in the CI environment
 func TestLoadKafkaBinary(t *testing.T) {
 	skipTestIfKernelNotSupported(t)
+	modes := []ebpftest.BuildMode{ebpftest.Prebuilt, ebpftest.CORE}
 
-	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt, ebpftest.RuntimeCompiled, ebpftest.CORE}, "", func(t *testing.T) {
+	if !stsutil.TestingInsideDockerBuilder() {
+		// [STS] we want to avoid issues with kernel headers
+		modes = append(modes, ebpftest.RuntimeCompiled)
+	}
+
+	ebpftest.TestBuildModes(t, modes, "", func(t *testing.T) {
 		t.Run("debug", func(t *testing.T) {
 			loadKafkaBinary(t, true)
 		})

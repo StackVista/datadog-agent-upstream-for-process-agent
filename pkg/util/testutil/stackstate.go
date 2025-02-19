@@ -1,7 +1,6 @@
 package testutil
 
 import (
-	"fmt"
 	"os"
 	"testing"
 )
@@ -12,6 +11,17 @@ func TestingStackState() bool {
 
 func SkipIfStackState(t *testing.T, reason string) {
 	if TestingStackState() {
-		t.Skip(fmt.Sprintf("Skipping test because StackState testing is enabled: %s", reason))
+		t.Skipf("Skipping test because StackState testing is enabled: %s", reason)
+	}
+}
+
+func TestingInsideDockerBuilder() bool {
+	_, err := os.Stat("/.dockerenv")
+	return err == nil
+}
+
+func SkipIfInsideDockerBuilder(t *testing.T, reason string) {
+	if TestingInsideDockerBuilder() {
+		t.Skipf("Skipping test because we are inside a docker: %s", reason)
 	}
 }
