@@ -4,15 +4,15 @@
 package http
 
 type ConnTuple = struct {
-	Saddr_h  uint64
-	Saddr_l  uint64
-	Daddr_h  uint64
-	Daddr_l  uint64
-	Sport    uint16
-	Dport    uint16
-	Netns    uint32
-	Pid      uint32
-	Metadata uint32
+	Saddr_h   uint64
+	Saddr_l   uint64
+	Daddr_h   uint64
+	Daddr_l   uint64
+	Sport     uint16
+	Dport     uint16
+	Netns     uint32
+	Metadata  uint32
+	Pad_cgo_0 [4]byte
 }
 type SslSock struct {
 	Tup       ConnTuple
@@ -29,14 +29,19 @@ type EbpfEvent struct {
 	Http  EbpfTx
 }
 type EbpfTx struct {
-	Request_started      uint64
-	Response_last_seen   uint64
-	Tags                 uint64
-	Tcp_seq              uint32
-	Response_status_code uint16
-	Request_method       uint8
-	Pad_cgo_0            [1]byte
-	Request_fragment     [208]byte
+	Request_started       uint64
+	Response_last_seen    uint64
+	Tags                  uint64
+	Tcp_seq               uint32
+	Response_status_code  uint16
+	Request_method        uint8
+	Pad_cgo_0             [1]byte
+	Request_fragment      [208]byte
+	Request_tracing_id    [40]byte
+	Response_tracing_id   [40]byte
+	Request_parse_result  uint8
+	Response_parse_result uint8
+	Pad_cgo_1             [6]byte
 }
 
 const (

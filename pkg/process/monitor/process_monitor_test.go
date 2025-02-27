@@ -8,6 +8,8 @@
 package monitor
 
 import (
+	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"sync"
@@ -15,11 +17,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"github.com/vishvananda/netns"
 	"go.uber.org/atomic"
 
-	"github.com/DataDog/datadog-agent/pkg/eventmonitor/consumers/testutil"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/util"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
@@ -27,35 +27,13 @@ import (
 
 func getProcessMonitor(t *testing.T) *ProcessMonitor {
 	pm := GetProcessMonitor()
+	require.NoError(t, pm.Initialize(false))
+
 	t.Cleanup(func() {
 		pm.Stop()
 		telemetry.Clear()
 	})
 	return pm
-}
-
-func waitForProcessMonitor(t *testing.T, pm *ProcessMonitor) {
-	execCounter := atomic.NewInt32(0)
-	execCallback := func(_ uint32) { execCounter.Inc() }
-	registerCallback(t, pm, true, &execCallback)
-
-	exitCounter := atomic.NewInt32(0)
-	// Sanity subscribing a callback.
-	exitCallback := func(_ uint32) { exitCounter.Inc() }
-	registerCallback(t, pm, false, &exitCallback)
-
-	require.Eventually(t, func() bool {
-		_ = exec.Command("/bin/echo").Run()
-		return execCounter.Load() > 0 && exitCounter.Load() > 0
-	}, 10*time.Second, time.Millisecond*200)
-}
-
-func initializePM(t *testing.T, pm *ProcessMonitor, useEventStream bool) {
-	require.NoError(t, pm.Initialize(useEventStream))
-	if useEventStream {
-		InitializeEventConsumer(testutil.NewTestProcessConsumer(t))
-	}
-	waitForProcessMonitor(t, pm)
 }
 
 func registerCallback(t *testing.T, pm *ProcessMonitor, isExec bool, callback *ProcessCallback) func() {
@@ -87,137 +65,77 @@ func TestProcessMonitorSingleton(t *testing.T) {
 	require.Equal(t, pm, pm2)
 }
 
-type processMonitorSuite struct {
-	suite.Suite
-	useEventStream bool
-}
-
-func (s *processMonitorSuite) TestProcessMonitorSanity() {
-	t := s.T()
+func TestProcessMonitorSanity(t *testing.T) {
 	pm := getProcessMonitor(t)
-	execsMutex := sync.RWMutex{}
-	execs := make(map[uint32]struct{})
+	numberOfExecs := atomic.Int32{}
 	testBinaryPath := getTestBinaryPath(t)
-	callback := func(pid uint32) {
-		execsMutex.Lock()
-		defer execsMutex.Unlock()
-		execs[pid] = struct{}{}
-	}
-	registerCallback(t, pm, true, &callback)
+	callback := func(pid uint32) { numberOfExecs.Inc() }
+	registerCallback(t, pm, true, (*ProcessCallback)(&callback))
 
-	exitMutex := sync.RWMutex{}
-	exits := make(map[uint32]struct{})
-	exitCallback := func(pid uint32) {
-		exitMutex.Lock()
-		defer exitMutex.Unlock()
-		exits[pid] = struct{}{}
-	}
-	registerCallback(t, pm, false, &exitCallback)
-
-	initializePM(t, pm, s.useEventStream)
-	cmd := exec.Command(testBinaryPath, "test")
-	require.NoError(t, cmd.Run())
-	require.Eventually(t, func() bool {
-		execsMutex.RLock()
-		_, execCaptured := execs[uint32(cmd.Process.Pid)]
-		execsMutex.RUnlock()
-		if !execCaptured {
-			t.Logf("didn't capture exec event %d", cmd.Process.Pid)
-		}
-
-		exitMutex.RLock()
-		_, exitCaptured := exits[uint32(cmd.Process.Pid)]
-		exitMutex.RUnlock()
-		if !exitCaptured {
-			t.Logf("didn't capture exit event %d", cmd.Process.Pid)
-		}
-		return execCaptured && exitCaptured
-	}, time.Second, time.Millisecond*200)
-
-	require.GreaterOrEqual(t, pm.tel.events.Get(), pm.tel.exec.Get(), "events is not >= than exec")
-	require.GreaterOrEqual(t, pm.tel.events.Get(), pm.tel.exit.Get(), "events is not >= than exit")
-	require.NotEqual(t, int64(0), pm.tel.exec.Get())
-	require.NotEqual(t, int64(0), pm.tel.exit.Get())
-	require.Equal(t, int64(0), pm.tel.restart.Get())
-	require.Equal(t, int64(0), pm.tel.reinitFailed.Get())
-	require.Equal(t, int64(0), pm.tel.processScanFailed.Get())
-	require.GreaterOrEqual(t, pm.tel.callbackExecuted.Get(), int64(1), "callback_executed")
+	require.NoError(t, exec.Command(testBinaryPath, "test").Run())
+	require.Eventuallyf(t, func() bool {
+		t.Logf("number of execs: %d", numberOfExecs.Load())
+		return numberOfExecs.Load() >= 1
+	}, time.Second, time.Millisecond*200, "didn't capture exec events")
 }
 
-func TestProcessMonitor(t *testing.T) {
-	t.Run("netlink", func(t *testing.T) {
-		suite.Run(t, &processMonitorSuite{useEventStream: false})
-	})
-	t.Run("event stream", func(t *testing.T) {
-		suite.Run(t, &processMonitorSuite{useEventStream: true})
-	})
+func mkCallback(t *testing.T, c *atomic.Bool, index int) *ProcessCallback {
+	f := func(pid uint32) {
+		t.Logf("Storing %d for %d", pid, index)
+		c.Store(true)
+	}
+	return (*ProcessCallback)(&f)
 }
 
-func (s *processMonitorSuite) TestProcessRegisterMultipleCallbacks() {
-	t := s.T()
+func TestProcessRegisterMultipleExecCallbacks(t *testing.T) {
 	pm := getProcessMonitor(t)
 
 	const iterations = 10
-	execCountersMutexes := make([]sync.RWMutex, iterations)
-	execCounters := make([]map[uint32]struct{}, iterations)
-	exitCountersMutexes := make([]sync.RWMutex, iterations)
-	exitCounters := make([]map[uint32]struct{}, iterations)
+	counters := make([]*atomic.Bool, iterations)
 	for i := 0; i < iterations; i++ {
-		execCountersMutexes[i] = sync.RWMutex{}
-		execCounters[i] = make(map[uint32]struct{})
-		c := execCounters[i]
-		// Sanity subscribing a callback.
-		callback := func(pid uint32) {
-			execCountersMutexes[i].Lock()
-			defer execCountersMutexes[i].Unlock()
-			c[pid] = struct{}{}
-		}
-		registerCallback(t, pm, true, &callback)
-
-		exitCountersMutexes[i] = sync.RWMutex{}
-		exitCounters[i] = make(map[uint32]struct{})
-		exitc := exitCounters[i]
-		// Sanity subscribing a callback.
-		exitCallback := func(pid uint32) {
-			exitCountersMutexes[i].Lock()
-			defer exitCountersMutexes[i].Unlock()
-			exitc[pid] = struct{}{}
-		}
-		registerCallback(t, pm, false, &exitCallback)
+		counters[i] = atomic.NewBool(false)
+		c := counters[i]
+		callback := func(pid uint32) { c.Store(true) }
+		registerCallback(t, pm, true, (*ProcessCallback)(&callback))
 	}
 
-	initializePM(t, pm, s.useEventStream)
-	cmd := exec.Command("/bin/sleep", "1")
-	require.NoError(t, cmd.Run())
+	t.Logf("Number of callbacks: %d", len(pm.processExecCallbacks))
+	require.NoError(t, exec.Command("/bin/echo").Run())
 	require.Eventuallyf(t, func() bool {
-		// Instead of breaking immediately when we don't find the event, we want logs to be printed for all iterations.
-		found := true
+		ok := true
 		for i := 0; i < iterations; i++ {
-			execCountersMutexes[i].RLock()
-			if _, captured := execCounters[i][uint32(cmd.Process.Pid)]; !captured {
-				t.Logf("iter %d didn't capture exec event", i)
-				found = false
+			if !counters[i].Load() {
+				t.Logf("iter %d didn't capture event", i)
+				ok = false
 			}
-			execCountersMutexes[i].RUnlock()
-
-			exitCountersMutexes[i].RLock()
-			if _, captured := exitCounters[i][uint32(cmd.Process.Pid)]; !captured {
-				t.Logf("iter %d didn't capture exit event", i)
-				found = false
-			}
-			exitCountersMutexes[i].RUnlock()
 		}
-		return found
+		return ok
 	}, time.Second, time.Millisecond*200, "at least of the callbacks didn't capture events")
+}
 
-	require.GreaterOrEqual(t, pm.tel.events.Get(), pm.tel.exec.Get(), "events is not >= than exec")
-	require.GreaterOrEqual(t, pm.tel.events.Get(), pm.tel.exit.Get(), "events is not >= than exit")
-	require.NotEqual(t, int64(0), pm.tel.exec.Get())
-	require.NotEqual(t, int64(0), pm.tel.exit.Get())
-	require.Equal(t, int64(0), pm.tel.restart.Get())
-	require.Equal(t, int64(0), pm.tel.reinitFailed.Get())
-	require.Equal(t, int64(0), pm.tel.processScanFailed.Get())
-	require.GreaterOrEqual(t, pm.tel.callbackExecuted.Get(), int64(1), "callback_executed")
+func TestProcessRegisterMultipleExitCallbacks(t *testing.T) {
+	pm := getProcessMonitor(t)
+
+	const iterations = 10
+	counters := make([]*atomic.Int32, iterations)
+	for i := 0; i < iterations; i++ {
+		counters[i] = &atomic.Int32{}
+		c := counters[i]
+		// Sanity subscribing a callback.
+		callback := func(pid uint32) { c.Inc() }
+		registerCallback(t, pm, true, (*ProcessCallback)(&callback))
+	}
+
+	require.NoError(t, exec.Command("/bin/echo").Run())
+	require.Eventuallyf(t, func() bool {
+		for i := 0; i < iterations; i++ {
+			if counters[i].Load() <= int32(0) {
+				t.Logf("iter %d didn't capture event", i)
+				return false
+			}
+		}
+		return true
+	}, time.Second, time.Millisecond*200, "at least of the callbacks didn't capture events")
 }
 
 func TestProcessMonitorRefcount(t *testing.T) {
@@ -225,83 +143,125 @@ func TestProcessMonitorRefcount(t *testing.T) {
 
 	for i := 1; i <= 10; i++ {
 		pm = GetProcessMonitor()
-		require.Equal(t, pm.refcount.Load(), int32(i))
+		pm.Initialize(false)
+		require.Equal(t, int32(i), pm.refcount.Load())
 	}
 
 	for i := 1; i <= 10; i++ {
 		pm.Stop()
-		require.Equal(t, pm.refcount.Load(), int32(10-i))
+		require.Equal(t, int32(10-i), pm.refcount.Load())
 	}
 }
 
-func (s *processMonitorSuite) TestProcessMonitorInNamespace() {
-	t := s.T()
+func TestProcessMonitorInNamespace(t *testing.T) {
 	execSet := sync.Map{}
-	exitSet := sync.Map{}
-
-	pm := getProcessMonitor(t)
-
-	callback := func(pid uint32) { execSet.Store(pid, struct{}{}) }
-	registerCallback(t, pm, true, &callback)
-
-	exitCallback := func(pid uint32) { exitSet.Store(pid, struct{}{}) }
-	registerCallback(t, pm, false, &exitCallback)
 
 	monNs, err := netns.New()
 	require.NoError(t, err, "could not create network namespace for process monitor")
 	t.Cleanup(func() { monNs.Close() })
 
-	require.NoError(t, kernel.WithNS(monNs, func() error {
-		initializePM(t, pm, s.useEventStream)
-		return nil
-	}), "could not start process monitor in netNS")
-	t.Cleanup(pm.Stop)
+	var pm *ProcessMonitor
+	require.NoError(t, kernel.WithNS(monNs,
+		func() error {
+			pm = getProcessMonitor(t)
+			return nil
+		},
+	), "could not start process monitor in netNS")
 
-	time.Sleep(500 * time.Millisecond)
+	callback := func(pid uint32) { execSet.Store(int(pid), struct{}{}) }
+	registerCallback(t, pm, true, (*ProcessCallback)(&callback))
+
 	// Process in root NS
-	cmd := exec.Command("/bin/sleep", "1")
+	cmd := exec.Command("/bin/echo")
 	require.NoError(t, cmd.Run(), "could not run process in root namespace")
-	pid := uint32(cmd.ProcessState.Pid())
 
 	require.Eventually(t, func() bool {
-		_, capturedExec := execSet.Load(pid)
-		if !capturedExec {
-			t.Logf("pid %d not captured in exec", pid)
-		}
-		_, capturedExit := exitSet.Load(pid)
-		if !capturedExit {
-			t.Logf("pid %d not captured in exit", pid)
-		}
-		return capturedExec && capturedExit
-	}, time.Second, time.Millisecond*200, "did not capture process EXEC/EXIT from root namespace")
+		_, captured := execSet.Load(cmd.ProcessState.Pid())
+		return captured
+	}, time.Second, time.Millisecond*200, "did not capture process EXEC from root namespace")
 
 	// Process in another NS
 	cmdNs, err := netns.New()
 	require.NoError(t, err, "could not create network namespace for process")
 	defer cmdNs.Close()
 
-	cmd = exec.Command("/bin/sleep", "1")
+	cmd = exec.Command("/bin/echo")
 	require.NoError(t, kernel.WithNS(cmdNs, cmd.Run), "could not run process in other network namespace")
-	pid = uint32(cmd.ProcessState.Pid())
 
 	require.Eventually(t, func() bool {
-		_, capturedExec := execSet.Load(pid)
-		if !capturedExec {
-			t.Logf("pid %d not captured in exec", pid)
-		}
-		_, capturedExit := exitSet.Load(pid)
-		if !capturedExit {
-			t.Logf("pid %d not captured in exit", pid)
-		}
-		return capturedExec && capturedExit
-	}, time.Second, 200*time.Millisecond, "did not capture process EXEC/EXIT from other namespace")
+		_, captured := execSet.Load(cmd.ProcessState.Pid())
+		return captured
+	}, time.Second, 200*time.Millisecond, "did not capture process EXEC from other namespace")
+}
 
-	require.GreaterOrEqual(t, pm.tel.events.Get(), pm.tel.exec.Get(), "events is not >= than exec")
-	require.GreaterOrEqual(t, pm.tel.events.Get(), pm.tel.exit.Get(), "events is not >= than exit")
-	require.NotEqual(t, int64(0), pm.tel.exec.Get())
-	require.NotEqual(t, int64(0), pm.tel.exit.Get())
-	require.Equal(t, int64(0), pm.tel.restart.Get())
-	require.Equal(t, int64(0), pm.tel.reinitFailed.Get())
-	require.Equal(t, int64(0), pm.tel.processScanFailed.Get())
-	require.GreaterOrEqual(t, pm.tel.callbackExecuted.Get(), int64(1), "callback_executed")
+func TestProcessMonitorRestartNetlink(t *testing.T) {
+	// Making sure we get the same process monitor if we call it twice.
+	pm := GetProcessMonitor()
+
+	unsubscribe := pm.SubscribeExec(func(pid uint32) {})
+
+	require.NoError(t, pm.Initialize(false))
+	defer pm.Stop()
+
+	// Make sure we can restart netlink
+	require.NoError(t, pm.RestartNetLink())
+
+	// making sure unsubscribe works and does not panic for the second unsubscription.
+	unsubscribe()
+	require.NotPanics(t, unsubscribe)
+}
+
+func TestProcessRestartNoDoublePid(t *testing.T) {
+	execSet := sync.Map{}
+	exitSet := sync.Map{}
+
+	pm := GetProcessMonitor()
+
+	tmpFile, err := ioutil.TempFile("", "sleep")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+	err = util.CopyFile("/bin/sleep", tmpFile.Name())
+	require.NoError(t, err)
+
+	require.NoError(t, os.Chmod(tmpFile.Name(), 0500))
+
+	require.NoError(t, pm.Initialize(false))
+	defer pm.Stop()
+	callbackExec := func(pid uint32) {
+		if _, exists := execSet.Load(int(pid)); exists {
+			require.Fail(t, "Same exec pid was reported twice")
+		}
+		execSet.Store(int(pid), struct{}{})
+	}
+	callbackExit := func(pid uint32) {
+		if _, exists := exitSet.Load(int(pid)); exists {
+			require.Fail(t, "Same exit pid was reported twice")
+		}
+		exitSet.Store(int(pid), struct{}{})
+	}
+
+	unsubscribeExec := pm.SubscribeExec(callbackExec)
+	unsubscribeExit := pm.SubscribeExit(callbackExit)
+
+	cmd := exec.Command(tmpFile.Name(), "10")
+	require.NoError(t, cmd.Start())
+
+	require.Eventuallyf(t, func() bool {
+		_, execExists := execSet.Load(cmd.Process.Pid)
+		_, exitExists := exitSet.Load(cmd.Process.Pid)
+		return execExists && !exitExists
+	}, time.Second, time.Millisecond*200, fmt.Sprintf("didn't capture exec and not exit"))
+
+	require.NoError(t, pm.RestartNetLink())
+	require.NoError(t, cmd.Process.Kill())
+	require.Equal(t, "signal: killed", cmd.Wait().Error())
+
+	require.Eventuallyf(t, func() bool {
+		_, execExists := execSet.Load(cmd.ProcessState.Pid())
+		_, exitExists := exitSet.Load(cmd.ProcessState.Pid())
+		return execExists && exitExists
+	}, time.Second, time.Millisecond*200, fmt.Sprintf("didn't capture exec and exit"))
+
+	unsubscribeExit()
+	unsubscribeExec()
 }

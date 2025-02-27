@@ -47,7 +47,7 @@ func ParseConnectionFilters(filters map[string][]string) (excludelist []*Connect
 		} else if strings.Contains(ip, "::") {
 			subnet, err = netip.ParsePrefix(ip + "/64") // if given ipv6, prefix length of 64
 		} else {
-			log.Errorf("Invalid IP/CIDR/* defined for connection filter")
+			log.Errorf("Invalid IP/CIDR/* defined for connection filter: %s", ip)
 			continue
 		}
 
@@ -127,7 +127,7 @@ func parsePortFilter(pf string) (uint64, uint64, ConnTypeFilter, error) {
 				upperPort, err = parsePortString(strings.TrimSpace(portRange[1])) // Parse upper port into upperPort
 			}
 		} else {
-			err = fmt.Errorf("invalid port range doesn't have enough components: %pf", portRange)
+			err = fmt.Errorf("invalid port range doesn't have enough components: %s", portRange)
 		}
 	} else { // The defined port is an integer
 		lowerPort, err = parsePortString(pf)

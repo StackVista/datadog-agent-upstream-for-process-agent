@@ -22,5 +22,4 @@
 #define asm_inline asm
 #endif
 
-#define volatile(x...) volatile("")
 #endif

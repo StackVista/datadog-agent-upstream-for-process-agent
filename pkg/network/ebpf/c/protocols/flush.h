@@ -18,6 +18,8 @@ static __always_inline void flush(void *ctx) {
     kafka_batch_flush(ctx);
     postgres_batch_flush(ctx);
     redis_batch_flush(ctx);
+    mongo_batch_flush(ctx);
+    amqp_batch_flush(ctx);
 }
 
 SEC("tracepoint/net/netif_receive_skb")

@@ -48,6 +48,17 @@ func main() {
 	convertPointerToUint64Regex := regexp.MustCompile(`\*_Ctype_struct_(\w+)`)
 	b = convertPointerToUint64Regex.ReplaceAll(b, []byte("uint64"))
 
+	convertHTTPTransactionRequestTracingRegex := regexp.MustCompile(`(Request_tracing_id)(\s+)\[(\d+)\]u?int8`)
+	b = convertHTTPTransactionRequestTracingRegex.ReplaceAll(b, []byte("$1$2[$3]byte"))
+
+	convertHTTPTransactionResponseTracingRegex := regexp.MustCompile(`(Response_tracing_id)(\s+)\[(\d+)\]u?int8`)
+	b = convertHTTPTransactionResponseTracingRegex.ReplaceAll(b, []byte("$1$2[$3]byte"))
+
+	// Convert [120]int8 to [120]byte in lib_path_t members to simplify
+	// conversion to string; see golang.org/issue/20753
+	convertLibraryRegex := regexp.MustCompile(`(Buf)(\s+)\[(\d+)\]u?int8`)
+	b = convertLibraryRegex.ReplaceAll(b, []byte("$1$2[$3]byte"))
+
 	b, err = format.Source(b)
 	if err != nil {
 		log.Fatal(err)

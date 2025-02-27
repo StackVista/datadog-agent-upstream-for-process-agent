@@ -378,7 +378,7 @@ typedef struct filterPacketHeader
 #define HTTP_BUFFER_SIZE 25
 
 // This controls the number of HTTP transactions read from userspace at a time
-#define HTTP_BATCH_SIZE 15
+#define HTTP_BATCH_SIZE 10
 
 #define HTTPS_PORT 443
 

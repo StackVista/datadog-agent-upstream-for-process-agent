@@ -30,8 +30,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/DataDog/datadog-agent/pkg/ebpf/ebpftest"
-	"github.com/DataDog/datadog-agent/pkg/ebpf/prebuilt"
-	consumerstestutil "github.com/DataDog/datadog-agent/pkg/eventmonitor/consumers/testutil"
 	"github.com/DataDog/datadog-agent/pkg/network"
 	"github.com/DataDog/datadog-agent/pkg/network/config"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
@@ -44,8 +42,8 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/usm/consts"
 	usmtestutil "github.com/DataDog/datadog-agent/pkg/network/usm/testutil"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/utils"
-	"github.com/DataDog/datadog-agent/pkg/process/monitor"
 	globalutils "github.com/DataDog/datadog-agent/pkg/util/testutil"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 	dockerutils "github.com/DataDog/datadog-agent/pkg/util/testutil/docker"
 )
 
@@ -54,9 +52,10 @@ type tlsSuite struct {
 }
 
 func TestTLSSuite(t *testing.T) {
-	modes := []ebpftest.BuildMode{ebpftest.RuntimeCompiled, ebpftest.CORE}
-	if !prebuilt.IsDeprecated() {
-		modes = append(modes, ebpftest.Prebuilt)
+	modes := []ebpftest.BuildMode{ebpftest.Prebuilt}
+	if !stsutil.TestingStackState() {
+		modes = append(modes, ebpftest.RuntimeCompiled)
+		modes = append(modes, ebpftest.CORE)
 	}
 	ebpftest.TestBuildModes(t, modes, "", func(t *testing.T) {
 		if !usmconfig.TLSSupported(utils.NewUSMEmptyConfig()) {
@@ -66,8 +65,18 @@ func TestTLSSuite(t *testing.T) {
 	})
 }
 
+// todo!: this is the new version of `TestHTTPSObservationViaLibraryIntegration` test.
 func (s *tlsSuite) TestHTTPSViaLibraryIntegration() {
 	t := s.T()
+
+	extractRequestID := func(cmd []string) string {
+		for _, arg := range cmd {
+			if strings.HasPrefix(arg, "X-Request-Id: ") {
+				return strings.TrimPrefix(arg, "X-Request-Id: ")
+			}
+		}
+		return ""
+	}
 
 	cfg := utils.NewUSMEmptyConfig()
 	cfg.EnableHTTPMonitoring = true
@@ -100,6 +109,10 @@ func (s *tlsSuite) TestHTTPSViaLibraryIntegration() {
 		{
 			name:     "curl",
 			fetchCmd: []string{"curl", "--http1.1", "-k", "-o/dev/null", "-d", tempFile},
+		},
+		{
+			name:     "curl_observation",
+			fetchCmd: []string{"curl", "--http1.1", "-k", "-H", "X-Request-Id: 8cda17a5-eb41-4ced-9843-acc826f95c8c", "-o/dev/null", "-d", tempFile},
 		},
 		{
 			// musl (used in, for example, Alpine Linux) uses the open(2) system
@@ -186,12 +199,16 @@ func (s *tlsSuite) TestHTTPSViaLibraryIntegration() {
 			if len(prefetchLibs) == 0 {
 				t.Fatalf("%s not linked with any of these libs %v", test.name, tlsLibs)
 			}
-			testHTTPSLibrary(t, cfg, command, prefetchLibs)
+			testHTTPSLibrary(t, cfg, command, prefetchLibs, extractRequestID(test.fetchCmd))
 		})
 	}
 }
 
-func testHTTPSLibrary(t *testing.T, cfg *config.Config, fetchCmd, prefetchLibs []string) {
+func testHTTPSLibrary(t *testing.T, cfg *config.Config, fetchCmd, prefetchLibs []string, traceID string) {
+	if traceID != "" {
+		// we need to set this to enable the observation logic
+		cfg.EnableHTTPTracing = true
+	}
 	usmMonitor := setupUSMTLSMonitor(t, cfg)
 	// not ideal but, short process are hard to catch
 	utils.WaitForProgramsToBeTraced(t, consts.USMModuleName, "shared_libraries", prefetchLib(t, prefetchLibs...).Process.Pid, utils.ManualTracingFallbackDisabled)
@@ -222,30 +239,49 @@ func testHTTPSLibrary(t *testing.T, cfg *config.Config, fetchCmd, prefetchLibs [
 	fetchPid := uint32(requestCmd.Process.Pid)
 	t.Logf("%s pid %d", cmd[0], fetchPid)
 	assert.Eventuallyf(t, func() bool {
-		stats := getHTTPLikeProtocolStats(usmMonitor, protocols.HTTP)
-		if stats == nil {
-			return false
-		}
-		for key, stats := range stats {
-			if key.Path.Content.Get() != "/200/foobar" {
-				continue
+		if traceID == "" {
+			stats := getHTTPLikeProtocolStats(usmMonitor, protocols.HTTP)
+			if stats == nil {
+				return false
 			}
-			req, exists := stats.Data[200]
-			if !exists {
-				t.Errorf("http %# v stats %# v", krpretty.Formatter(key), krpretty.Formatter(stats))
+			for key, stats := range stats {
+				if key.Path.Content.Get() != "/200/foobar" {
+					continue
+				}
+				req, exists := stats.Data[200]
+				if !exists {
+					t.Errorf("http %# v stats %# v", krpretty.Formatter(key), krpretty.Formatter(stats))
+					return false
+				}
+
+				statsTags := req.StaticTags
+				// debian 10 have curl binary linked with openssl and gnutls but use only openssl during tls query (there no runtime flag available)
+				// this make harder to map lib and tags, one set of tag should match but not both
+				if statsTags == network.ConnTagGnuTLS || statsTags == network.ConnTagOpenSSL {
+					t.Logf("found tag 0x%x %s", statsTags, network.GetStaticTags(statsTags))
+					return true
+				}
+				t.Logf("HTTP stat didn't match criteria %v tags 0x%x\n", key, statsTags)
+			}
+			return false
+		} else {
+			obs := getHTTPLikeProtocolObservations(usmMonitor, protocols.HTTP)
+			if obs == nil {
 				return false
 			}
 
-			statsTags := req.StaticTags
-			// debian 10 have curl binary linked with openssl and gnutls but use only openssl during tls query (there no runtime flag available)
-			// this make harder to map lib and tags, one set of tag should match but not both
-			if statsTags == network.ConnTagGnuTLS || statsTags == network.ConnTagOpenSSL {
-				t.Logf("found tag 0x%x %s", statsTags, network.GetStaticTags(statsTags))
-				return true
+			expectedTraceID := http.TransactionTraceId{
+				Type: http.TraceIdRequest,
+				Id:   traceID,
 			}
-			t.Logf("HTTP stat didn't match criteria %v tags 0x%x\n", key, statsTags)
+
+			for _, ob := range obs {
+				if ob.Status == 200 && ob.TraceId == expectedTraceID {
+					return true
+				}
+			}
+			return false
 		}
-		return false
 	}, 5*time.Second, 100*time.Millisecond, "couldn't find USM HTTPS stats")
 
 	if t.Failed() {
@@ -869,24 +905,46 @@ func setupUSMTLSMonitor(t *testing.T, cfg *config.Config) *Monitor {
 	require.NoError(t, err)
 	require.NoError(t, usmMonitor.Start())
 	if cfg.EnableUSMEventStream && usmconfig.NeedProcessMonitor(cfg) {
-		monitor.InitializeEventConsumer(consumerstestutil.NewTestProcessConsumer(t))
+		// todo!: not clear how do we want to handle this case. Panic/log ?
+		// monitor.InitializeEventConsumer(consumerstestutil.NewTestProcessConsumer(t))
 	}
 	t.Cleanup(usmMonitor.Stop)
 	t.Cleanup(utils.ResetDebugger)
 	return usmMonitor
 }
 
-// getHTTPLikeProtocolStats returns the stats for the protocols that store their stats in a map of http.Key and *http.RequestStats as values.
-func getHTTPLikeProtocolStats(monitor *Monitor, protocolType protocols.ProtocolType) map[http.Key]*http.RequestStats {
+func getHTTPLikeStats(monitor *Monitor, protocolType protocols.ProtocolType) *http.AllHttpStats {
 	httpStats, ok := monitor.GetProtocolStats()[protocolType]
 	if !ok {
 		return nil
 	}
-	res, ok := httpStats.(map[http.Key]*http.RequestStats)
+	res, ok := httpStats.(http.AllHttpStats)
 	if !ok {
 		return nil
 	}
-	return res
+	return &res
+}
+
+// getHTTPLikeProtocolStats returns the stats for the protocols that store their stats in a map of http.Key and *http.RequestStats as values.
+func getHTTPLikeProtocolStats(monitor *Monitor, protocolType protocols.ProtocolType) map[http.Key]*http.RequestStats {
+	if res := getHTTPLikeStats(monitor, protocolType); res != nil {
+		return res.RequestStats
+	}
+	return nil
+}
+
+func getHTTPLikeProtocolObservations(monitor *Monitor, protocolType protocols.ProtocolType) []http.TransactionObservation {
+	if res := getHTTPLikeStats(monitor, protocolType); res != nil {
+		return res.Observations
+	}
+	return nil
+}
+
+func getHTTPLikeProtocolStatsObservations(monitor *Monitor, protocolType protocols.ProtocolType) (map[http.Key]*http.RequestStats, []http.TransactionObservation) {
+	if res := getHTTPLikeStats(monitor, protocolType); res != nil {
+		return res.RequestStats, res.Observations
+	}
+	return nil, nil
 }
 
 func (s *tlsSuite) TestNodeJSTLS() {

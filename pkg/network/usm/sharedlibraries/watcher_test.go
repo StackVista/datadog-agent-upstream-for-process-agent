@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/DataDog/datadog-agent/pkg/ebpf/ebpftest"
-	"github.com/DataDog/datadog-agent/pkg/ebpf/prebuilt"
 	"github.com/DataDog/datadog-agent/pkg/eventmonitor/consumers/testutil"
 	usmconfig "github.com/DataDog/datadog-agent/pkg/network/usm/config"
 	fileopener "github.com/DataDog/datadog-agent/pkg/network/usm/sharedlibraries/testutil"
@@ -33,6 +32,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/process/monitor"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
 
 func launchProcessMonitor(t *testing.T, useEventStream bool) {
@@ -53,9 +53,10 @@ func TestSharedLibrary(t *testing.T) {
 		t.Skip("shared library tracing not supported for this platform")
 	}
 
-	modes := []ebpftest.BuildMode{ebpftest.RuntimeCompiled, ebpftest.CORE}
-	if !prebuilt.IsDeprecated() {
-		modes = append(modes, ebpftest.Prebuilt)
+	modes := []ebpftest.BuildMode{ebpftest.Prebuilt}
+	if !stsutil.TestingStackState() {
+		modes = append(modes, ebpftest.RuntimeCompiled)
+		modes = append(modes, ebpftest.CORE)
 	}
 
 	ebpftest.TestBuildModes(t, modes, "", func(t *testing.T) {
@@ -63,10 +64,11 @@ func TestSharedLibrary(t *testing.T) {
 			launchProcessMonitor(t, false)
 			suite.Run(t, new(SharedLibrarySuite))
 		})
-		t.Run("event stream", func(t *testing.T) {
-			launchProcessMonitor(t, true)
-			suite.Run(t, new(SharedLibrarySuite))
-		})
+		// [STS] todo!: today we don't support the event stream feature
+		// t.Run("event stream", func(t *testing.T) {
+		// 	launchProcessMonitor(t, true)
+		// 	suite.Run(t, new(SharedLibrarySuite))
+		// })
 	})
 }
 
@@ -95,13 +97,13 @@ func (s *SharedLibrarySuite) TestSharedLibraryDetection() {
 
 	require.Eventuallyf(t, func() bool {
 		return registerRecorder.CallsForPathID(fooPathID1) == 1
-	}, time.Second*10, 100*time.Millisecond, "")
+	}, time.Second*10, 100*time.Millisecond, "we didn't receive the open event from our ebpf probes")
 
 	require.NoError(t, command1.Process.Kill())
 
 	require.Eventually(t, func() bool {
 		return unregisterRecorder.CallsForPathID(fooPathID1) == 1
-	}, time.Second*10, 100*time.Millisecond)
+	}, time.Second*10, 100*time.Millisecond, "we didn't receive the exit event from netlink")
 }
 
 // Test that shared library files opened for writing only are ignored.

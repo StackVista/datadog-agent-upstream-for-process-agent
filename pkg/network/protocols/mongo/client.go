@@ -21,6 +21,10 @@ import (
 
 const (
 	defaultConnectionTimeout = time.Second * 10
+	// User is the username to use for authentication
+	User = "root"
+	// Pass is the password to use for authentication
+	Pass = "password"
 )
 
 // Options is a struct to hold the options for the mongo client
@@ -35,6 +39,25 @@ type Options struct {
 // Client is a wrapper around the mongo client
 type Client struct {
 	C *mongo.Client
+}
+
+func NewClientWithClientOptions(clientOptions *options.ClientOptions, timeout time.Duration) (*Client, error) {
+	timedCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	client, err := mongo.Connect(timedCtx, clientOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	timedCtx, cancel = context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := client.Ping(timedCtx, nil); err != nil {
+		return nil, err
+	}
+
+	return &Client{
+		C: client,
+	}, nil
 }
 
 // NewClient creates a new mongo client
@@ -62,22 +85,7 @@ func NewClient(opts Options) (*Client, error) {
 		clientOptions.SetDialer(opts.ClientDialer)
 	}
 
-	timedCtx, cancel := context.WithTimeout(context.Background(), opts.ConnectionTimout)
-	defer cancel()
-	client, err := mongo.Connect(timedCtx, clientOptions)
-	if err != nil {
-		return nil, err
-	}
-
-	timedCtx, cancel = context.WithTimeout(context.Background(), opts.ConnectionTimout)
-	defer cancel()
-	if err := client.Ping(timedCtx, nil); err != nil {
-		return nil, err
-	}
-
-	return &Client{
-		C: client,
-	}, nil
+	return NewClientWithClientOptions(clientOptions, opts.ConnectionTimout)
 }
 
 var (
@@ -87,6 +95,16 @@ var (
 		"local":  {},
 	}
 )
+
+// Do some work on the database to generate some stats
+// You will generally not care about the result of this function
+func (c *Client) GenerateLoad() error {
+	c.C.ListDatabases(context.Background(), bson.M{})
+	usersCollection := c.C.Database("testing").Collection("users")
+	user := bson.D{{Key: "fullName", Value: "John Doe"}, {Key: "age", Value: 30}}
+	_, err := usersCollection.InsertOne(context.Background(), user)
+	return err
+}
 
 // DeleteDatabases deletes all databases except the default ones
 func (c *Client) DeleteDatabases() error {

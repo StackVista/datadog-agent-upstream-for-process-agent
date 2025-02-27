@@ -162,6 +162,9 @@ const (
 	// TCPRetransmitRet traces the return value for the tcp_retransmit_skb() system call
 	TCPRetransmitRet ProbeFuncName = "kretprobe__tcp_retransmit_skb"
 
+	// Used for capturing the synack packet when a connection gets accepted
+	IpBuildAndSendPkt ProbeFuncName = "kprobe__ip_build_and_send_pkt"
+
 	// InetCskAcceptReturn traces the return value for the inet_csk_accept syscall
 	InetCskAcceptReturn ProbeFuncName = "kretprobe__inet_csk_accept"
 
@@ -198,6 +201,8 @@ const (
 	TCPRetransmitsMap BPFMapName = "tcp_retransmits"
 	// TCPOngoingConnectPid is the map storing ongoing TCP connection PIDs by (socket + tuple)
 	TCPOngoingConnectPid BPFMapName = "tcp_ongoing_connect_pid"
+	// TCPAcceptSeqMap is the map storing the seq/ack number that were seen while accepting a connection
+	TCPAcceptSeqMap BPFMapName = "tcp_accept_seq"
 	// ConnCloseEventMap is the map storing connection close events
 	ConnCloseEventMap BPFMapName = "conn_close_event"
 	// TracerStatusMap is the map storing the status of the tracer

@@ -60,7 +60,6 @@ func initializeTupleMaps(m *ddebpf.Manager) {
 			Sport:    c.Lport,
 			Dport:    c.Rport,
 			Netns:    c.NetNS,
-			Pid:      c.PID,
 			Metadata: meta,
 		}
 

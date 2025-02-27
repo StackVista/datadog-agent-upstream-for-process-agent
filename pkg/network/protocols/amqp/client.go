@@ -17,6 +17,14 @@ import (
 	"github.com/streadway/amqp"
 )
 
+// todo!: move them here since we need them also when we don't compile tests. server.go is compiled only with tests
+const (
+	// User is the user to use for authentication
+	User = "guest"
+	// Pass is the password to use for authentication
+	Pass = "guest"
+)
+
 // Options is a struct to hold the options for the amqp client
 type Options struct {
 	ServerAddress string

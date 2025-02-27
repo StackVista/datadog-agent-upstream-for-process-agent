@@ -16,9 +16,11 @@ import (
 	usmconfig "github.com/DataDog/datadog-agent/pkg/network/usm/config"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/utils"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
 
 func TestHttpCompile(t *testing.T) {
+	stsutil.SkipIfStackState(t, "we don't test runtime compiled mode")
 	ebpftest.TestBuildMode(t, ebpftest.RuntimeCompiled, "", func(t *testing.T) {
 		currKernelVersion, err := kernel.HostVersion()
 		require.NoError(t, err)

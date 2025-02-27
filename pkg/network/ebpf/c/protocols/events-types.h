@@ -31,7 +31,7 @@ typedef struct {
 typedef struct {
     __u64 idx;
     __u16 cpu;
-    __u16 len;
+    __u16 len; // this is the current number of elements with size `event_size` in the batch.
     __u16 cap;
     __u16 event_size;
     __u32 dropped_events;

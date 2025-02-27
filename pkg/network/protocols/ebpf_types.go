@@ -79,6 +79,10 @@ const (
 	ProgramRedis ProgramType = C.PROG_REDIS
 	// ProgramRedisTermination is the Golang representation of the C.PROG_REDIS_TERMINATION enum
 	ProgramRedisTermination ProgramType = C.PROG_REDIS_TERMINATION
+	// ProgramMongo is the Golang representation of the C.PROG_MONGO enum
+	ProgramMongo ProgramType = C.PROG_MONGO
+	// ProgramAMQP is the Golang representation of the C.PROG_AMQP enum
+	ProgramAMQP ProgramType = C.PROG_AMQP
 )
 
 type ebpfProtocolType C.protocol_t

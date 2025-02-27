@@ -17,11 +17,8 @@ import (
 	"github.com/cilium/ebpf"
 	"go.uber.org/atomic"
 
-	manager "github.com/DataDog/ebpf-manager"
-
 	ddebpf "github.com/DataDog/datadog-agent/pkg/ebpf"
 	"github.com/DataDog/datadog-agent/pkg/network/config"
-	filterpkg "github.com/DataDog/datadog-agent/pkg/network/filter"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/telemetry"
 	usmconfig "github.com/DataDog/datadog-agent/pkg/network/usm/config"
@@ -47,8 +44,7 @@ type Monitor struct {
 
 	processMonitor *monitor.ProcessMonitor
 
-	// termination
-	closeFilterFn func()
+	probes *MonitorProbes
 
 	lastUpdateTime *atomic.Int64
 }
@@ -79,25 +75,28 @@ func NewMonitor(c *config.Config, connectionProtocolMap *ebpf.Map) (m *Monitor, 
 		return nil, fmt.Errorf("error initializing ebpf program: %w", err)
 	}
 
-	filter, _ := mgr.GetProbe(manager.ProbeIdentificationPair{EBPFFuncName: protocolDispatcherSocketFilterFunction, UID: probeUID})
-	if filter == nil {
-		return nil, fmt.Errorf("error retrieving socket filter")
-	}
+	// todo!: It seems we are disabling the socket filter injection in the root namespace because we will do it into `NewMonitorProbes` since it is a namespace like the others in the end.
+	//
+	// filter, _ := mgr.GetProbe(manager.ProbeIdentificationPair{EBPFFuncName: protocolDispatcherSocketFilterFunction, UID: probeUID})
+	// if filter == nil {
+	// 	return nil, fmt.Errorf("error retrieving socket filter")
+	// }
 	ddebpf.AddNameMappings(mgr.Manager.Manager, "usm_monitor")
 
-	closeFilterFn, err := filterpkg.HeadlessSocketFilter(c, filter)
-	if err != nil {
-		return nil, fmt.Errorf("error enabling traffic inspection: %s", err)
-	}
+	// closeFilterFn, err := filterpkg.HeadlessSocketFilter(c, filter)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("error enabling traffic inspection: %s", err)
+	// }
 
 	processMonitor := monitor.GetProcessMonitor()
+	probes := NewMonitorProbes(c, processMonitor, mgr)
 
 	usmstate.Set(usmstate.Running)
 
 	usmMonitor := &Monitor{
 		cfg:            c,
 		ebpfProgram:    mgr,
-		closeFilterFn:  closeFilterFn,
+		probes:         probes,
 		processMonitor: processMonitor,
 	}
 
@@ -130,12 +129,22 @@ func (m *Monitor) Start() error {
 
 	err = m.ebpfProgram.Start()
 	if err != nil {
+		return fmt.Errorf("error starting ebpf program for usm: %w", err)
+	}
+
+	// Starting with updateAllNsProbes.
+	// We run this synchronously here instead of waiting for the NsNetMonitor to be sure all probes are started after this function
+	// returns
+	err = m.probes.Start()
+	if err != nil {
+		m.ebpfProgram.Close()
 		return err
 	}
 
 	// Need to explicitly save the error in `err` so the defer function could save the startup error.
 	if usmconfig.NeedProcessMonitor(m.cfg) {
-		err = m.processMonitor.Initialize(m.cfg.EnableUSMEventStream)
+		// [STS] todo!: we force the `EnableUSMEventStream` to false because we don't support it yet.
+		err = m.processMonitor.Initialize(false)
 	}
 
 	return err
@@ -203,11 +212,11 @@ func (m *Monitor) Stop() {
 	}
 
 	m.processMonitor.Stop()
+	m.probes.Stop()
 
 	ddebpf.RemoveNameMappings(m.ebpfProgram.Manager.Manager)
 
 	m.ebpfProgram.Close()
-	m.closeFilterFn()
 	usmstate.Set(usmstate.Stopped)
 }
 

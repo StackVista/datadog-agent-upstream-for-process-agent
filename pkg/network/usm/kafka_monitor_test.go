@@ -47,6 +47,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/usm/consts"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/utils"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
 
 const (
@@ -134,6 +135,7 @@ func (s *KafkaProtocolParsingSuite) getTopicName() string {
 }
 
 func TestKafkaProtocolParsing(t *testing.T) {
+	stsutil.SkipIfStackState(t, "We do not test this yet, it requires compose in the environment")
 	skipTestIfKernelNotSupported(t)
 	serverHost := "127.0.0.1"
 	require.NoError(t, kafka.RunServer(t, serverHost, kafkaPort))
@@ -1708,9 +1710,10 @@ func newKafkaMonitor(t *testing.T, cfg *config.Config) *Monitor {
 func TestLoadKafkaBinary(t *testing.T) {
 	skipTestIfKernelNotSupported(t)
 
-	modes := []ebpftest.BuildMode{ebpftest.RuntimeCompiled, ebpftest.CORE}
-	if !prebuilt.IsDeprecated() {
-		modes = append(modes, ebpftest.Prebuilt)
+	modes := []ebpftest.BuildMode{ebpftest.Prebuilt}
+	if !stsutil.TestingStackState() {
+		modes = append(modes, ebpftest.RuntimeCompiled)
+		modes = append(modes, ebpftest.CORE)
 	}
 	ebpftest.TestBuildModes(t, modes, "", func(t *testing.T) {
 		t.Run("debug", func(t *testing.T) {

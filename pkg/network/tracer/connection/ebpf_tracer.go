@@ -34,6 +34,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/tracer/connection/fentry"
 	"github.com/DataDog/datadog-agent/pkg/network/tracer/connection/kprobe"
 	"github.com/DataDog/datadog-agent/pkg/network/tracer/connection/util"
+	"github.com/DataDog/datadog-agent/pkg/network/tracer/offsetguess"
 	"github.com/DataDog/datadog-agent/pkg/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
@@ -199,6 +200,13 @@ func newEbpfTracer(config *config.Config, _ telemetryComponent.Component) (Trace
 		manager.ConstantEditor{Name: "ephemeral_range_begin", Value: uint64(begin)},
 		manager.ConstantEditor{Name: "ephemeral_range_end", Value: uint64(end)})
 
+	netDevQueueOffset, err := offsetguess.GetNetDevQueueSkbOffset()
+	if err != nil {
+		return nil, fmt.Errorf("error finding offset for net_dev_queue skb field: %w", err)
+	}
+	mgrOptions.ConstantEditors = append(mgrOptions.ConstantEditors,
+		manager.ConstantEditor{Name: "offset_net_dev_queue_skb", Value: netDevQueueOffset})
+
 	closedChannelSize := defaultClosedChannelSize
 	if config.ClosedChannelSize > 0 {
 		closedChannelSize = config.ClosedChannelSize
@@ -216,7 +224,7 @@ func newEbpfTracer(config *config.Config, _ telemetryComponent.Component) (Trace
 	var m *manager.Manager
 	var tracerType TracerType = TracerTypeFentry //nolint:revive // TODO
 	var closeTracerFn func()
-	m, closeTracerFn, err := fentry.LoadTracer(config, mgrOptions, connCloseEventHandler)
+	m, closeTracerFn, err = fentry.LoadTracer(config, mgrOptions, connCloseEventHandler)
 	if err != nil && !errors.Is(err, fentry.ErrorNotSupported) {
 		// failed to load fentry tracer
 		return nil, err
@@ -475,11 +483,7 @@ func (t *ebpfTracer) Remove(conn *network.ConnectionStats) error {
 	if conn.Type == network.TCP {
 		// We can ignore the error for this map since it will not always contain the entry
 		_ = t.tcpStats.Delete(t.removeTuple)
-		// We remove the PID from the tuple as it is not used in the retransmits map
-		pid := t.removeTuple.Pid
-		t.removeTuple.Pid = 0
 		_ = t.tcpRetransmits.Delete(t.removeTuple)
-		t.removeTuple.Pid = pid
 	}
 	return nil
 }
@@ -661,10 +665,6 @@ func (t *ebpfTracer) getTCPRetransmits(tuple *netebpf.ConnTuple, seen map[netebp
 		return 0, false
 	}
 
-	// The PID isn't used as a key in the stats map, we will temporarily set it to 0 here and reset it when we're done
-	pid := tuple.Pid
-	tuple.Pid = 0
-
 	var retransmits uint32
 	if err := t.tcpRetransmits.Lookup(tuple, &retransmits); err == nil {
 		// This is required to avoid (over)reporting retransmits for connections sharing the same socket.
@@ -676,7 +676,6 @@ func (t *ebpfTracer) getTCPRetransmits(tuple *netebpf.ConnTuple, seen map[netebp
 		}
 	}
 
-	tuple.Pid = pid
 	return retransmits, true
 }
 
@@ -744,7 +743,7 @@ func (t *ebpfTracer) setupTLSTagsMapCleaner(m *manager.Manager) {
 
 func populateConnStats(stats *network.ConnectionStats, t *netebpf.ConnTuple, s *netebpf.ConnStats, ch *cookieHasher) {
 	*stats = network.ConnectionStats{ConnectionTuple: network.ConnectionTuple{
-		Pid:    t.Pid,
+		Pid:    0, // todo!: not clear how we should populate this.
 		NetNS:  t.Netns,
 		Source: t.SourceAddress(),
 		Dest:   t.DestAddress(),
@@ -799,7 +798,7 @@ func populateConnStats(stats *network.ConnectionStats, t *netebpf.ConnTuple, s *
 	case netebpf.Outgoing:
 		stats.Direction = network.OUTGOING
 	default:
-		stats.Direction = network.OUTGOING
+		stats.Direction = network.NONE
 	}
 
 	if ch != nil {
@@ -822,6 +821,10 @@ func updateTCPStats(conn *network.ConnectionStats, tcpStats *netebpf.TCPStats) {
 			conn.TCPFailures = map[uint16]uint32{
 				tcpStats.Failure_reason: 1,
 			}
+		}
+		if tcpStats.Initial_tcp_seq.Seq != 0 || tcpStats.Initial_tcp_seq.Ack_seq != 0 {
+			conn.InitialTCPSeq.Seq = tcpStats.Initial_tcp_seq.Seq
+			conn.InitialTCPSeq.Ack_seq = tcpStats.Initial_tcp_seq.Ack_seq
 		}
 	}
 }

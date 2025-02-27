@@ -66,6 +66,7 @@ typedef struct {
     __u8 flags;
     __u8 direction;
     tls_info_t tls_tags;
+    __u32 pid;
 } conn_stats_ts_t;
 
 // Connection flags
@@ -76,9 +77,16 @@ typedef enum {
 } conn_flags_t;
 
 typedef struct {
+    __u32 seq; // The seq value communicated as the synack response
+    __u32 ack_seq; // The ack_seq value communicated as the synack response
+} tcp_seq_t;
+
+typedef struct {
     __u32 rtt;
     __u32 rtt_var;
     __u32 retransmits;
+
+    tcp_seq_t initial_tcp_seq;
 
     // Bit mask containing all TCP state transitions tracked by our tracer
     __u16 state_transitions;

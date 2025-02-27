@@ -40,6 +40,10 @@ import (
 	"golang.org/x/net/http2/hpack"
 	"golang.org/x/sys/unix"
 
+	"github.com/DataDog/datadog-agent/pkg/util/log"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
+	mongooptions "go.mongodb.org/mongo-driver/mongo/options"
+
 	"github.com/DataDog/datadog-agent/pkg/ebpf/ebpftest"
 	"github.com/DataDog/datadog-agent/pkg/network/config"
 	netebpf "github.com/DataDog/datadog-agent/pkg/network/ebpf"
@@ -140,8 +144,272 @@ type USMSuite struct {
 	suite.Suite
 }
 
+func (s *USMSuite) TestVerifierComplexity() {
+	// this is a simple test that just inject the tracer and log a verifier error if it is the case.
+	t := s.T()
+	cfg := tracertestutil.Config()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.ServiceMonitoringEnabled = true
+	cfg.EnableGoTLSSupport = false
+	cfg.EnableAMQPMonitoring = true
+	cfg.EnableMongoMonitoring = true
+	cfg.MaxAMQPStatsBuffered = 1000
+	cfg.BPFDebug = true
+	// log.SetupLogger(seelog.Default, "debug")
+	tr, err := tracer.NewTracer(cfg, nil)
+	require.NoError(t, err)
+	t.Cleanup(tr.Stop)
+}
+
+func (s *USMSuite) TestAMQPTracerSetup() {
+	cfg := tracertestutil.Config()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableAMQPMonitoring = true
+	cfg.BPFDebug = true
+	_ = setupTracer(s.T(), cfg)
+}
+
+func (s *USMSuite) TestAMQPStats() {
+	t := s.T()
+	cfg := tracertestutil.Config()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.ServiceMonitoringEnabled = true
+	cfg.EnableGoTLSSupport = false // this is not supported in prebuilt mode
+	cfg.EnableAMQPMonitoring = true
+	cfg.MaxAMQPStatsBuffered = 1000
+	cfg.BPFDebug = true
+
+	tr := setupTracer(t, cfg)
+
+	require.NoError(t, amqp.RunServer(t, "0.0.0.0", "5672", false))
+
+	client, err := amqp.NewClient(amqp.Options{ServerAddress: "localhost:5672"})
+	require.NoError(t, err)
+	defer client.Terminate()
+
+	// Make a queue, send some messages, consume them.
+	// It is important to send many messages to properly test the many-frames-in-a-single-packet case.
+	client.DeclareQueue("queue-name", client.PublishChannel)
+	for i := range 500 {
+		client.Publish("queue-name", fmt.Sprintf("message-%d", i))
+	}
+
+	// Make sure we will consume all the messages batched.
+	time.Sleep(1 * time.Second)
+	client.Consume("queue-name", 500)
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("amqp-testing-client")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for tup, metrics := range payload.AMQP {
+			log.Errorf("AMQP metrics %v:%v", tup, metrics)
+		}
+
+		return len(payload.AMQP) > 0
+	}, time.Second*30, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
+}
+
+func (s *USMSuite) TestAMQPStatsOnExistingConnection() {
+	t := s.T()
+	require.NoError(t, amqp.RunServer(t, "0.0.0.0", "5672", false))
+
+	client, err := amqp.NewClient(amqp.Options{ServerAddress: "localhost:5672"})
+	require.NoError(t, err)
+	defer client.Terminate()
+
+	// Start consuming and send one message to make sure the connection is established.
+	client.DeclareQueue("queue-name", client.PublishChannel)
+	go client.Consume("queue-name", 501)
+	client.Publish("queue-name", "my-first-message")
+
+	// Only now start the tracer
+	cfg := tracertestutil.Config()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableGoTLSSupport = false
+	cfg.EnableAMQPMonitoring = true
+	cfg.MaxAMQPStatsBuffered = 1000
+	cfg.ServiceMonitoringEnabled = true
+	cfg.MaxUSMConcurrentRequests = 1000
+	cfg.BPFDebug = true
+	tr := setupTracer(t, cfg)
+
+	// Now generate data on the existing connection
+	// We will not see exactly 500 messages in the stats, because we need to collect evidence of the connection first.
+	for i := 0; i < 500; i++ {
+		client.Publish("queue-name", fmt.Sprintf("message-%d", i))
+	}
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("amqp-testing-client")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return len(payload.AMQP) > 0
+	}, time.Second*30, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
+}
+
+// todo!: duplicate of `testAMQPProtocolClassificationInner` we can remove it
+// func (s *USMSuite) TestAMQPOverTLSStats() {
+// 	// This test fails because AMQP over GoTLS is not properly detected for unknown reasons.
+// 	// To see AMQP over TLS working, run this test whilst running another AMQP client using OpenSSL or similar.
+// 	t := s.T()
+
+// 	stsutil.SkipIfStackState(t, "This test is not complete we are not spawning a TLS AMQP server")
+
+// 	cfg := tracertestutil.Config()
+// 	cfg.EnableHTTPMonitoring = true
+// 	cfg.EnableHTTP2Monitoring = true
+// 	cfg.EnableNativeTLSMonitoring = true
+// 	cfg.EnableAMQPMonitoring = true
+// 	cfg.MaxAMQPStatsBuffered = 1000
+// 	cfg.ServiceMonitoringEnabled = true
+// 	cfg.BPFDebug = true
+// 	tr := setupTracer(t, cfg)
+
+// 	// This is kept here for future reference.
+// 	/*
+// 		client, err := amqp.NewTLSClient(amqp.Options{ServerAddress: "kangaroo.rmq.cloudamqp.com:5671/<vhost>", Username: "<user>", Password: "<pass>"})
+// 		require.NoError(t, err)
+// 		defer client.Terminate()
+
+// 		// Make a queue, send some messages, consume them.
+// 		// It is important to send many messages to properly test the many-frames-in-a-single-packet case.
+// 		client.DeclareQueue("queue-name", client.PublishChannel)
+// 		// for i := range 500 { // Requires Go 1.22
+// 		for i := 0; i < 500; i++ {
+// 			client.Publish("queue-name", fmt.Sprintf("message-%d", i))
+// 		}
+
+// 		// Make sure we will consume all the messages batched.
+// 		time.Sleep(1 * time.Second)
+// 		client.Consume("queue-name", 500)
+// 	*/
+
+// 	require.Eventually(t, func() bool {
+// 		payload, err := tr.GetActiveConnections("amqp-testing-client")
+// 		if err != nil {
+// 			t.Fatal(err)
+// 		}
+
+// 		for tup, metrics := range payload.AMQP {
+// 			log.Errorf("AMQP metrics %v:%v", tup, metrics)
+// 		}
+
+// 		return len(payload.AMQP) > 0
+// 	}, time.Second*30, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
+// }
+
+func (s *USMSuite) TestMongoOverTLSTracerSetup() {
+	t := s.T()
+	cfg := tracertestutil.Config()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableMongoMonitoring = true
+	cfg.BPFDebug = true
+	_ = setupTracer(t, cfg)
+}
+
+// To run this test, you need to have a TLS-enabled MongoDB instance running.
+// One way to do this is to use the MongoDB Atlas service, the free tier is enough.
+// Provide the URI of your MongoDB Atlas cluster in the MONGODB_URI environment variable.
+//
+//	export MONGODB_URI="mongodb+srv://secret_user:secret_pass@free-cluster-01.mongodb.net/?retryWrites=true&w=majority"
+func (s *USMSuite) TestEnableMongoOverTLSMonitoringNamespaces() {
+	t := s.T()
+	mongoURI := os.Getenv("MONGODB_URI")
+
+	if mongoURI == "" {
+		t.Skip("MONGODB_URI not set, skipping test")
+	}
+
+	cfg := tracertestutil.Config()
+	cfg.EnableHTTPMonitoring = true
+	cfg.ServiceMonitoringEnabled = true
+	cfg.EnableHTTP2Monitoring = true
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableMongoMonitoring = true
+	tr := setupTracer(t, cfg)
+
+	opts := mongooptions.Client().ApplyURI(mongoURI)
+	client, err := protocolsmongo.NewClientWithClientOptions(opts, 10*time.Second)
+	require.NoError(t, err)
+	defer client.Stop()
+
+	client.GenerateLoad()
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("1")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for key, metrics := range payload.Mongo {
+			if metrics.Latencies.GetCount() > 0.0 && key.NetNs != 0 {
+				return true
+			}
+		}
+		return false
+	}, time.Second*5, time.Millisecond*100, "Expected to find a stats, instead captured none")
+
+}
+
+func (s *USMSuite) TestMongoStats() {
+	t := s.T()
+	cfg := tracertestutil.Config()
+	cfg.ServiceMonitoringEnabled = true
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableGoTLSSupport = false // todo!: this is not supported in prebuilt mode
+	cfg.EnableMongoMonitoring = true
+	tr := setupTracer(t, cfg)
+
+	// If these tests time out, do a docker pull mongo:<version> first and try again.
+	for _, mongoVersion := range []string{"4", "6", "7"} {
+		t.Run(fmt.Sprintf("MongoVersion%s", mongoVersion), func(t *testing.T) {
+			testMongoStats(t, tr, mongoVersion)
+		})
+	}
+}
+
+func testMongoStats(t *testing.T, tr *tracer.Tracer, mongoVersion string) {
+	require.NoError(t, protocolsmongo.RunServer(t, "0.0.0.0", mongoPort, mongoVersion))
+
+	client, err := protocolsmongo.NewClient(protocolsmongo.Options{ServerAddress: "localhost:" + mongoPort, Username: protocolsmongo.User, Password: protocolsmongo.Pass})
+	require.NoError(t, err)
+	defer client.Stop()
+
+	if err := client.GenerateLoad(); err != nil {
+		t.Fatal(err)
+	}
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("mongo-testing-client")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, metrics := range payload.Mongo {
+			// We should have at least more than 3 transactions on the same connection.
+			// This test could be flaky since we are collecting data from the maps while connections are still running.
+			if metrics.Latencies.GetCount() > 3.0 {
+				log.Warnf("Avg. of latencies: %.2f ms", metrics.Latencies.GetSum()/1000000.0/metrics.Latencies.GetCount())
+				return true
+			}
+		}
+
+		return false
+	}, time.Second*5, time.Millisecond*100, "Expected to find a stats, instead captured none")
+}
+
 func TestUSMSuite(t *testing.T) {
-	ebpftest.TestBuildModes(t, []ebpftest.BuildMode{ebpftest.Prebuilt, ebpftest.RuntimeCompiled, ebpftest.CORE}, "", func(t *testing.T) {
+	modes := []ebpftest.BuildMode{ebpftest.Prebuilt}
+	if !stsutil.TestingStackState() {
+		modes = append(modes, ebpftest.RuntimeCompiled)
+		modes = append(modes, ebpftest.CORE)
+	}
+	ebpftest.TestBuildModes(t, modes, "", func(t *testing.T) {
 		suite.Run(t, new(USMSuite))
 	})
 }
@@ -1705,7 +1973,7 @@ func testMongoProtocolClassification(t *testing.T, tr *tracer.Tracer, clientHost
 	// Setting one instance of mongo server for all tests.
 	serverAddress := net.JoinHostPort(serverHost, mongoPort)
 	targetAddress := net.JoinHostPort(targetHost, mongoPort)
-	require.NoError(t, protocolsmongo.RunServer(t, serverHost, mongoPort))
+	require.NoError(t, protocolsmongo.RunServer(t, serverHost, mongoPort, "5.0.14"))
 
 	tests := []protocolClassificationAttributes{
 		{

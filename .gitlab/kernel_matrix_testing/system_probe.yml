@@ -230,6 +230,7 @@ kmt_run_sysprobe_tests_x64:
           - "debian_12"
           - "centos_7.9"
           - "centos_8"
+          # - "ubuntu_23.10" todo!: their testing architecture is changed non sure where to add again this one.
         TEST_SET: ["only_usm", "no_usm"]
   after_script:
     - !reference [.collect_outcomes_kmt]

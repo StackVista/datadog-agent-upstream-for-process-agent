@@ -266,6 +266,10 @@ func InitSystemProbeConfig(cfg pkgconfigmodel.Config) {
 	cfg.BindEnvAndSetDefault(join(netNS, "enable_gateway_lookup"), true, "DD_SYSTEM_PROBE_NETWORK_ENABLE_GATEWAY_LOOKUP")
 	// Default value (100000) is set in `adjustUSM`, to avoid having "deprecation warning", due to the default value.
 	cfg.BindEnv(join(netNS, "max_http_stats_buffered"), "DD_SYSTEM_PROBE_NETWORK_MAX_HTTP_STATS_BUFFERED")
+	cfg.BindEnv(join(smNS, "enable_http_tracing"))
+	cfg.BindEnvAndSetDefault(join(smNS, "max_http_observations_buffered"), 100000, "DD_SYSTEM_PROBE_NETWORK_MAX_HTTP_OBSERVATIONS_BUFFERED")
+	cfg.BindEnvAndSetDefault(join(smNS, "max_mongo_stats_buffered"), 100000)
+	cfg.BindEnvAndSetDefault(join(smNS, "max_amqp_stats_buffered"), 100000)
 	cfg.BindEnv(join(smNS, "max_http_stats_buffered"))
 	cfg.BindEnvAndSetDefault(join(smNS, "max_kafka_stats_buffered"), 100000)
 	cfg.BindEnv(join(smNS, "max_postgres_stats_buffered"))

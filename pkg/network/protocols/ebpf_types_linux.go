@@ -65,6 +65,10 @@ const (
 	ProgramRedis ProgramType = 0x16
 
 	ProgramRedisTermination ProgramType = 0x17
+
+	ProgramMongo ProgramType = 0x18
+
+	ProgramAMQP ProgramType = 0x19
 )
 
 type ebpfProtocolType uint16

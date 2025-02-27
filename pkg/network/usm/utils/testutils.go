@@ -74,6 +74,7 @@ func NewUSMEmptyConfig() *config.Config {
 	cfg.EnableIstioMonitoring = false
 	cfg.EnableNodeJSMonitoring = false
 	cfg.EnableGoTLSSupport = false
-
+	// [STS] todo!: today we don't support the event stream feature
+	cfg.EnableUSMEventStream = false
 	return cfg
 }

@@ -28,20 +28,21 @@ func TestBatchExtract(t *testing.T) {
 		batch.Len = 4
 		batch.Id = 0
 		batch.Cpu = 0
-		batch.C0.Tup.Pid = 1
-		batch.C1.Tup.Pid = 2
-		batch.C2.Tup.Pid = 3
-		batch.C3.Tup.Pid = 4
+		// [STS] we need to use the port because we don't have the PID in STS
+		batch.C0.Tup.Sport = 1
+		batch.C1.Tup.Sport = 2
+		batch.C2.Tup.Sport = 3
+		batch.C3.Tup.Sport = 4
 
 		var conns []*netebpf.Conn
 		for rc := extractor.NextConnection(batch); rc != nil; rc = extractor.NextConnection(batch) {
 			conns = append(conns, rc)
 		}
 		require.Len(t, conns, 4)
-		assert.Equal(t, uint32(1), conns[0].Tup.Pid)
-		assert.Equal(t, uint32(2), conns[1].Tup.Pid)
-		assert.Equal(t, uint32(3), conns[2].Tup.Pid)
-		assert.Equal(t, uint32(4), conns[3].Tup.Pid)
+		assert.Equal(t, uint16(1), conns[0].Tup.Sport)
+		assert.Equal(t, uint16(2), conns[1].Tup.Sport)
+		assert.Equal(t, uint16(3), conns[2].Tup.Sport)
+		assert.Equal(t, uint16(4), conns[3].Tup.Sport)
 	})
 
 	t.Run("partial flush", func(t *testing.T) {
@@ -55,16 +56,16 @@ func TestBatchExtract(t *testing.T) {
 		batch.Len = 4
 		batch.Id = 0
 		batch.Cpu = 0
-		batch.C0.Tup.Pid = 1
-		batch.C1.Tup.Pid = 2
-		batch.C2.Tup.Pid = 3
-		batch.C3.Tup.Pid = 4
+		batch.C0.Tup.Sport = 1
+		batch.C1.Tup.Sport = 2
+		batch.C2.Tup.Sport = 3
+		batch.C3.Tup.Sport = 4
 
 		var conns []*netebpf.Conn
 		for rc := extractor.NextConnection(batch); rc != nil; rc = extractor.NextConnection(batch) {
 			conns = append(conns, rc)
 		}
 		assert.Len(t, conns, 1)
-		assert.Equal(t, uint32(4), conns[0].Tup.Pid)
+		assert.Equal(t, uint16(4), conns[0].Tup.Sport)
 	})
 }

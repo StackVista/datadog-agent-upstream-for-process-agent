@@ -178,6 +178,34 @@ type Config struct {
 	// get flushed on every client request (default 30s check interval)
 	MaxRedisStatsBuffered int
 
+	// MaxHTTPObservationsBuffered represents the maximum number of HTTP observations we'll buffer in memory. These stats
+	// get flushed on every client request (default 30s check interval)
+	MaxHTTPObservationsBuffered int
+
+	// MaxMongoStatsBuffered represents the maximum number of MongoDB stats we'll buffer in memory. These stats
+	// get flushed on every client request (default 30s check interval)
+	MaxMongoStatsBuffered int
+
+	// MaxAMQPStatsBuffered represents the maximum number of AMQP stats we'll buffer in memory. These stats
+	// get flushed on every client request (default 30s check interval)
+	MaxAMQPStatsBuffered int
+
+	// ProbeDebugLog enables additional logging when initializing the probe. This costs additional memory/disk space
+	ProbeDebugLog bool
+
+	// EnableMongoMonitoring specifies whether the tracer should monitor Mongo traffic
+	EnableMongoMonitoring bool
+
+	// EnableAMQPMonitoring specifies whether the tracer should monitor AMQP traffic
+	EnableAMQPMonitoring bool
+
+	// EnableHTTPTracing enables distributed tracing by reading the X-Request-Id header and reporting that for distributed tracing
+	EnableHTTPTracing bool
+
+	// todo!: probably we need to remove it, see the deprecation
+	// ProbeLogBufferSizeBytes increase the probe log buffer for debugging purposes
+	// ProbeLogBufferSizeBytes int
+
 	// MaxConnectionsStateBuffered represents the maximum number of state objects that we'll store in memory. These state objects store
 	// the stats for a connection so we can accurately determine traffic change between client requests.
 	MaxConnectionsStateBuffered int
@@ -350,6 +378,11 @@ func New() *Config {
 		MaxPostgresStatsBuffered:   cfg.GetInt(sysconfig.FullKeyPath(smNS, "max_postgres_stats_buffered")),
 		MaxPostgresTelemetryBuffer: cfg.GetInt(sysconfig.FullKeyPath(smNS, "max_postgres_telemetry_buffer")),
 		MaxRedisStatsBuffered:      cfg.GetInt(sysconfig.FullKeyPath(smNS, "max_redis_stats_buffered")),
+
+		MaxMongoStatsBuffered:       cfg.GetInt(sysconfig.FullKeyPath(smNS, "max_mongo_stats_buffered")),
+		MaxAMQPStatsBuffered:        cfg.GetInt(sysconfig.FullKeyPath(smNS, "max_amqp_stats_buffered")),
+		MaxHTTPObservationsBuffered: cfg.GetInt(sysconfig.FullKeyPath(smNS, "max_http_observations_buffered")),
+		EnableHTTPTracing:           cfg.GetBool(sysconfig.FullKeyPath(smNS, "enable_http_tracing")),
 
 		MaxTrackedHTTPConnections: cfg.GetInt64(sysconfig.FullKeyPath(smNS, "max_tracked_http_connections")),
 		HTTPNotificationThreshold: cfg.GetInt64(sysconfig.FullKeyPath(smNS, "http_notification_threshold")),
