@@ -13,6 +13,9 @@ if ! test -f /usr/local/bin/docker-compose; then
    chmod +x /usr/local/bin/docker-compose
 fi
 
+# These dependencies are needed by `TestUSMSuite/prebuilt/TestProtocolClassification` suite.
+apt install iptables-persistent conntrack iproute2 -y --no-install-recommends
+
 # This command assumes the datadog agent to be mounted at /source-datadog-agent. To avoid outputting to that directory,
 # we make a clone before running any commands
 mkdir -p $WORKDIR
@@ -63,6 +66,12 @@ invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/
 # See TestAMQPOverTLSStats in tracker_usm_linux_test.go
 invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/. --test-run-name="^TestUSMSuite/prebuilt/TestAMQPStats$"
  
+# Run the tests for shared libraries
+invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/sharedlibraries/.
+
+# Run HTTP suite (Quite slow could take up to 5 minutes.)
+invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/. --test-run-name="^TestHTTP/prebuilt/.*" --timeout=400
+
 # Still to enable
 # invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. 
 # invoke test --build-include=linux_bpf,test --targets=./pkg/network/. 

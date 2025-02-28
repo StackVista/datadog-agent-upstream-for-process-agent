@@ -14,7 +14,7 @@ cd sts_tests
 $SOURCEDIR/sts_tests/sts_run_tests.sh
 ```
 
-## Clear Re-run (suggested if you change ebpf code)
+## Fresh Re-run (suggested if you change ebpf code)
 
 ```bash
 # Inside the container

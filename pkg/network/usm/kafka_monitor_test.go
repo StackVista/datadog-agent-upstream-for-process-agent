@@ -34,7 +34,6 @@ import (
 
 	ddebpf "github.com/DataDog/datadog-agent/pkg/ebpf"
 	"github.com/DataDog/datadog-agent/pkg/ebpf/ebpftest"
-	"github.com/DataDog/datadog-agent/pkg/ebpf/prebuilt"
 	"github.com/DataDog/datadog-agent/pkg/network"
 	"github.com/DataDog/datadog-agent/pkg/network/config"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
@@ -140,9 +139,10 @@ func TestKafkaProtocolParsing(t *testing.T) {
 	serverHost := "127.0.0.1"
 	require.NoError(t, kafka.RunServer(t, serverHost, kafkaPort))
 
-	modes := []ebpftest.BuildMode{ebpftest.RuntimeCompiled, ebpftest.CORE}
-	if !prebuilt.IsDeprecated() {
-		modes = append(modes, ebpftest.Prebuilt)
+	modes := []ebpftest.BuildMode{ebpftest.Prebuilt}
+	if !stsutil.TestingStackState() {
+		modes = append(modes, ebpftest.RuntimeCompiled)
+		modes = append(modes, ebpftest.CORE)
 	}
 	ebpftest.TestBuildModes(t, modes, "", func(t *testing.T) {
 		suite.Run(t, new(KafkaProtocolParsingSuite))

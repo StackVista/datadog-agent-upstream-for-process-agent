@@ -143,6 +143,9 @@ static __always_inline bool http_seen_before(http_transaction_t *http, skb_info_
         return true;
     }
 
+    // todo!: for some reason we removed in our fork, but without it the HTTP enqueing logic is broken. To enqueue a transaction we need `http->tcp_seq==HTTP_TERMINATING` but without this line it will never be true. Today we only set `skb_info->tcp_seq = HTTP_TERMINATING`...
+    // Without this line some tests like `TestHTTPMonitorRequestId` will fail.
+    http->tcp_seq = skb_info->tcp_seq;
     return false;
 }
 

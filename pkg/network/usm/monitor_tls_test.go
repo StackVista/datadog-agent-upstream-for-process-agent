@@ -121,6 +121,8 @@ func (s *tlsSuite) TestHTTPSViaLibraryIntegration() {
 			name:     "curl (musl)",
 			fetchCmd: []string{"chroot"},
 			getBinaryAndCommand: func(t *testing.T) (string, []string, []string) {
+				stsutil.SkipIfStackState(t, "This test requires docker inside the container, we don't have it in our runner")
+
 				dir, err := testutil.CurDir()
 				require.NoError(t, err)
 
