@@ -222,7 +222,12 @@ func loadTracerFromAsset(buf bytecode.AssetReader, runtimeTracer, coreTracer boo
 		}
 
 		var err error
-		closeProtocolClassifierSocketFilterFn, err = filter.HeadlessSocketFilter(config, socketFilterProbe)
+		ns, err := config.GetRootNetNs()
+		if err != nil {
+			return nil, nil, fmt.Errorf("cannot get root namespace: %w", err)
+		}
+		defer ns.Close()
+		closeProtocolClassifierSocketFilterFn, err = filter.HeadlessSocketFilterFromNamespace(socketFilterProbe, ns)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error enabling protocol classifier: %w", err)
 		}

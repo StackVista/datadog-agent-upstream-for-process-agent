@@ -127,6 +127,7 @@ func (m *Monitor) Start() error {
 		}
 	}()
 
+	// [STS] Please note that we call `attach` for the socket filter but the `fd` is `0`. the manager doesn't attach it and hides the error.
 	err = m.ebpfProgram.Start()
 	if err != nil {
 		return fmt.Errorf("error starting ebpf program for usm: %w", err)
@@ -145,6 +146,10 @@ func (m *Monitor) Start() error {
 	if usmconfig.NeedProcessMonitor(m.cfg) {
 		// [STS] todo!: we force the `EnableUSMEventStream` to false because we don't support it yet.
 		err = m.processMonitor.Initialize(false)
+	} else {
+		// [STS] we always need the process monitor for our logic otherwise we will never attach socket filters to new namespaces.
+		// In Datadog they only need it for TLS logic (to attach uprobes) but we need it always.
+		log.Error("[STS] Process monitor is not enabled, we won't attach probes to new namespaces.")
 	}
 
 	return err
@@ -155,7 +160,8 @@ func (m *Monitor) Pause() error {
 	if m == nil {
 		return nil
 	}
-
+	// [STS] We don't want to use this feature because it will disable all the socker filters. Moreover we dinamically attach/detach probes so we don't want to pause/resume since we don't have a static set of programs. BTW Datadog uses this feature just in tests.
+	log.Warn("[STS] Don't use the pause/resume feature in production.")
 	return m.ebpfProgram.Pause()
 }
 
@@ -164,7 +170,7 @@ func (m *Monitor) Resume() error {
 	if m == nil {
 		return nil
 	}
-
+	log.Warn("[STS] Don't use the pause/resume feature in production.")
 	return m.ebpfProgram.Resume()
 }
 
@@ -210,13 +216,13 @@ func (m *Monitor) Stop() {
 	if m == nil {
 		return
 	}
-
 	m.processMonitor.Stop()
-	m.probes.Stop()
 
 	ddebpf.RemoveNameMappings(m.ebpfProgram.Manager.Manager)
 
 	m.ebpfProgram.Close()
+	// After the detach of the eBPF program, we can close the FDs associated with the socket filters.
+	m.probes.Stop()
 	usmstate.Set(usmstate.Stopped)
 }
 

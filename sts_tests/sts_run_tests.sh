@@ -14,7 +14,7 @@ if ! test -f /usr/local/bin/docker-compose; then
 fi
 
 # These dependencies are needed by `TestUSMSuite/prebuilt/TestProtocolClassification` suite.
-apt install iptables-persistent conntrack iproute2 -y --no-install-recommends
+apt install iptables conntrack iproute2 -y --no-install-recommends
 
 # This command assumes the datadog agent to be mounted at /source-datadog-agent. To avoid outputting to that directory,
 # we make a clone before running any commands
@@ -69,10 +69,16 @@ invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/
 # Run the tests for shared libraries
 invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/sharedlibraries/.
 
-# Run HTTP suite (Quite slow could take up to 5 minutes.)
-invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/. --test-run-name="^TestHTTP/prebuilt/.*" --timeout=400
+# Run HTTP suite (Quite slow could take up to 5 minutes)
+# - `TestHTTP/prebuilt/TestHTTPMonitorRequestId/with_keep-alives` could be flaky
+# - `TestHTTP/prebuilt/TestHTTPMonitorAmbiguousId` could be flaky
+invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestHTTP/prebuilt/.*" --timeout=400
+
+# Run USM test suite (Quite slow could take up to 5 minutes)
+# still some failures
+invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/tests/. --timeout=400
 
 # Still to enable
-# invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. 
-# invoke test --build-include=linux_bpf,test --targets=./pkg/network/. 
+# invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --timeout=1000
+# invoke test --build-include=linux_bpf,test --targets=./pkg/network/. --timeout=1000
 

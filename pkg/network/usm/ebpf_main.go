@@ -132,6 +132,7 @@ func newEBPFProgram(c *config.Config, connectionProtocolMap *ebpf.Map) (*ebpfPro
 					EBPFFuncName: protocolDispatcherSocketFilterFunction,
 					UID:          probeUID,
 				},
+				// we need it because it is required by the `CloneProgram` API of the manager.
 				KeepProgramSpec: true,
 			},
 		},

@@ -17,7 +17,7 @@ import (
 	"github.com/vishvananda/netns"
 
 	"github.com/DataDog/datadog-agent/pkg/network/config"
-	filterpkg "github.com/DataDog/datadog-agent/pkg/network/filter"
+	"github.com/DataDog/datadog-agent/pkg/network/filter"
 	"github.com/DataDog/datadog-agent/pkg/process/monitor"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
@@ -32,7 +32,7 @@ type MonitorProbes struct {
 	netNsMonitor *NetNsMonitor
 
 	nsProbesM sync.Mutex
-	nsProbes  map[NetNs]*NsProbe
+	nsProbes  map[NetNs]func()
 }
 
 // NewMonitorProbes returns a new MonitorProbes instance
@@ -40,7 +40,7 @@ func NewMonitorProbes(c *config.Config, processMonitor *monitor.ProcessMonitor, 
 	monitorProbes := &MonitorProbes{
 		cfg:         c,
 		ebpfProgram: mgr,
-		nsProbes:    map[NetNs]*NsProbe{},
+		nsProbes:    map[NetNs]func(){},
 	}
 
 	monitorProbes.netNsMonitor = MakeNetNsMonitor(monitorProbes.cfg, processMonitor, monitorProbes.nsAddedCallback, monitorProbes.nsDroppedCallback)
@@ -50,20 +50,15 @@ func NewMonitorProbes(c *config.Config, processMonitor *monitor.ProcessMonitor, 
 
 // Start USM monitor.
 func (m *MonitorProbes) Start() error {
-
-	return m.updateAllNsProbes()
-}
-
-/** Update the active namespaces in one go. Only used for initialization. */
-func (m *MonitorProbes) updateAllNsProbes() error {
 	m.nsProbesM.Lock()
 	defer m.nsProbesM.Unlock()
 
-	var noActiveNs = make(map[NetNs]bool)
+	// todo!: before the `Start` the processMonitor is not initialized so we don't receive netlink events... in which scenario do we have a nsProbes not empty?
+	// var noActiveNs = make(map[NetNs]bool)
 
-	for netNS, _ := range m.nsProbes {
-		noActiveNs[netNS] = true
-	}
+	// for netNS, _ := range m.nsProbes {
+	// 	noActiveNs[netNS] = true
+	// }
 
 	err := kernel.ForAllNS(m.cfg.ProcRoot, func(handle netns.NsHandle) error {
 		ino, err := kernel.GetInoForNs(handle)
@@ -72,26 +67,26 @@ func (m *MonitorProbes) updateAllNsProbes() error {
 		}
 		netNs := NetNs(ino)
 
-		delete(noActiveNs, netNs)
+		// delete(noActiveNs, netNs)
 
 		if _, ok := m.nsProbes[netNs]; !ok {
-			nsM, err := m.loadProbeForNamespace(handle, netNs)
+			f, err := m.loadProbeForNamespace(handle, netNs)
 			if err != nil {
 				return fmt.Errorf("error loading probe for namespace: %w", err)
 			}
-			m.nsProbes[netNs] = nsM
+			m.nsProbes[netNs] = f
 		}
 
 		return nil
 	})
 
 	// Close the namespaces that were not observed.
-	for notActive, _ := range noActiveNs {
-		if probe, ok := m.nsProbes[notActive]; ok {
-			probe.Close()
-			delete(m.nsProbes, notActive)
-		}
-	}
+	// for notActive := range noActiveNs {
+	// 	if f, ok := m.nsProbes[notActive]; ok {
+	// 		f()
+	// 		delete(m.nsProbes, notActive)
+	// 	}
+	// }
 
 	return err
 }
@@ -100,58 +95,52 @@ func (m *MonitorProbes) nsAddedCallback(netNs NetNs, nsHandle netns.NsHandle) {
 	m.nsProbesM.Lock()
 	defer m.nsProbesM.Unlock()
 
-	if _, ok := m.nsProbes[netNs]; !ok {
-		nsM, err := m.loadProbeForNamespace(nsHandle, netNs)
-		if err != nil {
-			log.Errorf("Error registering network namespace: %d, %w", netNs, err)
-			return
-		}
-		m.nsProbes[netNs] = nsM
-		log.Debugf("Successfully registered probe for: %d", netNs)
+	if _, ok := m.nsProbes[netNs]; ok {
+		// we already have a probe for this namespace
+		return
 	}
+	f, err := m.loadProbeForNamespace(nsHandle, netNs)
+	if err != nil {
+		log.Errorf("Error registering network namespace: %d, %s", netNs, err)
+		return
+	}
+	m.nsProbes[netNs] = f
+	log.Debugf("Successfully registered probe for: %d", netNs)
 }
 
 func (m *MonitorProbes) nsDroppedCallback(netNs NetNs) {
 	m.nsProbesM.Lock()
 	defer m.nsProbesM.Unlock()
 
-	if nsProbe, ok := m.nsProbes[netNs]; ok {
-		log.Debugf("Successfully unregistered probe for: %d", netNs)
-		nsProbe.Close()
-		delete(m.nsProbes, netNs)
-	} else {
-		log.Errorf("Got drop namespace for non-existing namespace: %d", netNs)
+	closeFD, ok := m.nsProbes[netNs]
+	if !ok {
+		log.Warnf("Got drop namespace for non-existing namespace: %d", netNs)
+		return
 	}
+
+	defer func() {
+		// in any case we want to close the file descriptor.
+		closeFD()
+		delete(m.nsProbes, netNs)
+	}()
+
+	// If we have an entry in the map we should have the probe in the manager. `DetachHook` should always call `Stop` under the hood since we should have always the socket filter in the root network namespace.
+	if err := m.ebpfProgram.DetachHook(manager.ProbeIdentificationPair{EBPFFuncName: protocolDispatcherSocketFilterFunction, UID: probeUID + "_" + strconv.Itoa(int(netNs))}); err != nil {
+		log.Errorf("Error stopping probe for namespace: %d, %s", netNs, err)
+		return
+	}
+	log.Debugf("Successfully unregistered probe for: %d", netNs)
 }
 
-func (m *MonitorProbes) loadProbeForNamespace(ns netns.NsHandle, netNs NetNs) (*NsProbe, error) {
+func (m *MonitorProbes) loadProbeForNamespace(ns netns.NsHandle, netNs NetNs) (func(), error) {
 	log.Debugf("Attaching probe to namespace: %d", netNs)
 
-	probeTemplate, _ := m.ebpfProgram.GetProbe(manager.ProbeIdentificationPair{EBPFFuncName: protocolDispatcherSocketFilterFunction, UID: probeUID})
-	if probeTemplate == nil {
-		return nil, fmt.Errorf("error retrieving socket filter")
-	}
-
-	newProbe := probeTemplate.Copy()
-	newProbe.CopyProgram = true
-	newProbe.UID = probeUID + "_" + strconv.Itoa(int(netNs))
-	newProbe.KeepProgramSpec = false
-
-	var packetSrc *filterpkg.AFPacketSource
-
-	err := kernel.WithNS(ns, func() error {
-		var srcErr error
-		// todo!: `NewPacketSource` doesn't exist anymore change it.
-		packetSrc, srcErr = filterpkg.NewAFPacketSource(4 << 20) // 4 MB total
-		return srcErr
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	if err = packetSrc.SetEbpf(newProbe); err != nil {
-		return nil, fmt.Errorf("could not set file descriptor for eBPF program: %w", err)
+	// See here for an example on how clone a program: https://github.com/DataDog/ebpf-manager/blob/c4014715554a80fea3aaedd19739db3168fdf67c/examples/clone_vs_add_hook/demo.go#L9
+	filterForCurrentNS := manager.Probe{
+		ProbeIdentificationPair: manager.ProbeIdentificationPair{
+			UID:          probeUID + "_" + strconv.Itoa(int(netNs)), // New UID for our new filter
+			EBPFFuncName: protocolDispatcherSocketFilterFunction,
+		},
 	}
 
 	netnsEditor := []manager.ConstantEditor{
@@ -162,27 +151,26 @@ func (m *MonitorProbes) loadProbeForNamespace(ns netns.NsHandle, netNs NetNs) (*
 		},
 	}
 
-	if err := m.ebpfProgram.CloneProgram(probeUID, newProbe, netnsEditor, nil); err != nil {
-		if packetSrc != nil {
-			packetSrc.Close()
-		}
-		return nil, fmt.Errorf("couldn't clone %s: %w", probeUID, err)
+	closeFn, err := filter.HeadlessSocketFilterFromNamespace(&filterForCurrentNS, ns)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't create headless socket filter: %w", err)
 	}
 
-	return &NsProbe{
-		probe:       newProbe,
-		packetSrc:   packetSrc,
-		ebpfProgram: m.ebpfProgram,
-	}, nil
+	// As a uid we need to provide the uid of the probe we want to clone.
+	if err := m.ebpfProgram.CloneProgram(probeUID, &filterForCurrentNS, netnsEditor, nil); err != nil {
+		return nil, fmt.Errorf("couldn't clone %s: %w", filterForCurrentNS.ProbeIdentificationPair.UID, err)
+	}
+
+	return closeFn, nil
 }
 
-// Stop HTTP monitoring
+// Stop the MonitorProbes. This method should be called after the manager detaches and unloads all ebpf programs.
 func (m *MonitorProbes) Stop() {
 	m.netNsMonitor.Close()
-
 	m.nsProbesM.Lock()
 	defer m.nsProbesM.Unlock()
-	for _, n := range m.nsProbes {
-		n.Close()
+	// We just need to close the file descriptors, the manager should have already detached everything.
+	for _, closeFD := range m.nsProbes {
+		closeFD()
 	}
 }

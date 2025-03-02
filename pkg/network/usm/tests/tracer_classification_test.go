@@ -341,7 +341,7 @@ func waitForConnectionsWithProtocol(t *testing.T, tr *tracer.Tracer, targetAddr,
 			for _, c := range network.FilterConnections(conns, func(cs network.ConnectionStats) bool {
 				return cs.Direction == network.OUTGOING && cs.Type == network.TCP && fmt.Sprintf("%s:%d", cs.Dest, cs.DPort) == targetAddr
 			}) {
-				t.Logf("found potential outgoing connection %+v", c)
+				// t.Logf("found potential outgoing connection %+v", c)
 				if assertProtocolStack(t, &c.ProtocolStack, expectedStack) {
 					t.Logf("found outgoing connection %+v", c)
 					outgoing = &c
@@ -354,7 +354,7 @@ func waitForConnectionsWithProtocol(t *testing.T, tr *tracer.Tracer, targetAddr,
 			for _, c := range network.FilterConnections(conns, func(cs network.ConnectionStats) bool {
 				return cs.Direction == network.INCOMING && cs.Type == network.TCP && fmt.Sprintf("%s:%d", cs.Source, cs.SPort) == serverAddr
 			}) {
-				t.Logf("found potential incoming connection %+v", c)
+				// t.Logf("found potential incoming connection %+v", c)
 				if assertProtocolStack(t, &c.ProtocolStack, expectedStack) {
 					t.Logf("found incoming connection %+v", c)
 					incoming = &c
@@ -365,7 +365,7 @@ func waitForConnectionsWithProtocol(t *testing.T, tr *tracer.Tracer, targetAddr,
 
 		failed := incoming == nil || outgoing == nil
 		if failed {
-			t.Log(conns)
+			// t.Log(conns)
 		}
 		return !failed
 	}, 5*time.Second, 100*time.Millisecond, "could not find incoming or outgoing connections")

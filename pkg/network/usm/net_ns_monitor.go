@@ -24,6 +24,8 @@ const (
 
 type NetNs uint32
 
+// todo!: not clear why we need to create another monitor and not using just the processMonitor. are we sure we cannot handle the probe injection directly in the processMonitor?
+
 // NetNsMonitor will subscribe to a processMonitor to track changes to net namespaces being created/destroyed.
 //
 // In theory a process may switch between namespaces, however since we are only interested in all active namespaces for containers
@@ -150,6 +152,7 @@ func (n *NetNsMonitor) callbackExec(p uint32) {
 			log.Warnf("Error closing namespace handle: %d, %w. Possible resource leak.", netNs, nsHandle)
 		}
 	} else {
+		// This is the first pid in this namespace, so we need to instrument the namespace
 		n.pidsForNs[netNs] = map[uint32]bool{p: true}
 
 		// Scheduling a callback, transferring ownership of nsHandle
