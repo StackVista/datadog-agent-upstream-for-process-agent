@@ -251,20 +251,6 @@ static __always_inline void http_process(http_classification_t *http_class, skb_
     }
 }
 
-// this function is called by the socket-filter program to decide whether or not we should inspect
-// the contents of a certain packet, in order to avoid the cost of processing packets that are not
-// of interest such as empty ACKs, or encrypted traffic.
-static __always_inline bool http_allow_packet(conn_tuple_t *tuple, skb_info_t *skb_info) {
-    bool empty_payload = is_payload_empty(skb_info);
-    if (empty_payload) {
-        // if the payload data is empty or encrypted packet, we only
-        // process it if the packet represents a TCP termination
-        return skb_info->tcp_flags&(TCPHDR_FIN|TCPHDR_RST);
-    }
-
-    return true;
-}
-
 SEC("socket/http_filter")
 int socket__http_filter(struct __sk_buff* skb) {
     skb_info_t skb_info;
@@ -273,10 +259,6 @@ int socket__http_filter(struct __sk_buff* skb) {
 
     if (!fetch_dispatching_arguments(&http_class.tuple, &skb_info)) {
         log_debug("http_filter failed to fetch arguments for tail call");
-        return 0;
-    }
-
-    if (!http_allow_packet(&http_class.tuple, &skb_info)) {
         return 0;
     }
 

@@ -21,6 +21,10 @@
 BPF_HASH_MAP(map_err_telemetry_map, unsigned long, map_err_telemetry_t, 0)
 BPF_HASH_MAP(helper_err_telemetry_map, unsigned long, helper_err_telemetry_t, 0)
 
+// STS: Making this configurable, because the telemetry helpers here cause very many instructions to be generated, due
+// to the conditionals in the telemetry code.
+// #define ENABLE_BPF_TELEMETRY
+#ifdef ENABLE_BPF_TELEMETRY
 #define PATCH_TARGET_TELEMETRY -1
 static void *(*bpf_telemetry_update_patch)(unsigned long, ...) = (void *)PATCH_TARGET_TELEMETRY;
 
@@ -62,10 +66,6 @@ static void *(*bpf_telemetry_update_patch)(unsigned long, ...) = (void *)PATCH_T
 #define FN_INDX_bpf_perf_event_output bpf_perf_event_output_indx
 #define FN_INDX_bpf_ringbuf_output bpf_ringbuf_output_indx
 
-// STS: Making this configurable, because the telemetry helpers here cause very many instructions to be generated, due
-// to the conditionals in the telemetry code.
-// #define ENABLE_BPF_TELEMETRY
-#ifdef ENABLE_BPF_TELEMETRY
 #define helper_with_telemetry(fn, ...)                                                          \
     ({                                                                                          \
         int helper_indx = -1;                                                                   \
