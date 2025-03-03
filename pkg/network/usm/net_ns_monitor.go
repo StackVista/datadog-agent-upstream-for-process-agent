@@ -35,6 +35,9 @@ type NetNs uint32
 type NetNsMonitor struct {
 	m sync.Mutex
 
+	// Use this to close the NetNsMonitor only once.
+	isInitialized bool
+
 	// callback registration and parallel execution management
 	config          *config.Config
 	addNsCallback   AddNsCallback
@@ -81,7 +84,7 @@ func MakeNetNsMonitor(c *config.Config, mon *monitor.ProcessMonitor, addCallback
 	m.UnSubscribeExit = mon.SubscribeExit(m.callbackExit)
 
 	m.UnSubscribeExec = mon.SubscribeExec(m.callbackExec)
-
+	m.isInitialized = true
 	return m
 }
 
@@ -170,12 +173,16 @@ func (n *NetNsMonitor) callbackExec(p uint32) {
 }
 
 func (n *NetNsMonitor) Close() {
+	if !n.isInitialized {
+		return
+	}
+
 	n.m.Lock()
 	n.UnSubscribeExit()
 	n.UnSubscribeExec()
 	n.m.Unlock()
 
-	// todo!: this channel is closed twice, see `TestMonitorProtocolFail/PreStart_fails`
 	close(n.callbackRunner)
 	n.done.Wait()
+	n.isInitialized = false
 }

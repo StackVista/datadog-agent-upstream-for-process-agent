@@ -67,8 +67,6 @@ var (
 )
 
 func TestMonitorProtocolFail(t *testing.T) {
-	// todo!: fix this before merging
-	t.Skip("Skipping test to avoid panic but we need to fix it. Review the process monitor cleanup logic, and also the probe monitors cleanup logic.")
 	failingStartupMock := func(_ *manager.Manager) error {
 		return fmt.Errorf("mock error")
 	}

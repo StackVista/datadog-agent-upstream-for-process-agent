@@ -173,4 +173,5 @@ func (m *MonitorProbes) Stop() {
 	for _, closeFD := range m.nsProbes {
 		closeFD()
 	}
+	m.nsProbes = map[NetNs]func(){}
 }
