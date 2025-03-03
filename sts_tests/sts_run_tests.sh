@@ -75,7 +75,8 @@ invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/
 invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestHTTP/prebuilt/.*" --timeout=400
 
 # Run USM test suite (Quite slow could take up to 5 minutes)
-# still some failures
+# - `TestUSMSuite/prebuilt/TestIgnoreTLSClassificationIfApplicationProtocolWasDetected/POSTGRES` could be flaky
+# - `TestUSMSuite/prebuilt/TestProtocolClassification/with_dnat/http2/http2_traffic_using_gRPC_-_irrelevant_literal_headers` fails
 invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/tests/. --timeout=400
 
 # Still to enable
