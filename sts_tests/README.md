@@ -26,6 +26,8 @@ $SOURCEDIR/sts_tests/sts_run_tests.sh
 ```bash
 # Inside the container
 cd $WORKDIR
+export STS_TEST_RUN=true
+export PREBUILT_TEST_RUN=true
 rsync -au "$SOURCEDIR"/. $WORKDIR && chown -R root:root $WORKDIR
 invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/. --test-run-name="^TestUSMSuite/prebuilt/.*Mongo.*"
 # If you need to rebuilt the system-probe

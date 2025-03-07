@@ -97,8 +97,7 @@ func GetProcessMonitor() *ProcessMonitor {
 			processExecCallbacks: make(map[*ProcessCallback]struct{}, 0),
 			processExitCallbacks: make(map[*ProcessCallback]struct{}, 0),
 			runningPids:          make(map[uint32]struct{}),
-			// todo!: initialized it here to avoid a nil pointer dereference if we close the process monitor without starting netlink, see `TestMonitorProtocolFail/Prestart` test.
-			isClosing: atomic.NewBool(false),
+			isClosing:            atomic.NewBool(false),
 		}
 	})
 	processMonitor.refcount.Add(1)
@@ -115,8 +114,6 @@ func (pm *ProcessMonitor) Initialize(useEventStream bool) error {
 	pm.m.Lock()
 	defer pm.m.Unlock()
 
-	// todo!: The refcount should probably stay in the `GetProcessMonitor` since we initialize only one but we get the processMonitor many times... This also fixes the suite `TestSharedLibraryDetection` where we use a unique process monitor for mutliple tests.
-	// pm.refcount.Add(1)
 	if pm.isInitialized {
 		return nil
 	}
@@ -257,7 +254,8 @@ func (pm *ProcessMonitor) startNetlink() error {
 			// We need this lock because someone could use it to add some callbacks while we are processing events.
 			pm.m.Lock()
 
-			// todo!: The `ProcEventMonitor` sends also other events that we don't use here. So why do we send them?
+			// todo!: The `ProcEventMonitor` sends also other events that we don't use here.
+			// We need to sync with the DataDog netlink implementation.
 			switch ev := event.Msg.(type) {
 			case *netlink.ExecProcEvent:
 				pm.callExecCallbacks(ev.ProcessPid)
@@ -268,7 +266,8 @@ func (pm *ProcessMonitor) startNetlink() error {
 		}
 	}()
 
-	// todo!: not clear why we need `notRunningPids`. We still have the lock so `pm.runningPids` should be empty
+	// At the first `startNetlink` call this logic will be useless since `pm.runningPids` is empty.
+	// but in case of netlink restart this logic will be used.
 	var notRunningPids = make(map[uint32]bool)
 	for pid := range pm.runningPids {
 		notRunningPids[pid] = true
@@ -390,6 +389,6 @@ func FindDeletedProcesses[V any](pids map[uint32]V) map[uint32]struct{} {
 
 // InitializeEventConsumer initializes the event consumer with the event handling.
 func InitializeEventConsumer(consumer *consumers.ProcessConsumer) {
-	// todo!: keep it empty and fail if it is used. In our fork we should never call this method.
+	// [STS] keep it empty and fail if it is used. In our fork we should never call this method.
 	panic("[STS] we don't implement this method")
 }

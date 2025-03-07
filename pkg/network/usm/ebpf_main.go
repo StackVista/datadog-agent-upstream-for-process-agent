@@ -443,19 +443,12 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 	options.DefaultKprobeAttachMethod = kprobeAttachMethod
 	options.BypassEnabled = e.cfg.BypassEnabled
 	options.VerifierOptions.Programs.LogDisabled = false
-	options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelInstruction
-	// Deprecated: options.VerifierOptions.Programs.LogSize = 16000000
+	options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelStats
 
 	if e.cfg.ProbeDebugLog {
 		log.Warn("Running EBPF probe with debug output")
 		options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelInstruction | ebpf.LogLevelStats
 	}
-
-	// todo!: seems no more useful, see the deprecation
-	// if e.cfg.ProbeLogBufferSizeBytes != 0 {
-	// 	log.Warnf("Running EBPF probe with log size: %d", e.cfg.ProbeLogBufferSizeBytes)
-	// 	options.VerifierOptions.Programs.LogSize = e.cfg.ProbeLogBufferSizeBytes
-	// }
 
 	supported, notSupported := e.getProtocolsForBuildMode()
 	cleanup := e.configureManagerWithSupportedProtocols(supported)

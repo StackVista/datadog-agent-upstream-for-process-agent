@@ -580,7 +580,7 @@ func (t *tracerOffsetGuesser) checkAndUpdateCurrentOffset(mp *maps.GenericMap[ui
 	case GuessRTTVar:
 		// [STS] See GuessRTT
 		t.status.Offset_rtt_var = notApplicable
-		t.logAndAdvance(t.status.Offset_rtt, GuessSocketSK)
+		t.logAndAdvance(t.status.Offset_rtt_var, GuessSocketSK)
 	case GuessSocketSK:
 		if t.status.Sport_via_sk == expected.sport && t.status.Dport_via_sk == htons(expected.dport) {
 			// if we are on kernel version < 4.7, net_dev_queue tracepoint will not be activated, and thus we should skip

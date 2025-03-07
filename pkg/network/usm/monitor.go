@@ -21,7 +21,6 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/config"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/telemetry"
-	usmconfig "github.com/DataDog/datadog-agent/pkg/network/usm/config"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/consts"
 	usmstate "github.com/DataDog/datadog-agent/pkg/network/usm/state"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/utils"
@@ -75,7 +74,7 @@ func NewMonitor(c *config.Config, connectionProtocolMap *ebpf.Map) (m *Monitor, 
 		return nil, fmt.Errorf("error initializing ebpf program: %w", err)
 	}
 
-	// todo!: It seems we are disabling the socket filter injection in the root namespace because we will do it into `NewMonitorProbes` since it is a namespace like the others in the end.
+	// We are disabling the socket filter injection in the root namespace because we will do it into `NewMonitorProbes` since it is a namespace like the others in the end.
 	//
 	// filter, _ := mgr.GetProbe(manager.ProbeIdentificationPair{EBPFFuncName: protocolDispatcherSocketFilterFunction, UID: probeUID})
 	// if filter == nil {
@@ -142,16 +141,13 @@ func (m *Monitor) Start() error {
 		return err
 	}
 
-	// Need to explicitly save the error in `err` so the defer function could save the startup error.
-	if usmconfig.NeedProcessMonitor(m.cfg) {
-		// [STS] todo!: we force the `EnableUSMEventStream` to false because we don't support it yet.
-		err = m.processMonitor.Initialize(false)
-	} else {
-		// [STS] we always need the process monitor for our logic otherwise we will never attach socket filters to new namespaces.
-		// In Datadog they only need it for TLS logic (to attach uprobes) but we need it always.
-		log.Error("[STS] Process monitor is not enabled, we won't attach probes to new namespaces.")
-	}
-
+	// [STS] we always need the process monitor for our logic otherwise we will never attach socket filters to new namespaces.
+	// Please note that even without the process monitor we still attach the socket filters to
+	// all namespaces that exist at startup time but we don't attach/detach new/dead namespaces.
+	// In Datadog they only need it for TLS logic (to attach uprobes) but we need it always.
+	//
+	// [STS] we force the `EnableUSMEventStream` to false because we don't support it yet.
+	err = m.processMonitor.Initialize(false)
 	return err
 }
 
@@ -160,8 +156,11 @@ func (m *Monitor) Pause() error {
 	if m == nil {
 		return nil
 	}
-	// [STS] We don't want to use this feature because it will disable all the socker filters. Moreover we dinamically attach/detach probes so we don't want to pause/resume since we don't have a static set of programs. BTW Datadog uses this feature just in tests.
-	log.Warn("[STS] Don't use the pause/resume feature in production.")
+	if m.ebpfProgram.cfg.BypassEnabled {
+		// [STS] We don't want to use this feature because it will disable all the socker filters. Moreover we dinamically attach/detach probes so we don't want to pause/resume since we don't have a static set of programs. BTW Datadog uses this feature just in tests.
+		// We panic only in case of `BypassEnabled` because without this flag the method does nothing.
+		panic("[STS] Don't use the pause/resume feature in production.")
+	}
 	return m.ebpfProgram.Pause()
 }
 
@@ -170,7 +169,11 @@ func (m *Monitor) Resume() error {
 	if m == nil {
 		return nil
 	}
-	log.Warn("[STS] Don't use the pause/resume feature in production.")
+	if m.ebpfProgram.cfg.BypassEnabled {
+		// [STS] We don't want to use this feature because it will disable all the socker filters. Moreover we dinamically attach/detach probes so we don't want to pause/resume since we don't have a static set of programs. BTW Datadog uses this feature just in tests.
+		// We panic only in case of `BypassEnabled` because without this flag the method does nothing.
+		panic("[STS] Don't use the pause/resume feature in production.")
+	}
 	return m.ebpfProgram.Resume()
 }
 

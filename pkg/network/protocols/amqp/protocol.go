@@ -93,7 +93,6 @@ func (p *protocol) PreStart(mgr *manager.Manager) error {
 		return err
 	}
 
-	// todo!: shouldn't we move this into `newAMQPProtocol`? the telemetry should be external and not included inside the StatKeeper
 	p.statkeeper = NewStatkeeper(p.cfg, p.telemetry)
 	p.eventsConsumer.Start()
 

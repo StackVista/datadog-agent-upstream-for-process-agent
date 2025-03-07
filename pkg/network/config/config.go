@@ -202,10 +202,6 @@ type Config struct {
 	// EnableHTTPTracing enables distributed tracing by reading the X-Request-Id header and reporting that for distributed tracing
 	EnableHTTPTracing bool
 
-	// todo!: probably we need to remove it, see the deprecation
-	// ProbeLogBufferSizeBytes increase the probe log buffer for debugging purposes
-	// ProbeLogBufferSizeBytes int
-
 	// MaxConnectionsStateBuffered represents the maximum number of state objects that we'll store in memory. These state objects store
 	// the stats for a connection so we can accurately determine traffic change between client requests.
 	MaxConnectionsStateBuffered int

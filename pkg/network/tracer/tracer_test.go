@@ -40,6 +40,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/tracer/testutil/testdns"
 	"github.com/DataDog/datadog-agent/pkg/process/util"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
 
 var (
@@ -64,7 +65,7 @@ type TracerSuite struct {
 }
 
 func TestTracerSuite(t *testing.T) {
-	ebpftest.TestBuildModes(t, ebpftest.SupportedBuildModes(), "", func(t *testing.T) {
+	ebpftest.TestBuildModes(t, stsutil.OnlyPrebuiltModeIfSelected(), "", func(t *testing.T) {
 		suite.Run(t, new(TracerSuite))
 	})
 }
@@ -634,7 +635,7 @@ func (s *TracerSuite) TestShouldSkipExcludedConnection() {
 	}, "Unable to find UDP connection to 127.0.0.1:80")
 }
 
-func (s *TracerSuite) TestShouldExcludeEmptyStatsConnection() {
+func (s *TracerSuite) TestShouldNotExcludeEmptyStatsConnection() {
 	t := s.T()
 	cfg := testConfig()
 	tr := setupTracer(t, cfg)
@@ -663,7 +664,17 @@ func (s *TracerSuite) TestShouldExcludeEmptyStatsConnection() {
 		require.Fail(collect, "could not find connection")
 	}, 2*time.Second, 100*time.Millisecond)
 
-	// next call should not have the same connection
+	// [STS] This test was introduced here https://github.com/DataDog/datadog-agent/pull/13477
+	// what DataDog does with this test:
+	// - open a UDP connection and sends some data on it.
+	// - Get the connections and save its data
+	// - Get again the connections and check that we don't report it anymore. This is because the stats on
+	//   this connection are not changed so they don't want to report this connection when `getConnections` is called.
+	//
+	// In our fork we always want to report the connections even if stats are not changed.
+	// See this change https://gitlab.com/stackvista/agent/datadog-agent-upstream-for-process-agent/-/commit/53f2a5cc598f322bdd09ea337210486fcb456863
+	//
+	// This is the reason why we are changing this test
 	cxs := getConnections(t, tr)
 	found := false
 	for _, c := range cxs.Conns {
@@ -674,7 +685,7 @@ func (s *TracerSuite) TestShouldExcludeEmptyStatsConnection() {
 			break
 		}
 	}
-	require.False(t, found, "empty connections should be filtered out")
+	require.True(t, found, "empty connections should not be filtered out")
 }
 
 func TestSkipConnectionDNS(t *testing.T) {
@@ -1017,6 +1028,7 @@ func testDNSStats(t *testing.T, tr *Tracer, domain string, success, failure, tim
 		if !assert.Equal(c, queryMsg.Len(), int(conn.Monotonic.SentBytes)) {
 			return
 		}
+		// [STS] we don't have the pid in the connection tuple in our implementation, so we cannot assert against it
 		if !tr.config.EnableEbpfless {
 			if !assert.Equal(c, os.Getpid(), int(conn.Pid)) {
 				return

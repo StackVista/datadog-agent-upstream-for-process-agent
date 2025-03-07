@@ -23,6 +23,7 @@ import (
 	nettestutil "github.com/DataDog/datadog-agent/pkg/network/testutil"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
 
 func TestMain(m *testing.M) {
@@ -35,6 +36,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestConntrackExists(t *testing.T) {
+	stsutil.SkipIfStackState(t, "we need 'ip' command to run this test")
 	ns := testutil.SetupCrossNsDNAT(t)
 
 	tcpCloser := nettestutil.StartServerTCPNs(t, net.ParseIP("2.2.2.4"), 8080, ns)
@@ -160,6 +162,7 @@ func BenchmarkConntrackExists(b *testing.B) {
 }
 
 func TestConntrackExists6(t *testing.T) {
+	stsutil.SkipIfStackState(t, "we need 'ip' command to run this test")
 	ns := testutil.SetupCrossNsDNAT6(t)
 
 	tcpCloser := nettestutil.StartServerTCPNs(t, net.ParseIP("fd00::2"), 8080, ns)
@@ -193,6 +196,7 @@ func TestConntrackExists6(t *testing.T) {
 }
 
 func TestConntrackExistsRootDNAT(t *testing.T) {
+	stsutil.SkipIfStackState(t, "we need 'ip' command to run this test")
 	destIP := "10.10.1.1"
 	destPort := 80
 	listenIP := "2.2.2.4"

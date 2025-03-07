@@ -118,39 +118,29 @@ func (h *StatKeeper) GetAndResetAllStats() (stats map[Key]*RequestStats, observa
 func parseTraceId(tx Transaction) TransactionTraceId {
 	resp := tx.ResponseTracingID()
 	req := tx.RequestTracingID()
-
-	if resp == "" {
-		if req == "" {
-			return TransactionTraceId{
-				Type: TraceIdNone,
-				Id:   "",
-			}
-		} else {
-			return TransactionTraceId{
-				Type: TraceIdRequest,
-				Id:   req,
-			}
-		}
-	} else {
-		if req == "" {
-			return TransactionTraceId{
-				Type: TraceIdResponse,
-				Id:   resp,
-			}
-		} else {
-			if req == resp {
-				return TransactionTraceId{
-					Type: TraceIdBoth,
-					Id:   req,
-				}
-			} else {
-				return TransactionTraceId{
-					Type: TraceIdAmbiguous,
-					Id:   "",
-				}
-			}
-		}
+	res := TransactionTraceId{
+		Type: TraceIdNone,
+		Id:   "",
 	}
+
+	switch {
+	case resp == "" && req == "":
+		res.Type = TraceIdNone
+		res.Id = ""
+	case resp == "" && req != "":
+		res.Type = TraceIdRequest
+		res.Id = req
+	case resp != "" && req == "":
+		res.Type = TraceIdResponse
+		res.Id = resp
+	case resp != "" && req != "" && resp == req:
+		res.Type = TraceIdBoth
+		res.Id = req
+	case resp != "" && req != "" && resp != req:
+		res.Type = TraceIdAmbiguous
+		res.Id = ""
+	}
+	return res
 }
 
 // Close closes the stat keeper.

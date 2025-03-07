@@ -58,7 +58,7 @@ func (s *HTTP2Suite) TestFormatHTTP2Stats() {
 		serverPort,
 		[]byte("/testpath-1"),
 		true,
-		http.MethodGet,
+		http.MethodGet, 0,
 	)
 	http2Stats1 := http.NewRequestStats()
 	for _, i := range statusCodes {
@@ -149,7 +149,7 @@ func (s *HTTP2Suite) TestFormatHTTP2StatsByPath() {
 		80,
 		[]byte("/testpath"),
 		true,
-		http.MethodGet,
+		http.MethodGet, 0,
 	)
 
 	payload := &network.Connections{
@@ -225,7 +225,7 @@ func (s *HTTP2Suite) TestHTTP2IDCollisionRegression() {
 		80,
 		[]byte("/"),
 		true,
-		http.MethodGet,
+		http.MethodGet, 0,
 	)
 	http2Stats.AddRequest(104, 1.0, 0, nil)
 
@@ -288,7 +288,7 @@ func (s *HTTP2Suite) TestHTTP2LocalhostScenario() {
 		serverport,
 		[]byte("/"),
 		true,
-		http.MethodGet,
+		http.MethodGet, 0,
 	)
 	http2Stats.AddRequest(103, 1.0, 0, nil)
 
@@ -314,7 +314,7 @@ func (s *HTTP2Suite) TestHTTP2LocalhostScenario() {
 			cliport,
 			[]byte("/"),
 			true,
-			http.MethodGet,
+			http.MethodGet, 0,
 		)
 
 		in.HTTP2[httpKeyWin] = http2Stats

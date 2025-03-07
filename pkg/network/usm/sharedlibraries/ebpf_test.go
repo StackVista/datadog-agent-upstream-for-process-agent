@@ -28,12 +28,7 @@ type EbpfProgramSuite struct {
 }
 
 func TestEbpfProgram(t *testing.T) {
-	modes := []ebpftest.BuildMode{ebpftest.Prebuilt}
-	if !stsutil.TestingStackState() {
-		modes = append(modes, ebpftest.RuntimeCompiled)
-		modes = append(modes, ebpftest.CORE)
-	}
-	ebpftest.TestBuildModes(t, modes, "", func(t *testing.T) {
+	ebpftest.TestBuildModes(t, stsutil.OnlyPrebuiltModeIfSelected(), "", func(t *testing.T) {
 		if !IsSupported(ebpf.NewConfig()) {
 			t.Skip("shared-libraries monitoring is not supported on this configuration")
 		}

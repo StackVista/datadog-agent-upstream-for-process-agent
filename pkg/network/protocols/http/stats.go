@@ -90,8 +90,8 @@ func (k Key) String() string {
 }
 
 // NewKey generates a new Key
-func NewKey(saddr, daddr util.Address, sport, dport uint16, path []byte, fullPath bool, method Method) Key {
-	return NewKeyWithConnection(types.NewConnectionKey(saddr, daddr, sport, dport), path, fullPath, method)
+func NewKey(saddr, daddr util.Address, sport, dport uint16, path []byte, fullPath bool, method Method, netns uint32) Key {
+	return NewKeyWithConnection(types.NewConnectionKey(saddr, daddr, sport, dport, netns), path, fullPath, method)
 }
 
 // NewKeyWithConnection generates a new Key with a given connection tuple

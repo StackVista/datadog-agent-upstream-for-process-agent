@@ -19,9 +19,11 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/config"
 	"github.com/DataDog/datadog-agent/pkg/network/netlink/testutil"
 	nettestutil "github.com/DataDog/datadog-agent/pkg/network/testutil"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
 
 func TestConsumerKeepsRunningAfterCircuitBreakerTrip(t *testing.T) {
+	stsutil.SkipIfStackState(t, "we need 'ip' command to run this test")
 	ns := testutil.SetupCrossNsDNAT(t)
 	cfg := &config.Config{
 		Config: ebpf.Config{

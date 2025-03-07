@@ -50,7 +50,7 @@ func (s *RedisSuite) TestFormatRedisStats() {
 		localhost,
 		localhost,
 		redisClientPort,
-		redisServerPort,
+		redisServerPort, 0,
 	)
 
 	in := &network.Connections{
@@ -107,7 +107,7 @@ func (s *RedisSuite) TestRedisIDCollisionRegression() {
 		localhost,
 		localhost,
 		redisClientPort,
-		redisServerPort,
+		redisServerPort, 0,
 	)
 
 	in := &network.Connections{
@@ -158,7 +158,7 @@ func (s *RedisSuite) TestRedisLocalhostScenario() {
 		localhost,
 		localhost,
 		redisClientPort,
-		redisServerPort,
+		redisServerPort, 0,
 	)
 
 	in := &network.Connections{
@@ -226,7 +226,7 @@ func generateBenchMarkPayloadRedis(sourcePortsMax, destPortsMax uint16) network.
 				localhost,
 				localhost,
 				sport+1,
-				dport+1,
+				dport+1, 0,
 			)] = &redis.RequestStat{}
 		}
 	}

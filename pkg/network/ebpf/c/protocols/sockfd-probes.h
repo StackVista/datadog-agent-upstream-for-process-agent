@@ -21,9 +21,8 @@ int BPF_KPROBE(kprobe__tcp_close, struct sock *sk) {
         return 0;
     }
 
-    u64 pid_tgid = bpf_get_current_pid_tgid();
     conn_tuple_t t;
-    if (!read_conn_tuple(&t, sk, pid_tgid, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&t, sk, CONN_TYPE_TCP)) {
         return 0;
     }
 
@@ -117,7 +116,7 @@ int BPF_KRETPROBE(kretprobe__sockfd_lookup_light, struct socket *socket) {
     }
 
     conn_tuple_t t;
-    if (!read_conn_tuple(&t, sock, pid_tgid, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&t, sock, CONN_TYPE_TCP)) {
         goto cleanup;
     }
 

@@ -17,7 +17,6 @@ import (
 	"github.com/streadway/amqp"
 )
 
-// todo!: move them here since we need them also when we don't compile tests. server.go is compiled only with tests
 const (
 	// User is the user to use for authentication
 	User = "guest"

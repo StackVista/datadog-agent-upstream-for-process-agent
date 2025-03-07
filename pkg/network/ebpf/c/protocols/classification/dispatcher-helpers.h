@@ -215,7 +215,6 @@ static __always_inline void dispatch_kafka(struct __sk_buff *skb) {
     }
 
     // Add netns to separate localhost traffic
-    // todo!: it seems a duplicate, we do it in `protocol_dispatcher_entrypoint`. kafka dispatcher is called only from there.
     skb_tup.netns = get_netns();
 
     char request_fragment[CLASSIFICATION_MAX_BUFFER];

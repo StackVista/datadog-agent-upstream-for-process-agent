@@ -18,7 +18,6 @@ typedef struct {
     char *buffer_ptr; // pointer to the user buffer
     size_t data_end; // represents the end of the user buffer
     size_t data_off; // current read offset in the user buffer
-    // size_t len; // todo!: we can remove this we can now use `data_end`
 } tls_dispatcher_arguments_t;
 
 #endif

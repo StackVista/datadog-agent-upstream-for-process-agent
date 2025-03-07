@@ -49,8 +49,9 @@ static __always_inline void classify_decrypted_payload(protocol_stack_t *stack, 
     }
 
     // Protocol is not HTTP/HTTP2/gRPC
-    // todo!: in theory we should never reach this `is_redis` since the above classification should detect it.
-    // the only meaningful case is when the redis classification is disabled but if it is disabled why do we want to identify it here?
+    // Even if we check the redis protocol inside `classify_protocol_for_dispatcher` 
+    // maybe there are scenarios in which we just have the tracer enabled and not the USM
+    // so this further check could be useful.
     if (is_redis(buffer, len)) {
         proto = PROTOCOL_REDIS;
     } else if (is_mysql(t, buffer, len)) {
@@ -124,12 +125,14 @@ static __always_inline void tls_process(struct pt_regs *ctx, conn_tuple_t *t, vo
         break;
     case PROTOCOL_MONGO:
         prog = PROG_MONGO;
-        // todo!: do we need the normalized tuple here or the simple one?
+        // [STS] it seems having the simple tuple (not normalized) is it enough for 2 reasons:
+        // - both mongo and amqp normalize the tuple as soon as they start processing the data
+        // - we want to emulate the socket filter flow, the socket filter provide the simple tuple not normalized
         final_tuple = *t;
         break;
     case PROTOCOL_AMQP:
         prog = PROG_AMQP;
-        // todo!: do we need the normalized tuple here or the simple one?
+        // [STS] Same as Mongo
         final_tuple = *t;
         break;
     default:
@@ -285,7 +288,7 @@ static __always_inline void map_ssl_ctx_to_sock(struct sock *skp) {
     bpf_map_delete_elem(&ssl_ctx_by_pid_tgid, &pid_tgid);
 
     ssl_sock_t ssl_sock = {};
-    if (!read_conn_tuple(&ssl_sock.tup, skp, pid_tgid, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&ssl_sock.tup, skp, CONN_TYPE_TCP)) {
         return;
     }
 

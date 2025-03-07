@@ -38,13 +38,8 @@ func (c *ConnectionKey) String() string {
 	)
 }
 
-// NewConnectionKey generates a new ConnectionKey, we keep this for compatibility with the DataDog codebase
-func NewConnectionKey(saddr, daddr util.Address, sport, dport uint16) ConnectionKey {
-	return NewConnectionKeyWithNamespace(saddr, daddr, sport, dport, 0)
-}
-
-// NewConnectionKeyWithNamespace generates a new ConnectionKey
-func NewConnectionKeyWithNamespace(saddr, daddr util.Address, sport, dport uint16, netns uint32) ConnectionKey {
+// NewConnectionKey generates a new ConnectionKey
+func NewConnectionKey(saddr, daddr util.Address, sport, dport uint16, netns uint32) ConnectionKey {
 	saddrl, saddrh := util.ToLowHigh(saddr)
 	daddrl, daddrh := util.ToLowHigh(daddr)
 	return ConnectionKey{

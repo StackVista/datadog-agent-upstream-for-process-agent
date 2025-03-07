@@ -121,7 +121,16 @@ static __always_inline bool http_seen_before(http_transaction_t *http, skb_info_
         // to true before flushing and deleting the eBPF map data, setting it to
         // 0 here gives a chance for the late response to "cancel" the map
         // deletion.
-        http->tcp_seq = 0;
+        
+        // [STS] This code was introduced to fix a race condition between uprobes 
+        // and socket filters (https://github.com/DataDog/datadog-agent/pull/20829). 
+        // This is just a mitigation not a real fix, right now we prefer to keep our
+        // version since we've never seen this race condition but in the future
+        // we could face the same issue. 
+        // One real solution would be to use TC programs instead of socket filters, 
+        // in this way we will be always sure that the TC programs are executed before the uprobe.
+                
+        // http->tcp_seq = 0;
         return false;
     }
 
@@ -143,9 +152,9 @@ static __always_inline bool http_seen_before(http_transaction_t *http, skb_info_
         return true;
     }
 
-    // todo!: for some reason we removed in our fork, but without it the HTTP enqueing logic is broken. To enqueue a transaction we need `http->tcp_seq==HTTP_TERMINATING` but without this line it will never be true. Today we only set `skb_info->tcp_seq = HTTP_TERMINATING`...
-    // Without this line some tests like `TestHTTPMonitorRequestId` will fail.
-    http->tcp_seq = skb_info->tcp_seq;
+    // [STS] We set the `http->tcp_seq` into `http_update_seen_before` so we don't need it here.
+    // todo!: Commenting this causes the the issue described above, we are flushing the same transaction twice to userspace.
+    // http->tcp_seq = skb_info->tcp_seq;
     return false;
 }
 
@@ -206,6 +215,7 @@ static __always_inline bool http_should_flush_previous_state(http_transaction_t 
 // representing HTTP transactions.
 static __always_inline void http_process(http_classification_t *http_class, skb_info_t *skb_info, __u64 tags) {
     char *buffer = (char *)http_class->request_fragment;
+    // bpf_printk("[http_process]: type=%d, method=%d, trace_id: %s", http_class->packet_type, http_class->method, http_class->tracing_id);
 
     http_transaction_t *http = http_fetch_state(&http_class->tuple, http_class->packet_type);
     if (!http || http_seen_before(http, skb_info, http_class->packet_type)) {
@@ -239,15 +249,25 @@ static __always_inline void http_process(http_classification_t *http_class, skb_
     if (((skb_info && !is_payload_empty(skb_info)) || !skb_info) && http_responding(http)) {
         http->response_last_seen = bpf_ktime_get_ns();
     }
+    
+    // [STS] Part of the race condition work (https://github.com/DataDog/datadog-agent/pull/20829)
+    // See the comment above for more details.
 
-    if (http->tcp_seq == HTTP_TERMINATING) {
+    // if (http->tcp_seq == HTTP_TERMINATING) {
+    //     http_batch_enqueue_wrapper(&http_class->tuple, http);
+    //     // Check a second time to minimize the chance of accidentally deleting a
+    //     // map entry if there is a race with a late response.
+    //     // Please refer to comments in `http_seen_before` for more context.
+    //     if (http->tcp_seq == HTTP_TERMINATING) {
+    //         bpf_map_delete_elem(&http_in_flight, &http_class->tuple);
+    //     }
+    // }
+
+    // Instead we use the old version.
+    if (http_closed(skb_info)) {
+        // bpf_printk("[push batch]: method type=%d, request trace id=%s, response trace_id: %s", http->request_method, http->request_tracing_id, http->response_tracing_id);
         http_batch_enqueue_wrapper(&http_class->tuple, http);
-        // Check a second time to minimize the chance of accidentally deleting a
-        // map entry if there is a race with a late response.
-        // Please refer to comments in `http_seen_before` for more context.
-        if (http->tcp_seq == HTTP_TERMINATING) {
-            bpf_map_delete_elem(&http_in_flight, &http_class->tuple);
-        }
+        bpf_map_delete_elem(&http_in_flight, &http_class->tuple);
     }
 }
 
@@ -261,6 +281,7 @@ int socket__http_filter(struct __sk_buff* skb) {
         log_debug("http_filter failed to fetch arguments for tail call");
         return 0;
     }
+    // bpf_printk("[socket filter]: tcp_seq=%u, tcp_flags=%d, src port: %d", skb_info.tcp_seq, skb_info.tcp_flags, http_class.tuple.sport);
 
     http_classify_skb(&http_class, &skb_info, skb);
 

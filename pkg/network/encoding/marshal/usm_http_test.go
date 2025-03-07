@@ -37,7 +37,7 @@ func TestFormatHTTPStats(t *testing.T) {
 		serverPort,
 		[]byte("/testpath-1"),
 		true,
-		http.MethodGet,
+		http.MethodGet, 0,
 	)
 	httpStats1 := http.NewRequestStats()
 	for _, i := range statusCodes {
@@ -129,7 +129,7 @@ func TestFormatHTTPStatsByPath(t *testing.T) {
 		80,
 		[]byte("/testpath"),
 		true,
-		http.MethodGet,
+		http.MethodGet, 0,
 	)
 
 	payload := &network.Connections{
@@ -203,7 +203,7 @@ func TestIDCollisionRegression(t *testing.T) {
 		80,
 		[]byte("/"),
 		true,
-		http.MethodGet,
+		http.MethodGet, 0,
 	)
 	httpStats.AddRequest(104, 1.0, 0, nil)
 
@@ -262,7 +262,7 @@ func TestLocalhostScenario(t *testing.T) {
 		80,
 		[]byte("/"),
 		true,
-		http.MethodGet,
+		http.MethodGet, 0,
 	)
 	httpStats.AddRequest(103, 1.0, 0, nil)
 
@@ -288,7 +288,7 @@ func TestLocalhostScenario(t *testing.T) {
 			60000,
 			[]byte("/"),
 			true,
-			http.MethodGet,
+			http.MethodGet, 0,
 		)
 
 		in.HTTP[httpKeyWin] = httpStats
@@ -382,7 +382,7 @@ func generateBenchMarkPayload(sourcePortsMax, destPortsMax uint16) network.Conne
 				dport+1,
 				[]byte(fmt.Sprintf("/api/%d-%d", sport+1, dport+1)),
 				true,
-				http.MethodGet,
+				http.MethodGet, 0,
 			)] = httpStats
 		}
 	}

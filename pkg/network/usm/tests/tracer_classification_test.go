@@ -100,6 +100,8 @@ type protocolClassificationAttributes struct {
 	validation func(t *testing.T, ctx testContext, tr *tracer.Tracer)
 	// Cleaning test resources if needed.
 	teardown func(t *testing.T, ctx testContext)
+	// Reason to skip the test.
+	skipReason string
 }
 
 func validateProtocolConnection(expectedStack *protocols.Stack) func(t *testing.T, ctx testContext, tr *tracer.Tracer) {

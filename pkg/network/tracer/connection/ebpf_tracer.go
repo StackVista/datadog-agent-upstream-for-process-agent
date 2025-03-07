@@ -743,7 +743,7 @@ func (t *ebpfTracer) setupTLSTagsMapCleaner(m *manager.Manager) {
 
 func populateConnStats(stats *network.ConnectionStats, t *netebpf.ConnTuple, s *netebpf.ConnStats, ch *cookieHasher) {
 	*stats = network.ConnectionStats{ConnectionTuple: network.ConnectionTuple{
-		Pid:    0, // todo!: not clear how we should populate this.
+		Pid:    s.Pid,
 		NetNS:  t.Netns,
 		Source: t.SourceAddress(),
 		Dest:   t.DestAddress(),
@@ -798,6 +798,8 @@ func populateConnStats(stats *network.ConnectionStats, t *netebpf.ConnTuple, s *
 	case netebpf.Outgoing:
 		stats.Direction = network.OUTGOING
 	default:
+		// [STS] When we have an ongoing connection and we are not sure about the direction, we prefer to be
+		// conservative and put it NONE instead of OUTGOING.
 		stats.Direction = network.NONE
 	}
 

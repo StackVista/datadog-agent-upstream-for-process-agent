@@ -1698,7 +1698,7 @@ func TestHTTPStats(t *testing.T) {
 		DPort:  80,
 	}}
 
-	key := http.NewKey(c.Source, c.Dest, c.SPort, c.DPort, []byte("/testpath"), true, http.MethodGet)
+	key := http.NewKey(c.Source, c.Dest, c.SPort, c.DPort, []byte("/testpath"), true, http.MethodGet, 0)
 
 	httpStats := make(map[http.Key]*http.RequestStats)
 	httpStats[key] = http.NewRequestStats()
@@ -1727,7 +1727,7 @@ func TestHTTP2Stats(t *testing.T) {
 	}}
 
 	getStats := func(path string) map[protocols.ProtocolType]interface{} {
-		key := http.NewKey(c.Source, c.Dest, c.SPort, c.DPort, []byte(path), true, http.MethodGet)
+		key := http.NewKey(c.Source, c.Dest, c.SPort, c.DPort, []byte(path), true, http.MethodGet, 0)
 
 		http2Stats := make(map[http.Key]*http.RequestStats)
 		http2Stats[key] = http.NewRequestStats()
@@ -1760,7 +1760,7 @@ func TestHTTPStatsWithMultipleClients(t *testing.T) {
 
 	getStats := func(path string) map[protocols.ProtocolType]interface{} {
 		httpStats := make(map[http.Key]*http.RequestStats)
-		key := http.NewKey(c.Source, c.Dest, c.SPort, c.DPort, []byte(path), true, http.MethodGet)
+		key := http.NewKey(c.Source, c.Dest, c.SPort, c.DPort, []byte(path), true, http.MethodGet, 0)
 		httpStats[key] = http.NewRequestStats()
 
 		usmStats := make(map[protocols.ProtocolType]interface{})
@@ -1823,7 +1823,7 @@ func TestHTTP2StatsWithMultipleClients(t *testing.T) {
 
 	getStats := func(path string) map[protocols.ProtocolType]interface{} {
 		http2Stats := make(map[http.Key]*http.RequestStats)
-		key := http.NewKey(c.Source, c.Dest, c.SPort, c.DPort, []byte(path), true, http.MethodGet)
+		key := http.NewKey(c.Source, c.Dest, c.SPort, c.DPort, []byte(path), true, http.MethodGet, 0)
 		http2Stats[key] = http.NewRequestStats()
 
 		usmStats := make(map[protocols.ProtocolType]interface{})
@@ -1878,93 +1878,91 @@ func TestHTTP2StatsWithMultipleClients(t *testing.T) {
 	assert.Len(t, delta.HTTP2, 2)
 }
 
-// todo!: fix these tests, some structures are changed
-// func TestHTTPObservations(t *testing.T) {
-// 	c := ConnectionStats{
-// 		Source: util.AddressFromString("1.1.1.1"),
-// 		Dest:   util.AddressFromString("0.0.0.0"),
-// 		SPort:  1000,
-// 		DPort:  80,
-// 	}
+func TestHTTPObservations(t *testing.T) {
+	c := ConnectionStats{ConnectionTuple: ConnectionTuple{
+		Source: util.AddressFromString("1.1.1.1"),
+		Dest:   util.AddressFromString("0.0.0.0"),
+		SPort:  1000,
+		DPort:  80,
+	}}
+	httpObservations := make([]http.TransactionObservation, 0)
+	var o http.TransactionObservation
+	httpObservations = append(httpObservations, o)
 
-// 	httpObservations := make([]http.TransactionObservation, 0)
-// 	var o http.TransactionObservation
-// 	httpObservations = append(httpObservations, o)
+	// Register client & pass in HTTP stats
+	state := newDefaultState()
+	delta := state.GetDelta("client", latestEpochTime(), []ConnectionStats{c}, nil,
+		map[protocols.ProtocolType]interface{}{
+			protocols.HTTP: http.AllHttpStats{Observations: httpObservations},
+		},
+	)
 
-// 	// Register client & pass in HTTP stats
-// 	state := newDefaultState()
-// 	delta := state.GetDelta("client", latestEpochTime(), []ConnectionStats{c}, nil,
-// 		map[protocols.ProtocolType]interface{}{
-// 			protocols.HTTP: http.AllHttpStats{Observations: httpObservations},
-// 		},
-// 	)
+	// Some observation data
+	assert.Len(t, delta.HTTPObservations, 1)
 
-// 	// Some observation data
-// 	assert.Len(t, delta.HTTPObservations, 1)
+	// Verify data has been flushed
+	delta = state.GetDelta("client", latestEpochTime(), []ConnectionStats{c}, nil, nil)
+	assert.Len(t, delta.HTTPObservations, 0)
+}
 
-// 	// Verify data has been flushed
-// 	delta = state.GetDelta("client", latestEpochTime(), []ConnectionStats{c}, nil, nil)
-// 	assert.Len(t, delta.HTTPObservations, 0)
-// }
+func TestHTTPObservationsWithMultipleClients(t *testing.T) {
+	c := ConnectionStats{ConnectionTuple: ConnectionTuple{
+		Source: util.AddressFromString("1.1.1.1"),
+		Dest:   util.AddressFromString("0.0.0.0"),
+		SPort:  1000,
+		DPort:  80,
+	}}
 
-// func TestHTTPObservationsWithMultipleClients(t *testing.T) {
-// 	c := ConnectionStats{
-// 		Source: util.AddressFromString("1.1.1.1"),
-// 		Dest:   util.AddressFromString("0.0.0.0"),
-// 		SPort:  1000,
-// 		DPort:  80,
-// 	}
+	getObservations := func() map[protocols.ProtocolType]interface{} {
+		httpObservations := make([]http.TransactionObservation, 0)
+		var o http.TransactionObservation
+		httpObservations = append(httpObservations, o)
+		return map[protocols.ProtocolType]interface{}{protocols.HTTP: http.AllHttpStats{Observations: httpObservations}}
+	}
 
-// 	getObservations := func() map[protocols.ProtocolType]interface{} {
-// 		httpObservations := make([]http.TransactionObservation, 0)
-// 		var o http.TransactionObservation
-// 		httpObservations = append(httpObservations, o)
-// 		return map[protocols.ProtocolType]interface{}{protocols.HTTP: http.AllHttpStats{Observations: httpObservations}}
-// 	}
+	client1 := "client1"
+	client2 := "client2"
+	client3 := "client3"
+	state := newDefaultState()
 
-// 	client1 := "client1"
-// 	client2 := "client2"
-// 	client3 := "client3"
-// 	state := newDefaultState()
+	// Register the first two clients
+	state.RegisterClient(client1)
+	state.RegisterClient(client2)
 
-// 	// Register the first two clients
-// 	state.RegisterClient(client1)
-// 	state.RegisterClient(client2)
+	// We should have nothing on first call
+	assert.Len(t, state.GetDelta(client1, latestEpochTime(), nil, nil, nil).HTTPObservations, 0)
+	assert.Len(t, state.GetDelta(client2, latestEpochTime(), nil, nil, nil).HTTPObservations, 0)
 
-// 	// We should have nothing on first call
-// 	assert.Len(t, state.GetDelta(client1, latestEpochTime(), nil, nil, nil).HTTPObservations, 0)
-// 	assert.Len(t, state.GetDelta(client2, latestEpochTime(), nil, nil, nil).HTTPObservations, 0)
+	// Store the connection to both clients & pass HTTP observations to the first client
+	c.LastUpdateEpoch = latestEpochTime()
+	state.StoreClosedConnection(&c)
 
-// 	// Store the connection to both clients & pass HTTP observations to the first client
-// 	c.LastUpdateEpoch = latestEpochTime()
-// 	state.StoreClosedConnections([]ConnectionStats{c})
+	delta := state.GetDelta(client1, latestEpochTime(), nil, nil, getObservations())
+	assert.Len(t, delta.HTTPObservations, 1)
 
-// 	delta := state.GetDelta(client1, latestEpochTime(), nil, nil, getObservations())
-// 	assert.Len(t, delta.HTTPObservations, 1)
+	// Verify that the HTTP observations were also stored in the second client
+	delta = state.GetDelta(client2, latestEpochTime(), nil, nil, nil)
+	assert.Len(t, delta.HTTPObservations, 1)
 
-// 	// Verify that the HTTP observations were also stored in the second client
-// 	delta = state.GetDelta(client2, latestEpochTime(), nil, nil, nil)
-// 	assert.Len(t, delta.HTTPObservations, 1)
+	// Register a third client & verify that it does not have the HTTP observations
+	delta = state.GetDelta(client3, latestEpochTime(), []ConnectionStats{c}, nil, nil)
+	assert.Len(t, delta.HTTPObservations, 0)
 
-// 	// Register a third client & verify that it does not have the HTTP observations
-// 	delta = state.GetDelta(client3, latestEpochTime(), []ConnectionStats{c}, nil, nil)
-// 	assert.Len(t, delta.HTTPObservations, 0)
+	c.LastUpdateEpoch = latestEpochTime()
+	state.StoreClosedConnection(&c)
 
-// 	c.LastUpdateEpoch = latestEpochTime()
-// 	state.StoreClosedConnections([]ConnectionStats{c})
+	// Pass in new HTTP observations to the first client
+	delta = state.GetDelta(client1, latestEpochTime(), nil, nil, getObservations())
+	assert.Len(t, delta.HTTPObservations, 1)
 
-// 	// Pass in new HTTP observations to the first client
-// 	delta = state.GetDelta(client1, latestEpochTime(), nil, nil, getObservations())
-// 	assert.Len(t, delta.HTTPObservations, 1)
+	// And the second client
+	delta = state.GetDelta(client2, latestEpochTime(), nil, nil, getObservations())
+	assert.Len(t, delta.HTTPObservations, 2)
 
-// 	// And the second client
-// 	delta = state.GetDelta(client2, latestEpochTime(), nil, nil, getObservations())
-// 	assert.Len(t, delta.HTTPObservations, 2)
-
-// 	// Verify that the third client also accumulated both new HTTP observations
-// 	delta = state.GetDelta(client3, latestEpochTime(), nil, nil, nil)
-// 	assert.Len(t, delta.HTTPObservations, 2)
-// }
+	// Verify that the third client also accumulated both new HTTP observations
+	delta = state.GetDelta(client3, latestEpochTime(), nil, nil, nil)
+	assert.Len(t, delta.HTTPObservations, 2)
+}
 
 func TestDetermineConnectionIntraHost(t *testing.T) {
 	tests := []struct {
@@ -2396,7 +2394,7 @@ func TestKafkaStats(t *testing.T) {
 		DPort:  80,
 	}}
 
-	key := kafka.NewKey(c.Source, c.Dest, c.SPort, c.DPort, "my-topic", kafka.ProduceAPIKey, 1)
+	key := kafka.NewKey(c.Source, c.Dest, c.SPort, c.DPort, "my-topic", kafka.ProduceAPIKey, 1, 0)
 
 	kafkaStats := make(map[kafka.Key]*kafka.RequestStats)
 	kafkaStats[key] = &kafka.RequestStats{
@@ -2429,7 +2427,7 @@ func TestKafkaStatsWithMultipleClients(t *testing.T) {
 
 	getStats := func(topicName string) map[protocols.ProtocolType]interface{} {
 		kafkaStats := make(map[kafka.Key]*kafka.RequestStats)
-		key := kafka.NewKey(c.Source, c.Dest, c.SPort, c.DPort, topicName, kafka.ProduceAPIKey, 1)
+		key := kafka.NewKey(c.Source, c.Dest, c.SPort, c.DPort, topicName, kafka.ProduceAPIKey, 1, 0)
 		kafkaStats[key] = &kafka.RequestStats{
 			ErrorCodeToStat: map[int32]*kafka.RequestStat{
 				0: {Count: 2},

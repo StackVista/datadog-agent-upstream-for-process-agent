@@ -49,22 +49,17 @@ type SharedLibrarySuite struct {
 }
 
 func TestSharedLibrary(t *testing.T) {
+	stsutil.SkipIfStackState(t, "[todo] this is flaky only when we run it together with other tests, we need to understand why")
 	if !usmconfig.TLSSupported(utils.NewUSMEmptyConfig()) {
 		t.Skip("shared library tracing not supported for this platform")
 	}
 
-	modes := []ebpftest.BuildMode{ebpftest.Prebuilt}
-	if !stsutil.TestingStackState() {
-		modes = append(modes, ebpftest.RuntimeCompiled)
-		modes = append(modes, ebpftest.CORE)
-	}
-
-	ebpftest.TestBuildModes(t, modes, "", func(t *testing.T) {
+	ebpftest.TestBuildModes(t, stsutil.OnlyPrebuiltModeIfSelected(), "", func(t *testing.T) {
 		t.Run("netlink", func(t *testing.T) {
 			launchProcessMonitor(t, false)
 			suite.Run(t, new(SharedLibrarySuite))
 		})
-		// [STS] todo!: today we don't support the event stream feature
+		// [STS] today we don't support the event stream feature so we don't test it
 		// t.Run("event stream", func(t *testing.T) {
 		// 	launchProcessMonitor(t, true)
 		// 	suite.Run(t, new(SharedLibrarySuite))

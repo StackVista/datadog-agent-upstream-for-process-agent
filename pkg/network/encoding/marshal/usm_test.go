@@ -25,7 +25,7 @@ func TestGroupByConnection(t *testing.T) {
 		80,
 		[]byte("/connection-1-path-1"),
 		true,
-		http.MethodGet,
+		http.MethodGet, 0,
 	)
 	val1 := http.NewRequestStats()
 	val1.AddRequest(100, 10.0, 0, nil)
@@ -37,7 +37,7 @@ func TestGroupByConnection(t *testing.T) {
 		80,
 		[]byte("/connection-1-path-2"),
 		true,
-		http.MethodGet,
+		http.MethodGet, 0,
 	)
 	val2 := http.NewRequestStats()
 	val2.AddRequest(200, 10.0, 0, nil)
@@ -50,7 +50,7 @@ func TestGroupByConnection(t *testing.T) {
 		80,
 		[]byte("/connection-2-path-1"),
 		true,
-		http.MethodGet,
+		http.MethodGet, 0,
 	)
 	val3 := http.NewRequestStats()
 	val3.AddRequest(300, 10.0, 0, nil)
@@ -62,7 +62,7 @@ func TestGroupByConnection(t *testing.T) {
 		80,
 		[]byte("/connection-2-path-2"),
 		true,
-		http.MethodGet,
+		http.MethodGet, 0,
 	)
 	val4 := http.NewRequestStats()
 	val4.AddRequest(400, 10.0, 0, nil)

@@ -293,8 +293,7 @@ static __always_inline int handle_message(conn_tuple_t *t, size_t sent_bytes, si
 
 static __always_inline int handle_retransmit(struct sock *sk, int count) {
     conn_tuple_t t = {};
-    u64 zero = 0;
-    if (!read_conn_tuple(&t, sk, zero, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&t, sk, CONN_TYPE_TCP)) {
         return 0;
     }
 
@@ -362,7 +361,7 @@ static __always_inline int handle_skb_consume_udp(struct sock *sk, struct sk_buf
 
 static __always_inline int handle_tcp_recv(u64 pid_tgid, struct sock *skp, int recv) {
     conn_tuple_t t = {};
-    if (!read_conn_tuple(&t, skp, pid_tgid, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&t, skp, CONN_TYPE_TCP)) {
         return 0;
     }
 

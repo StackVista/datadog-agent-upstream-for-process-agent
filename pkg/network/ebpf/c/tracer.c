@@ -111,7 +111,7 @@ int BPF_BYPASSABLE_KRETPROBE(kretprobe__tcp_sendmsg, int sent) {
 
     log_debug("kretprobe/tcp_sendmsg: pid_tgid: %llu, sent: %d, sock: %p", pid_tgid, sent, skp);
     conn_tuple_t t = {};
-    if (!read_conn_tuple(&t, skp, pid_tgid, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&t, skp, CONN_TYPE_TCP)) {
         return 0;
     }
 
@@ -155,7 +155,7 @@ int BPF_BYPASSABLE_KRETPROBE(kretprobe__tcp_sendpage, int sent) {
 
     log_debug("kretprobe/tcp_sendpage: pid_tgid: %llu, sent: %d, sock: %p", pid_tgid, sent, skp);
     conn_tuple_t t = {};
-    if (!read_conn_tuple(&t, skp, pid_tgid, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&t, skp, CONN_TYPE_TCP)) {
         return 0;
     }
 
@@ -197,7 +197,7 @@ int BPF_BYPASSABLE_KRETPROBE(kretprobe__udp_sendpage, int sent) {
 
     log_debug("kretprobe/udp_sendpage: pid_tgid: %llu, sent: %d, sock: %p", pid_tgid, sent, skp);
     conn_tuple_t t = {};
-    if (!read_conn_tuple(&t, skp, pid_tgid, CONN_TYPE_UDP)) {
+    if (!read_conn_tuple(&t, skp, CONN_TYPE_UDP)) {
         return 0;
     }
     
@@ -208,7 +208,7 @@ SEC("kprobe/tcp_done")
 int BPF_BYPASSABLE_KPROBE(kprobe__tcp_done, struct sock *sk) {
     conn_tuple_t t = {};
 
-    if (!read_conn_tuple(&t, sk, 0, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&t, sk, CONN_TYPE_TCP)) {
         increment_telemetry_count(tcp_done_failed_tuple);
         return 0;
     }
@@ -270,7 +270,7 @@ int BPF_BYPASSABLE_KPROBE(kprobe__tcp_close, struct sock *sk) {
 
     // Get network namespace id
     log_debug("kprobe/tcp_close: kernel thread id: %llu, user mode pid: %llu", GET_KERNEL_THREAD_ID(pid_tgid), GET_USER_MODE_PID(pid_tgid));
-    if (!read_conn_tuple(&t, sk, pid_tgid, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&t, sk, CONN_TYPE_TCP)) {
         return 0;
     }
     log_debug("kprobe/tcp_close: netns: %u, sport: %u, dport: %u", t.netns, t.sport, t.dport);
@@ -387,7 +387,7 @@ static __always_inline int handle_ip6_skb(struct sock *sk, size_t size, struct f
     u64 pid_tgid = bpf_get_current_pid_tgid();
 
     conn_tuple_t t = {};
-    if (!read_conn_tuple(&t, sk, pid_tgid, CONN_TYPE_UDP)) {
+    if (!read_conn_tuple(&t, sk, CONN_TYPE_UDP)) {
 #ifdef COMPILE_PREBUILT
         if (!are_fl6_offsets_known()) {
             log_debug("ERR: src/dst addr not set, fl6 offsets are not known");
@@ -578,7 +578,7 @@ static __always_inline int handle_ip_skb(struct sock *sk, size_t size, struct fl
     size -= sizeof(struct udphdr);
     u64 pid_tgid = bpf_get_current_pid_tgid();
     conn_tuple_t t = {};
-    if (!read_conn_tuple(&t, sk, pid_tgid, CONN_TYPE_UDP)) {
+    if (!read_conn_tuple(&t, sk, CONN_TYPE_UDP)) {
 #ifdef COMPILE_PREBUILT
         if (!are_fl4_offsets_known()) {
             log_debug("ERR: src/dst addr not set src:%llu,dst:%llu. fl4 offsets are not known", t.saddr_l, t.daddr_l);
@@ -771,7 +771,7 @@ static __always_inline int handle_ret_udp_recvmsg_pre_4_7_0(int copied, void *ud
         sockaddr_to_addr(sap, &t.daddr_h, &t.daddr_l, &t.dport, &t.metadata);
     }
 
-    if (!read_conn_tuple_partial(&t, st->sk, pid_tgid, CONN_TYPE_UDP)) {
+    if (!read_conn_tuple_partial(&t, st->sk, CONN_TYPE_UDP)) {
         log_debug("ERR(kretprobe/udp_recvmsg): error reading conn tuple, pid_tgid=%llu", pid_tgid);
         bpf_map_delete_elem(udp_sock_map, &pid_tgid);
         return 0;
@@ -957,7 +957,7 @@ int BPF_BYPASSABLE_KPROBE(kprobe__tcp_connect, struct sock *skp) {
     log_debug("kprobe/tcp_connect: kernel thread id: %llu, user mode pid: %llu", GET_KERNEL_THREAD_ID(pid_tgid), GET_USER_MODE_PID(pid_tgid));
 
     conn_tuple_t t = {};
-    if (!read_conn_tuple(&t, skp, 0, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&t, skp, CONN_TYPE_TCP)) {
         increment_telemetry_count(tcp_connect_failed_tuple);
         return 0;
     }
@@ -972,7 +972,7 @@ int BPF_BYPASSABLE_KPROBE(kprobe__tcp_connect, struct sock *skp) {
 SEC("kprobe/tcp_finish_connect")
 int BPF_BYPASSABLE_KPROBE(kprobe__tcp_finish_connect, struct sock *skp) {
     conn_tuple_t t = {};
-    if (!read_conn_tuple(&t, skp, 0, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&t, skp, CONN_TYPE_TCP)) {
         increment_telemetry_count(tcp_finish_connect_failed_tuple);
         return 0;
     }
@@ -1048,7 +1048,7 @@ int BPF_BYPASSABLE_KRETPROBE(kretprobe__inet_csk_accept, struct sock *sk) {
     log_debug("kretprobe/inet_csk_accept: kernel thread id: %llu, user mode pid: %llu", GET_KERNEL_THREAD_ID(pid_tgid), GET_USER_MODE_PID(pid_tgid));
 
     conn_tuple_t t = {};
-    if (!read_conn_tuple(&t, sk, pid_tgid, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&t, sk, CONN_TYPE_TCP)) {
         return 0;
     }
     log_debug("kretprobe/inet_csk_accept: netns: %u, sport: %u, dport: %u", t.netns, t.sport, t.dport);
@@ -1097,8 +1097,7 @@ int BPF_BYPASSABLE_KPROBE(kprobe__inet_csk_listen_stop, struct sock *skp) {
 
 static __always_inline int handle_udp_destroy_sock(void *ctx, struct sock *skp) {
     conn_tuple_t tup = {};
-    u64 pid_tgid = bpf_get_current_pid_tgid();
-    int valid_tuple = read_conn_tuple(&tup, skp, pid_tgid, CONN_TYPE_UDP);
+    int valid_tuple = read_conn_tuple(&tup, skp, CONN_TYPE_UDP);
 
     __u16 lport = 0;
     if (valid_tuple) {
@@ -1207,7 +1206,7 @@ int tracepoint__net__net_dev_queue(char* ctx) {
 
     conn_tuple_t sock_tup;
     bpf_memset(&sock_tup, 0, sizeof(conn_tuple_t));
-    if (!read_conn_tuple(&sock_tup, sk, 0, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&sock_tup, sk, CONN_TYPE_TCP)) {
         return 0;
     }
 

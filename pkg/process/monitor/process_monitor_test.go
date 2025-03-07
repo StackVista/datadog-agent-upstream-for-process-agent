@@ -9,7 +9,6 @@ package monitor
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"sync"
@@ -217,7 +216,7 @@ func TestProcessRestartNoDoublePid(t *testing.T) {
 
 	pm := GetProcessMonitor()
 
-	tmpFile, err := ioutil.TempFile("", "sleep")
+	tmpFile, err := os.CreateTemp("", "sleep")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
 	err = util.CopyFile("/bin/sleep", tmpFile.Name())

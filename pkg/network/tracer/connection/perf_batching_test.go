@@ -22,19 +22,17 @@ import (
 )
 
 const (
-	pidMax uint32 = 1 << 22 // PID_MAX_LIMIT on 64bit systems
+	basePort uint16 = 0
 )
 
 func TestGetPendingConns(t *testing.T) {
-	// todo!: see if we can adapt this test without pids
-	t.Skip("Skipping test that relies on PID")
-
 	manager := newTestBatchManager(t)
 
 	batch := new(netebpf.Batch)
 	batch.Id = 0
-	// batch.C0.Tup.Pid = pidMax + 1
-	// batch.C1.Tup.Pid = pidMax + 2
+	// [STS] we cannot use the pid so we use unrealist port values
+	batch.C0.Tup.Sport = basePort + 1
+	batch.C1.Tup.Sport = basePort + 2
 	batch.Len = 2
 
 	cpu := uint32(0)
@@ -48,21 +46,21 @@ func TestGetPendingConns(t *testing.T) {
 	manager.GetPendingConns(buffer)
 	pendingConns := buffer.Connections()
 	assert.GreaterOrEqual(t, len(pendingConns), 2)
-	for _, pid := range []uint32{pidMax + 1, pidMax + 2} {
+	for _, sPort := range []uint16{basePort + 1, basePort + 2} {
 		found := false
 		for p := range pendingConns {
-			if pendingConns[p].Pid == pid {
+			if pendingConns[p].SPort == sPort {
 				found = true
 				pendingConns = append(pendingConns[:p], pendingConns[p+1:]...)
 				break
 			}
 		}
 
-		assert.True(t, found, "could not find batched connection for pid %d", pid)
+		assert.True(t, found, "could not find batched connection for port %d", sPort)
 	}
 
 	// Now let's pretend a new connection was added to the batch on eBPF side
-	// batch.C2.Tup.Pid = pidMax + 3
+	batch.C2.Tup.Sport = basePort + 3
 	batch.Len++
 	updateBatch()
 
@@ -73,13 +71,13 @@ func TestGetPendingConns(t *testing.T) {
 	assert.GreaterOrEqual(t, len(pendingConns), 1)
 	var found bool
 	for _, p := range pendingConns {
-		if p.Pid == pidMax+3 {
+		if p.SPort == basePort+3 {
 			found = true
 			break
 		}
 	}
 
-	assert.True(t, found, "could not find batched connection for pid %d", pidMax+3)
+	assert.True(t, found, "could not find batched connection for port %d", basePort+3)
 }
 
 func TestPerfBatchStateCleanup(t *testing.T) {

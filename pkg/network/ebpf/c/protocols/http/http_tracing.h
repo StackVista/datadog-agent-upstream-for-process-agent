@@ -326,6 +326,7 @@ static __always_inline __u8 http_is_req_resp(char const *p) {
                                  __bpf_no_branch_cmp_unequal(p[6], '/')
                               );
 
+  // todo!: we need to support the TRACE method. Maybe we want to rely on the DataDog code `http_parse_data` but we need to check how the number of instructions is affected.
   return is_response | is_get | is_post | is_put | is_delete | is_head | is_options | is_patch;
 }
 

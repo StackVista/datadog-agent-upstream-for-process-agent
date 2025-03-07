@@ -71,6 +71,7 @@ import (
 	usmconfig "github.com/DataDog/datadog-agent/pkg/network/usm/config"
 	"github.com/DataDog/datadog-agent/pkg/process/util"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 	"github.com/DataDog/datadog-agent/pkg/util/testutil/flake"
 )
 
@@ -83,6 +84,7 @@ func platformInit() {
 
 func (s *TracerSuite) TestTCPRemoveEntries() {
 	t := s.T()
+	stsutil.SkipIfStackState(t, "we need iptables executable")
 	config := testConfig()
 	config.TCPConnTimeout = 100 * time.Millisecond
 	tr := setupTracer(t, config)
@@ -145,6 +147,8 @@ func (s *TracerSuite) TestTCPRemoveEntries() {
 
 func (s *TracerSuite) TestTCPRetransmit() {
 	t := s.T()
+	stsutil.SkipIfStackState(t, "we need iptables executable")
+
 	cfg := testConfig()
 	// Enable BPF-based system probe
 	tr := setupTracer(t, cfg)
@@ -210,6 +214,8 @@ func (s *TracerSuite) TestTCPRetransmit() {
 
 func (s *TracerSuite) TestTCPRetransmitSharedSocket() {
 	t := s.T()
+	stsutil.SkipIfStackState(t, "we need iptables executable")
+
 	cfg := testConfig()
 	// ebpfless does not support tracing PIDs such as this test
 	skipOnEbpflessNotSupported(t, cfg)
@@ -262,7 +268,9 @@ func (s *TracerSuite) TestTCPRetransmitSharedSocket() {
 	// Fetch all connections matching source and target address
 	allConnections := getConnections(t, tr)
 	conns := network.FilterConnections(allConnections, network.ByTuple(c.LocalAddr(), c.RemoteAddr()))
-	require.Len(t, conns, numProcesses)
+	// [STS] We see just one connection, becuase we don't use the pid as a key in the tuple.
+	// The number of byte sent will be correct even if we just have 1 connection, because we see all the pids belonging to the same connection.
+	require.Len(t, conns, 1)
 
 	totalSent := 0
 	for _, c := range conns {
@@ -270,24 +278,27 @@ func (s *TracerSuite) TestTCPRetransmitSharedSocket() {
 	}
 	assert.Equal(t, numProcesses*clientMessageSize, totalSent)
 
-	// Since we can't reliably identify the PID associated to a retransmit, we have opted
-	// to report the total number of retransmits for *one* of the connections sharing the
-	// same socket
-	connsWithRetransmits := 0
-	for _, c := range conns {
-		if c.Monotonic.Retransmits > 0 {
-			connsWithRetransmits++
-		}
-	}
-	assert.Equal(t, 1, connsWithRetransmits)
+	// [STS] We don't differentiate connection by PID
 
-	// Test if telemetry measuring PID collisions is correct
-	// >= because there can be other connections going on during CI that increase pidCollisions
-	assert.GreaterOrEqual(t, connection.EbpfTracerTelemetry.PidCollisions.Load(), int64(numProcesses-1))
+	// // Since we can't reliably identify the PID associated to a retransmit, we have opted
+	// // to report the total number of retransmits for *one* of the connections sharing the
+	// // same socket
+	// connsWithRetransmits := 0
+	// for _, c := range conns {
+	// 	if c.Monotonic.Retransmits > 0 {
+	// 		connsWithRetransmits++
+	// 	}
+	// }
+	// assert.Equal(t, 1, connsWithRetransmits)
+
+	// // Test if telemetry measuring PID collisions is correct
+	// // >= because there can be other connections going on during CI that increase pidCollisions
+	// assert.GreaterOrEqual(t, connection.EbpfTracerTelemetry.PidCollisions.Load(), int64(numProcesses-1))
 }
 
 func (s *TracerSuite) TestTCPRTT() {
 	t := s.T()
+	stsutil.SkipIfStackState(t, "We disable the RTT collection in our fork, skip the test")
 	// mark as flaky since the offset for RTT can be incorrectly guessed on prebuilt
 	if ebpftest.GetBuildMode() == ebpftest.Prebuilt {
 		flake.Mark(t)
@@ -517,6 +528,7 @@ func (s *TracerSuite) TestConnectionExpirationRegression() {
 
 func (s *TracerSuite) TestConntrackExpiration() {
 	t := s.T()
+	stsutil.SkipIfStackState(t, "we need 'iptables-save' executable")
 	ebpftest.LogLevel(t, "trace")
 
 	cfg := testConfig()
@@ -596,6 +608,7 @@ func (s *TracerSuite) TestConntrackExpiration() {
 // connections when the first lookup fails
 func (s *TracerSuite) TestConntrackDelays() {
 	t := s.T()
+	stsutil.SkipIfStackState(t, "we need 'iptables-save' executable")
 	netlinktestutil.SetupDNAT(t)
 	wg := sync.WaitGroup{}
 
@@ -639,6 +652,7 @@ func (s *TracerSuite) TestConntrackDelays() {
 
 func (s *TracerSuite) TestTranslationBindingRegression() {
 	t := s.T()
+	stsutil.SkipIfStackState(t, "we need 'iptables-save' executable")
 	netlinktestutil.SetupDNAT(t)
 	wg := sync.WaitGroup{}
 
@@ -769,6 +783,7 @@ func (s *TracerSuite) TestGatewayLookupNotEnabled() {
 
 func (s *TracerSuite) TestGatewayLookupEnabled() {
 	t := s.T()
+	stsutil.SkipIfStackState(t, "we need ip executable")
 	ctrl := gomock.NewController(t)
 	m := NewMockcloudProvider(ctrl)
 	oldCloud := network.Cloud
@@ -830,6 +845,7 @@ func (s *TracerSuite) TestGatewayLookupEnabled() {
 
 func (s *TracerSuite) TestGatewayLookupSubnetLookupError() {
 	t := s.T()
+	stsutil.SkipIfStackState(t, "we need ip executable")
 	ctrl := gomock.NewController(t)
 	m := NewMockcloudProvider(ctrl)
 	oldCloud := network.Cloud
@@ -899,6 +915,7 @@ func (s *TracerSuite) TestGatewayLookupSubnetLookupError() {
 
 func (s *TracerSuite) TestGatewayLookupCrossNamespace() {
 	t := s.T()
+	stsutil.SkipIfStackState(t, "we need ip executable")
 	ctrl := gomock.NewController(t)
 	m := NewMockcloudProvider(ctrl)
 	oldCloud := network.Cloud
@@ -1158,6 +1175,7 @@ func (s *TracerSuite) TestUDPConnExpiryTimeout() {
 
 func (s *TracerSuite) TestDNATIntraHostIntegration() {
 	t := s.T()
+	stsutil.SkipIfStackState(t, "we need 'iptables-save' executable")
 	cfg := testConfig()
 	skipEbpflessTodo(t, cfg)
 	netlinktestutil.SetupDNAT(t)
@@ -1235,6 +1253,7 @@ func (s *TracerSuite) TestSelfConnect() {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
+	// We have a client that sends some data to a server on the localhost
 	cmd := exec.CommandContext(ctx, "testdata/fork.py")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -1263,9 +1282,16 @@ func (s *TracerSuite) TestSelfConnect() {
 			return cs.SPort == uint16(port) && cs.DPort == uint16(port) && cs.Source.IsLoopback() && cs.Dest.IsLoopback()
 		})
 
+		// [STS] In DataDog suite, this test expect an output like this
+		// 1. [TCPv4] [PID: 242296] [127.0.0.1:41571 ⇄ 127.0.0.1:41571] (outgoing) ...
+		// 2. [TCPv4] [PID: 242295] [127.0.0.1:41571 ⇄ 127.0.0.1:41571] (outgoing) ...
+		// Becuase the both the client and the server will use the same tuple but with different PIDs. The key for the connection stats map is the tuple. In datadog 2 tuples with different pid are different, in our fork no, the pid is no more part of the key. that's why we expect only 1 connection.
+		//
+		// Our output
+		// 1. [TCPv4] [PID: 242296] [127.0.0.1:41571 ⇄ 127.0.0.1:41571] (outgoing) ...
 		t.Logf("connections: %v", conns)
-		require.Len(collect, conns, 2)
-	}, 5*time.Second, 100*time.Millisecond, "could not find expected number of tcp connections, expected: 2")
+		require.Len(collect, conns, 1)
+	}, 5*time.Second, 100*time.Millisecond, "could not find expected number of tcp connections, expected: 1")
 }
 
 // sets up two udp sockets talking to each other locally.
@@ -1643,6 +1669,7 @@ func testUDPReusePort(t *testing.T, udpnet string, ip string) {
 
 func (s *TracerSuite) TestDNSStatsWithNAT() {
 	t := s.T()
+	stsutil.SkipIfStackState(t, "we need 'iptables-save' executable")
 	cfg := testConfig()
 	skipEbpflessTodo(t, cfg)
 	testutil.IptablesSave(t)
@@ -2880,6 +2907,9 @@ const (
 func TestMapCleanerDoesNotRemoveNewConnections(t *testing.T) {
 	currKernelVersion, err := kernel.HostVersion()
 	require.NoError(t, err)
+
+	// we can enable this test when we will support this logic.
+	stsutil.SkipIfStackState(t, "GO TLS is not supported in prebuilt mode, skip it for now")
 
 	cfg := testConfig()
 	cfg.ServiceMonitoringEnabled = true

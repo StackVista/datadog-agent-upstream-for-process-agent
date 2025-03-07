@@ -53,9 +53,8 @@ func (m *MonitorProbes) Start() error {
 	m.nsProbesM.Lock()
 	defer m.nsProbesM.Unlock()
 
-	// todo!: before the `Start` the processMonitor is not initialized so we don't receive netlink events... in which scenario do we have a nsProbes not empty?
+	// This code is not used for now since we call this method only at startup time
 	// var noActiveNs = make(map[NetNs]bool)
-
 	// for netNS, _ := range m.nsProbes {
 	// 	noActiveNs[netNS] = true
 	// }

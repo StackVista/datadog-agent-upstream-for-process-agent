@@ -29,10 +29,12 @@ import (
 	nettestutil "github.com/DataDog/datadog-agent/pkg/network/testutil"
 	"github.com/DataDog/datadog-agent/pkg/process/util"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
 
 func TestConntrackers(t *testing.T) {
 	ebpftest.LogLevel(t, "trace")
+	stsutil.SkipIfStackState(t, "to run this we need 'ip' & 'conntrack' packages")
 	t.Run("netlink", func(t *testing.T) {
 		runConntrackerTest(t, "netlink", setupNetlinkConntracker)
 	})

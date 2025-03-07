@@ -26,7 +26,7 @@ type Key struct {
 // NewKey generates a new Key
 func NewKey(saddr, daddr util.Address, sport, dport uint16, netns uint32, topicName string, requestId uint32) Key {
 	return Key{
-		ConnectionKey: types.NewConnectionKeyWithNamespace(saddr, daddr, sport, dport, netns),
+		ConnectionKey: types.NewConnectionKey(saddr, daddr, sport, dport, netns),
 	}
 }
 

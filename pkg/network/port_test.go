@@ -24,6 +24,7 @@ import (
 	netlinktestutil "github.com/DataDog/datadog-agent/pkg/network/netlink/testutil"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
 
 func TestMain(m *testing.M) {
@@ -89,6 +90,7 @@ func runServerProcess(t *testing.T, proto string, port uint16, ns netns.NsHandle
 }
 
 func TestReadListeningPorts(t *testing.T) {
+	stsutil.SkipIfStackState(t, "to run this we need 'ip' package")
 	t.Run("TCP", func(t *testing.T) {
 		testReadListeningPorts(t, "tcp")
 	})

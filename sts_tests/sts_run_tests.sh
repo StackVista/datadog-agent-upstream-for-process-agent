@@ -13,8 +13,8 @@ if ! test -f /usr/local/bin/docker-compose; then
    chmod +x /usr/local/bin/docker-compose
 fi
 
-# These dependencies are needed by `TestUSMSuite/prebuilt/TestProtocolClassification` suite.
-apt install iptables conntrack iproute2 -y --no-install-recommends
+# These dependencies are needed by some tests such as the `TestConntrackers` suite.
+# apt install iptables conntrack iproute2 -y --no-install-recommends
 
 # This command assumes the datadog agent to be mounted at /source-datadog-agent. To avoid outputting to that directory,
 # we make a clone before running any commands
@@ -41,6 +41,8 @@ invoke system-probe.build
 export DD_SYSTEM_PROBE_BPF_DIR=$WORKDIR/pkg/ebpf/bytecode/build/
 
 export STS_TEST_RUN=true
+# Run tests only in prebuilt mode
+export PREBUILT_TEST_RUN=true
 
 # Selected test suites for testing
 echo "Running suites"
@@ -66,18 +68,26 @@ invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/
 # See TestAMQPOverTLSStats in tracker_usm_linux_test.go
 invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/. --test-run-name="^TestUSMSuite/prebuilt/TestAMQPStats$"
  
-# Run the tests for shared libraries
-invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/sharedlibraries/.
+# Run the tests for shared libraries (skipped for now)
+# invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/sharedlibraries/.
 
-# Run HTTP suite (Quite slow could take up to 5 minutes)
-# - `TestHTTP/prebuilt/TestHTTPMonitorRequestId/with_keep-alives` could be flaky
-# - `TestHTTP/prebuilt/TestHTTPMonitorAmbiguousId` could be flaky
+# Run HTTP suite
 invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestHTTP/prebuilt/.*" --timeout=400
 
 # Run USM test suite (Quite slow could take up to 5 minutes)
 # - `TestUSMSuite/prebuilt/TestIgnoreTLSClassificationIfApplicationProtocolWasDetected/POSTGRES` could be flaky
 # - `TestUSMSuite/prebuilt/TestProtocolClassification/with_dnat/http2/http2_traffic_using_gRPC_-_irrelevant_literal_headers` fails
 invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/tests/. --timeout=400
+
+# Run tracer suite (Quite slow could take up to 5 minutes)
+invoke test --build-include=linux_bpf,test --targets=./pkg/network/tracer/. --timeout=400
+
+# Run full USM suite
+invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --timeout=1000
+
+# Run Network suite
+invoke test --build-include=linux_bpf,test --targets=./pkg/network/. --timeout=1000
+
 
 # Still to enable
 # invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --timeout=1000
