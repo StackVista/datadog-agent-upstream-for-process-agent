@@ -56,7 +56,7 @@ require (
 	github.com/DataDog/datadog-operator v1.1.0
 	github.com/DataDog/ebpf-manager v0.3.1
 	github.com/DataDog/go-libddwaf v1.5.0
-	github.com/DataDog/go-tuf v1.0.2-0.5.2
+	github.com/DataDog/go-tuf v1.1.0-0.5.2
 	github.com/DataDog/gopsutil v1.2.2
 	github.com/DataDog/nikos v1.12.1
 	github.com/DataDog/opentelemetry-mapping-go/pkg/otlp/attributes v0.8.0
@@ -594,6 +594,7 @@ require (
 	github.com/knadh/koanf/v2 v2.0.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/moby/sys/sequential v0.5.0 // indirect
+	github.com/onsi/ginkgo/v2 v2.11.0 // indirect
 	github.com/pjbgf/sha1cd v0.3.0 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/rs/zerolog v1.29.1 // indirect
