@@ -397,6 +397,7 @@ func (t *ebpfTracer) GetConnections(buffer *network.ConnectionBuffer, filter fun
 		connsByTuple[*key] = stats.Cookie
 
 		isTCP := conn.Type == network.TCP
+		// we increment the counters before filtering, is this correct?
 		switch conn.Family {
 		case network.AFINET6:
 			if isTCP {
@@ -412,6 +413,7 @@ func (t *ebpfTracer) GetConnections(buffer *network.ConnectionBuffer, filter fun
 			}
 		}
 
+		// in the logic of the `filter` callback `true`` means keep the connection
 		if filter != nil && !filter(conn) {
 			continue
 		}
@@ -419,7 +421,7 @@ func (t *ebpfTracer) GetConnections(buffer *network.ConnectionBuffer, filter fun
 		if t.getTCPStats(tcp, key) {
 			updateTCPStats(conn, tcp)
 		}
-		if retrans, ok := t.getTCPRetransmits(key, seen); ok && conn.Type == network.TCP {
+		if retrans, ok := t.getTCPRetransmits(key, seen); ok {
 			conn.Monotonic.Retransmits = retrans
 		}
 
@@ -741,15 +743,17 @@ func (t *ebpfTracer) setupTLSTagsMapCleaner(m *manager.Manager) {
 	t.TLSTagsCleaner = TLSTagsMapCleaner
 }
 
+// Unify eBPF connection tuple + stats into a single userspace notation `network.ConnectionStats`
 func populateConnStats(stats *network.ConnectionStats, t *netebpf.ConnTuple, s *netebpf.ConnStats, ch *cookieHasher) {
-	*stats = network.ConnectionStats{ConnectionTuple: network.ConnectionTuple{
-		Pid:    s.Pid,
-		NetNS:  t.Netns,
-		Source: t.SourceAddress(),
-		Dest:   t.DestAddress(),
-		SPort:  t.Sport,
-		DPort:  t.Dport,
-	},
+	*stats = network.ConnectionStats{
+		ConnectionTuple: network.ConnectionTuple{
+			Pid:    s.Pid, // [STS] this is the pid of the process that created the connection. we can obtain it during different moment of the connection lifecycle (tcp_sendmsg, tcp_finish_connect, etc) but in all cases this should always be the pid of the process that created the connection.
+			NetNS:  t.Netns,
+			Source: t.SourceAddress(),
+			Dest:   t.DestAddress(),
+			SPort:  t.Sport,
+			DPort:  t.Dport,
+		},
 		Monotonic: network.StatCounters{
 			SentBytes:   s.Sent_bytes,
 			RecvBytes:   s.Recv_bytes,

@@ -173,9 +173,7 @@ func (t *Telemetry) Count(tx *ebpf.EbpfEvent, eventWrapper *EventWrapper) {
 
 // Log logs the postgres stats summary
 func (t *Telemetry) Log() {
-	if log.ShouldLog(log.DebugLvl) {
-		log.Debugf("postgres stats summary: %s", t.metricGroup.Summary())
-	}
+	log.Infof("postgres stats summary: %s", t.metricGroup.Summary())
 }
 
 // kernelTelemetry  provides empirical kernel statistics about the number of messages in each TCP packet

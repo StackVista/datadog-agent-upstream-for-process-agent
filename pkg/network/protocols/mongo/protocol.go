@@ -138,6 +138,8 @@ func (p *protocol) processMongo(events []EbpfTx) {
 // [source, dest tuple, request path] -> RequestStats object
 func (p *protocol) GetStats() *protocols.ProtocolStats {
 	p.eventsConsumer.Sync()
+	// After the above Sync of the batch new events could arrive from ebpf
+	// that's why we always need a lock on the statkeeper
 	p.telemetry.Log()
 	return &protocols.ProtocolStats{
 		Type:  protocols.Mongo,

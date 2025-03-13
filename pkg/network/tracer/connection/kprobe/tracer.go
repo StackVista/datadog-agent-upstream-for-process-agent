@@ -16,7 +16,6 @@ import (
 
 	ddebpf "github.com/DataDog/datadog-agent/pkg/ebpf"
 	"github.com/DataDog/datadog-agent/pkg/ebpf/bytecode"
-	"github.com/DataDog/datadog-agent/pkg/ebpf/prebuilt"
 	ebpftelemetry "github.com/DataDog/datadog-agent/pkg/ebpf/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/network/config"
 	netebpf "github.com/DataDog/datadog-agent/pkg/network/ebpf"
@@ -175,9 +174,10 @@ func LoadTracer(cfg *config.Config, mgrOpts manager.Options, connCloseEventHandl
 		log.Warnf("error compiling network tracer, falling back to prebuilt: %s", err)
 	}
 
-	if prebuilt.IsDeprecated() {
-		log.Warn("using deprecated prebuilt network tracer")
-	}
+	// [STS] we always use the prebuilt mode and we don't want the warning message
+	// if prebuilt.IsDeprecated() {
+	// 	log.Warn("using deprecated prebuilt network tracer")
+	// }
 
 	offsets, err := tracerOffsetGuesserRunner(cfg)
 	if err != nil {

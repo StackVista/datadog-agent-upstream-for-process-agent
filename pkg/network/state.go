@@ -370,6 +370,7 @@ func (ns *networkState) GetTelemetryDelta(
 	return nil
 }
 
+// if the callback returns `true` we keep the connection `false` we skip it.
 func filterConnections(conns []ConnectionStats, keep func(c *ConnectionStats) bool) []ConnectionStats {
 	p := 0
 	for i := range conns {
@@ -656,6 +657,7 @@ func (ns *networkState) StoreClosedConnection(closed *ConnectionStats) {
 func (ns *networkState) storeClosedConnection(c *ConnectionStats) {
 	for _, client := range ns.clients {
 		if i, ok := client.closed.byCookie[c.Cookie]; ok {
+			// we update only some fields if necessary, if we have same cookie but different tuple we replace it
 			if ns.mergeConnectionStats(&client.closed.conns[i], c) {
 				stateTelemetry.statsCookieCollisions.Inc()
 				client.closed.replaceAt(i, c)
@@ -918,10 +920,12 @@ func (ns *networkState) storeRedisStats(allStats map[redis.Key]*redis.RequestSta
 // storeMongoStats stores the latest Mongo stats for all clients
 func (ns *networkState) storeMongoStats(allStats map[mongo.Key]*mongo.RequestStat) {
 	if len(ns.clients) == 1 {
+		// todo!: in our code we never have more than one client, this doesn't seem the common case but the only one...
 		for _, client := range ns.clients {
 			if len(client.mongoStatsDelta) == 0 && len(allStats) <= ns.maxMongoStats {
 				// optimization for the common case:
 				// if there is only one client and no previous state, no memory allocation is needed
+				// todo!: in which case do we have `len(client.mongoStatsDelta) != 0`?
 				client.mongoStatsDelta = allStats
 				return
 			}
@@ -1127,6 +1131,7 @@ func (ns *networkState) RemoveConnections(conns []*ConnectionStats) {
 	ns.Lock()
 	defer ns.Unlock()
 
+	// each client has a map where it seems to save the active connections and so we need to remove them
 	for _, cl := range ns.clients {
 		for _, c := range conns {
 			delete(cl.stats, c.Cookie)

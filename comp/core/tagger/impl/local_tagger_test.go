@@ -40,7 +40,7 @@ func TestAccumulateTagsFor(t *testing.T) {
 	tel := fxutil.Test[telemetry.Component](t, telemetryimpl.MockModule())
 	telemetryStore := taggerTelemetry.NewStore(tel)
 	cfg := configmock.New(t)
-	tagger, err := newLocalTagger(cfg, store, telemetryStore)
+	tagger, err := NewLocalTagger(cfg, store, telemetryStore)
 	assert.NoError(t, err)
 	localTagger := tagger.(*localTagger)
 	localTagger.Start(context.Background())
@@ -80,7 +80,7 @@ func TestTag(t *testing.T) {
 	tel := fxutil.Test[telemetry.Component](t, telemetryimpl.MockModule())
 	telemetryStore := taggerTelemetry.NewStore(tel)
 	cfg := configmock.New(t)
-	tagger, err := newLocalTagger(cfg, store, telemetryStore)
+	tagger, err := NewLocalTagger(cfg, store, telemetryStore)
 	assert.NoError(t, err)
 	localTagger := tagger.(*localTagger)
 

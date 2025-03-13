@@ -16,6 +16,8 @@ import (
 	"github.com/DataDog/datadog-agent/comp/core/config"
 	flaretypes "github.com/DataDog/datadog-agent/comp/core/flare/types"
 	log "github.com/DataDog/datadog-agent/comp/core/log/def"
+	logcomp "github.com/DataDog/datadog-agent/comp/core/log/def"
+	wmcatalog "github.com/DataDog/datadog-agent/comp/core/workloadmeta/collectors/catalog"
 	wmdef "github.com/DataDog/datadog-agent/comp/core/workloadmeta/def"
 	compdef "github.com/DataDog/datadog-agent/comp/def"
 	"github.com/DataDog/datadog-agent/pkg/util/common"
@@ -63,6 +65,29 @@ type Provider struct {
 	Comp          wmdef.Component
 	FlareProvider flaretypes.Provider
 	Endpoint      api.AgentEndpointProvider
+}
+
+// [STS] Our own function to start the workloadmeta component without using fx.
+func StartWorkloadMetaNoFx(ctx context.Context, log logcomp.Component) wmdef.Component {
+	candidates := make(map[string]wmdef.Collector)
+
+	for _, c := range wmcatalog.GetCollectors() {
+		if (c.GetTargetCatalog() & wmdef.ProcessAgent) > 0 {
+			candidates[c.GetID()] = c
+		}
+	}
+
+	wm := &workloadmeta{
+		log:          log,
+		store:        make(map[wmdef.Kind]map[string]*cachedEntity),
+		candidates:   candidates,
+		collectors:   make(map[string]wmdef.Collector),
+		eventCh:      make(chan []wmdef.CollectorEvent, eventChBufferSize),
+		ongoingPulls: make(map[string]time.Time),
+	}
+
+	wm.start(ctx)
+	return wm
 }
 
 // NewWorkloadMeta creates a new workloadmeta component.
