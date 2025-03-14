@@ -409,7 +409,7 @@ func (s *USMSuite) TestProtocolClassification() {
 
 	t.Run("with dnat", func(t *testing.T) {
 		// SetupDNAT sets up a NAT translation from 2.2.2.2 to 1.1.1.1
-		stsutil.SkipIfStackState(t, "This suite runs on host iptables so probably it's better to avoid it")
+		stsutil.SkipIfIpPackagesRequired(t)
 		netlink.SetupDNAT(t)
 		testProtocolClassificationCrossOS(t, tr, "localhost", "2.2.2.2", "1.1.1.1")
 		testProtocolClassificationLinux(t, tr, "localhost", "2.2.2.2", "1.1.1.1")
@@ -419,7 +419,7 @@ func (s *USMSuite) TestProtocolClassification() {
 
 	t.Run("with snat", func(t *testing.T) {
 		// SetupDNAT sets up a NAT translation from 6.6.6.6 to 7.7.7.7
-		stsutil.SkipIfStackState(t, "This suite runs on host iptables so probably it's better to avoid it")
+		stsutil.SkipIfIpPackagesRequired(t)
 		netlink.SetupSNAT(t)
 		testProtocolClassificationCrossOS(t, tr, "6.6.6.6", "127.0.0.1", "127.0.0.1")
 		testProtocolClassificationLinux(t, tr, "6.6.6.6", "127.0.0.1", "127.0.0.1")

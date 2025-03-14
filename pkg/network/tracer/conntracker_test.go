@@ -34,7 +34,7 @@ import (
 
 func TestConntrackers(t *testing.T) {
 	ebpftest.LogLevel(t, "trace")
-	stsutil.SkipIfStackState(t, "to run this we need 'ip' & 'conntrack' packages")
+	stsutil.SkipIfIpPackagesRequired(t)
 	t.Run("netlink", func(t *testing.T) {
 		runConntrackerTest(t, "netlink", setupNetlinkConntracker)
 	})

@@ -23,7 +23,7 @@ import (
 )
 
 func TestConsumerKeepsRunningAfterCircuitBreakerTrip(t *testing.T) {
-	stsutil.SkipIfStackState(t, "we need 'ip' command to run this test")
+	stsutil.SkipIfIpPackagesRequired(t)
 	ns := testutil.SetupCrossNsDNAT(t)
 	cfg := &config.Config{
 		Config: ebpf.Config{

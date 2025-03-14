@@ -84,7 +84,7 @@ func platformInit() {
 
 func (s *TracerSuite) TestTCPRemoveEntries() {
 	t := s.T()
-	stsutil.SkipIfStackState(t, "we need iptables executable")
+	stsutil.SkipIfIpPackagesRequired(t)
 	config := testConfig()
 	config.TCPConnTimeout = 100 * time.Millisecond
 	tr := setupTracer(t, config)
@@ -147,7 +147,7 @@ func (s *TracerSuite) TestTCPRemoveEntries() {
 
 func (s *TracerSuite) TestTCPRetransmit() {
 	t := s.T()
-	stsutil.SkipIfStackState(t, "we need iptables executable")
+	stsutil.SkipIfIpPackagesRequired(t)
 
 	cfg := testConfig()
 	// Enable BPF-based system probe
@@ -214,7 +214,7 @@ func (s *TracerSuite) TestTCPRetransmit() {
 
 func (s *TracerSuite) TestTCPRetransmitSharedSocket() {
 	t := s.T()
-	stsutil.SkipIfStackState(t, "we need iptables executable")
+	stsutil.SkipIfIpPackagesRequired(t)
 
 	cfg := testConfig()
 	// ebpfless does not support tracing PIDs such as this test
@@ -528,7 +528,7 @@ func (s *TracerSuite) TestConnectionExpirationRegression() {
 
 func (s *TracerSuite) TestConntrackExpiration() {
 	t := s.T()
-	stsutil.SkipIfStackState(t, "we need 'iptables-save' executable")
+	stsutil.SkipIfIpPackagesRequired(t)
 	ebpftest.LogLevel(t, "trace")
 
 	cfg := testConfig()
@@ -608,7 +608,7 @@ func (s *TracerSuite) TestConntrackExpiration() {
 // connections when the first lookup fails
 func (s *TracerSuite) TestConntrackDelays() {
 	t := s.T()
-	stsutil.SkipIfStackState(t, "we need 'iptables-save' executable")
+	stsutil.SkipIfIpPackagesRequired(t)
 	netlinktestutil.SetupDNAT(t)
 	wg := sync.WaitGroup{}
 
@@ -652,7 +652,7 @@ func (s *TracerSuite) TestConntrackDelays() {
 
 func (s *TracerSuite) TestTranslationBindingRegression() {
 	t := s.T()
-	stsutil.SkipIfStackState(t, "we need 'iptables-save' executable")
+	stsutil.SkipIfIpPackagesRequired(t)
 	netlinktestutil.SetupDNAT(t)
 	wg := sync.WaitGroup{}
 
@@ -783,7 +783,7 @@ func (s *TracerSuite) TestGatewayLookupNotEnabled() {
 
 func (s *TracerSuite) TestGatewayLookupEnabled() {
 	t := s.T()
-	stsutil.SkipIfStackState(t, "we need ip executable")
+	stsutil.SkipIfIpPackagesRequired(t)
 	ctrl := gomock.NewController(t)
 	m := NewMockcloudProvider(ctrl)
 	oldCloud := network.Cloud
@@ -845,7 +845,7 @@ func (s *TracerSuite) TestGatewayLookupEnabled() {
 
 func (s *TracerSuite) TestGatewayLookupSubnetLookupError() {
 	t := s.T()
-	stsutil.SkipIfStackState(t, "we need ip executable")
+	stsutil.SkipIfIpPackagesRequired(t)
 	ctrl := gomock.NewController(t)
 	m := NewMockcloudProvider(ctrl)
 	oldCloud := network.Cloud
@@ -915,7 +915,7 @@ func (s *TracerSuite) TestGatewayLookupSubnetLookupError() {
 
 func (s *TracerSuite) TestGatewayLookupCrossNamespace() {
 	t := s.T()
-	stsutil.SkipIfStackState(t, "we need ip executable")
+	stsutil.SkipIfIpPackagesRequired(t)
 	ctrl := gomock.NewController(t)
 	m := NewMockcloudProvider(ctrl)
 	oldCloud := network.Cloud
@@ -1175,7 +1175,7 @@ func (s *TracerSuite) TestUDPConnExpiryTimeout() {
 
 func (s *TracerSuite) TestDNATIntraHostIntegration() {
 	t := s.T()
-	stsutil.SkipIfStackState(t, "we need 'iptables-save' executable")
+	stsutil.SkipIfIpPackagesRequired(t)
 	cfg := testConfig()
 	skipEbpflessTodo(t, cfg)
 	netlinktestutil.SetupDNAT(t)
@@ -1669,7 +1669,7 @@ func testUDPReusePort(t *testing.T, udpnet string, ip string) {
 
 func (s *TracerSuite) TestDNSStatsWithNAT() {
 	t := s.T()
-	stsutil.SkipIfStackState(t, "we need 'iptables-save' executable")
+	stsutil.SkipIfIpPackagesRequired(t)
 	cfg := testConfig()
 	skipEbpflessTodo(t, cfg)
 	testutil.IptablesSave(t)

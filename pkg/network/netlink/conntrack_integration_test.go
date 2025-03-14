@@ -36,7 +36,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestConntrackExists(t *testing.T) {
-	stsutil.SkipIfStackState(t, "we need 'ip' command to run this test")
+	stsutil.SkipIfIpPackagesRequired(t)
 	ns := testutil.SetupCrossNsDNAT(t)
 
 	tcpCloser := nettestutil.StartServerTCPNs(t, net.ParseIP("2.2.2.4"), 8080, ns)
@@ -162,7 +162,7 @@ func BenchmarkConntrackExists(b *testing.B) {
 }
 
 func TestConntrackExists6(t *testing.T) {
-	stsutil.SkipIfStackState(t, "we need 'ip' command to run this test")
+	stsutil.SkipIfIpPackagesRequired(t)
 	ns := testutil.SetupCrossNsDNAT6(t)
 
 	tcpCloser := nettestutil.StartServerTCPNs(t, net.ParseIP("fd00::2"), 8080, ns)
@@ -196,7 +196,7 @@ func TestConntrackExists6(t *testing.T) {
 }
 
 func TestConntrackExistsRootDNAT(t *testing.T) {
-	stsutil.SkipIfStackState(t, "we need 'ip' command to run this test")
+	stsutil.SkipIfIpPackagesRequired(t)
 	destIP := "10.10.1.1"
 	destPort := 80
 	listenIP := "2.2.2.4"

@@ -452,7 +452,8 @@ func testNameHelper(optionTrue, optionFalse string, value bool) string {
 // 4. Server and client do not support keep alive, and there is DNAT.
 func (s *HTTPTestSuite) TestSanity() {
 	t := s.T()
-	stsutil.SkipIfStackState(t, "we need ip executable")
+	stsutil.SkipIfIpPackagesRequired(t)
+
 	serverAddrWithoutNAT := "localhost:8080"
 	targetAddrWithNAT := "2.2.2.2:8080"
 	serverAddrWithNAT := "1.1.1.1:8080"

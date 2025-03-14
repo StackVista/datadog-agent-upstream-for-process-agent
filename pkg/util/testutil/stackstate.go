@@ -8,16 +8,26 @@ import (
 )
 
 func TestingStackState() bool {
-	return os.Getenv("STS_TEST_RUN") != ""
+	return os.Getenv("SKIP_STS_MARKED_TESTS") != ""
 }
 
 func TestingPrebuilt() bool {
-	return os.Getenv("PREBUILT_TEST_RUN") != ""
+	return os.Getenv("SKIP_NOT_EBPF_PREBUILT_TESTS") != ""
+}
+
+func TestingIpPackages() bool {
+	return os.Getenv("SKIP_IPTABLE_TESTS") != ""
 }
 
 func SkipIfStackState(t *testing.T, reason string) {
 	if TestingStackState() {
 		t.Skipf("Skipping test because StackState testing is enabled: %s", reason)
+	}
+}
+
+func SkipIfIpPackagesRequired(t *testing.T) {
+	if TestingIpPackages() {
+		t.Skipf("Skipping iptables related test")
 	}
 }
 

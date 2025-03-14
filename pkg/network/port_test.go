@@ -90,7 +90,7 @@ func runServerProcess(t *testing.T, proto string, port uint16, ns netns.NsHandle
 }
 
 func TestReadListeningPorts(t *testing.T) {
-	stsutil.SkipIfStackState(t, "to run this we need 'ip' package")
+	stsutil.SkipIfIpPackagesRequired(t)
 	t.Run("TCP", func(t *testing.T) {
 		testReadListeningPorts(t, "tcp")
 	})

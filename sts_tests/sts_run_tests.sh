@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 
-# This script should run inside this container
-
 set -ex
+
+if ! stat /.dockerenv >/dev/null 2>&1; then
+  echo "error: this script should run inside our docker image" >&2
+  exit 1
+fi
 
 if ! type "rsync" > /dev/null; then
   apt install rsync -y --no-install-recommends
@@ -13,8 +16,11 @@ if ! test -f /usr/local/bin/docker-compose; then
    chmod +x /usr/local/bin/docker-compose
 fi
 
-# These dependencies are needed by some tests such as the `TestConntrackers` suite.
-# apt install iptables conntrack iproute2 -y --no-install-recommends
+# We install these dependencies but we don't use them by default.
+# To skip tests releated to iptables and conntrack use the env variable export `SKIP_IPTABLE_TESTS=true`.
+# If you don't skip them please pay attention since these tests could alter the network state of your local machine.
+export SKIP_IPTABLE_TESTS=true
+apt install iptables conntrack iproute2 -y --no-install-recommends
 
 # This command assumes the datadog agent to be mounted at /source-datadog-agent. To avoid outputting to that directory,
 # we make a clone before running any commands
@@ -34,15 +40,11 @@ invoke install-tools
 
 invoke system-probe.build
 
-# todo!: why do we need them? it seems we don't generate them anymore.
-# llvm-objdump -S $WORKDIR/pkg/ebpf/bytecode/build/usm-debug.o > $OUTPUTDIR/usm_debug.txt
-# llvm-objdump -S $WORKDIR/pkg/ebpf/bytecode/build/usm.o > $OUTPUTDIR/usm.txt
-
 export DD_SYSTEM_PROBE_BPF_DIR=$WORKDIR/pkg/ebpf/bytecode/build/
 
-export STS_TEST_RUN=true
+export SKIP_STS_MARKED_TESTS=true
 # Run tests only in prebuilt mode
-export PREBUILT_TEST_RUN=true
+export SKIP_NOT_EBPF_PREBUILT_TESTS=true
 
 # Selected test suites for testing
 echo "Running suites"
@@ -87,9 +89,3 @@ invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --timeo
 
 # Run Network suite
 invoke test --build-include=linux_bpf,test --targets=./pkg/network/. --timeout=1000
-
-
-# Still to enable
-# invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --timeout=1000
-# invoke test --build-include=linux_bpf,test --targets=./pkg/network/. --timeout=1000
-

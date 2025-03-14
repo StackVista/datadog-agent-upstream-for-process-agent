@@ -1,5 +1,5 @@
-
-DOCKER_IMAGE=quay.io/stackstate/datadog_build_system-probe_x64:0d87e00f
+#!/usr/bin/env bash
+source ./docker_image.sh
 # We want to keep the same exact path of our source code inside the container, to please the paths in the docker-compose files
 HOST_SRC_CODE="$(dirname "$(pwd)")"
 

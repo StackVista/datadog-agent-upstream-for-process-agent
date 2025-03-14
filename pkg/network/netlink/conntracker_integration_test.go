@@ -37,7 +37,7 @@ const (
 
 // keep this test for netlink only, because eBPF listens to all namespaces all the time.
 func TestConnTrackerCrossNamespaceAllNsDisabled(t *testing.T) {
-	stsutil.SkipIfStackState(t, "we need 'ip' command to run this test")
+	stsutil.SkipIfIpPackagesRequired(t)
 	ns := testutil.SetupCrossNsDNAT(t)
 
 	cfg := config.New()
