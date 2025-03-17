@@ -50,8 +50,6 @@ func getCollectorOptions() []fx.Option {
 func GetCollectors() []workloadmeta.Collector {
 	// These are the only ones that have the `workloadmeta.ProcessAgent` flag
 	providers := []func() (workloadmeta.CollectorProvider, error){
-		cfcontainer.NewCollector,
-		cfvm.NewCollector,
 		containerd.NewCollector,
 		docker.NewCollector,
 		kubelet.NewCollector,
@@ -62,6 +60,8 @@ func GetCollectors() []workloadmeta.Collector {
 
 		// It seems we don't use these ones.
 		// ecs.NewCollector,
+		// cfcontainer.NewCollector,
+		// cfvm.NewCollector,
 		// ecsfargate.NewCollector,
 		// kubeapiserver.NewCollector,
 		// remoteworkloadmeta.NewCollector,
