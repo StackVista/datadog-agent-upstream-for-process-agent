@@ -72,9 +72,8 @@ func StartWorkloadMetaNoFx(ctx context.Context, log logcomp.Component) wmdef.Com
 	candidates := make(map[string]wmdef.Collector)
 
 	for _, c := range wmcatalog.GetCollectors() {
-		if (c.GetTargetCatalog() & wmdef.ProcessAgent) > 0 {
-			candidates[c.GetID()] = c
-		}
+		// GetCollectors returns all the collectors that have the `workloadmeta.ProcessAgent` flag
+		candidates[c.GetID()] = c
 	}
 
 	wm := &workloadmeta{

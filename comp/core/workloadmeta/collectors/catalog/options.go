@@ -46,6 +46,7 @@ func getCollectorOptions() []fx.Option {
 	}
 }
 
+// [STS] Our own function to get the collectors we use in the ProcessAgent
 func GetCollectors() []workloadmeta.Collector {
 	// These are the only ones that have the `workloadmeta.ProcessAgent` flag
 	providers := []func() (workloadmeta.CollectorProvider, error){
