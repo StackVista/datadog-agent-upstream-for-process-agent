@@ -57,7 +57,8 @@ func (e *EbpfEvent) Method() Method {
 	return Method(e.Http.Request_method)
 }
 
-// StatusCode returns the status code of the HTTP transaction
+// StatusCode returns the status code of the HTTP transaction, this is coming from ebpf
+// So it is not a rounded value, could be for example `503`.
 func (e *EbpfEvent) StatusCode() uint16 {
 	return e.Http.Response_status_code
 }

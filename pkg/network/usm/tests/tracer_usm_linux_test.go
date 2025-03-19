@@ -212,6 +212,65 @@ func (s *USMSuite) TestAMQPStats() {
 	}, time.Second*30, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
 }
 
+// [STS] test HTTP2 metrics with a simple server
+func (s *USMSuite) TestHTTP2Stats() {
+	t := s.T()
+	cfg := tracertestutil.Config()
+	cfg.EnableNativeTLSMonitoring = true
+	cfg.ServiceMonitoringEnabled = true
+	cfg.EnableGoTLSSupport = false // this is not supported in prebuilt mode
+	cfg.EnableAMQPMonitoring = true
+	cfg.EnableHTTP2Monitoring = true
+	cfg.MaxAMQPStatsBuffered = 1000
+	cfg.BPFDebug = true
+
+	tr := setupTracer(t, cfg)
+
+	// http2 server init
+	http2Server := &nethttp.Server{
+		Addr: "127.0.0.1:9090",
+		Handler: h2c.NewHandler(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, _ *nethttp.Request) {
+			w.WriteHeader(200)
+			w.Write([]byte("test"))
+		}), &http2.Server{}),
+	}
+
+	go func() {
+		if err := http2Server.ListenAndServe(); err != nethttp.ErrServerClosed {
+			require.NoError(t, err, "could not serve")
+		}
+	}()
+	t.Cleanup(func() {
+		http2Server.Close()
+	})
+
+	client := &nethttp.Client{
+		Transport: &http2.Transport{
+			AllowHTTP: true,
+			DialTLSContext: func(_ context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+				return net.Dial(network, addr)
+			},
+		},
+	}
+
+	resp, err := client.Post("http://127.0.0.1:9090", "application/json", bytes.NewReader([]byte("test")))
+	require.NoError(t, err)
+	resp.Body.Close()
+
+	require.Eventually(t, func() bool {
+		payload, err := tr.GetActiveConnections("http-testing-client")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for k, metrics := range payload.HTTP2 {
+			log.Warnf("Http2 metrics %v:%v", k.String(), metrics)
+		}
+
+		return len(payload.HTTP2) > 0
+	}, time.Second*30, time.Millisecond*100, "Expected to find HTTP2 stats, instead captured none")
+}
+
 func (s *USMSuite) TestAMQPStatsOnExistingConnection() {
 	t := s.T()
 	require.NoError(t, amqp.RunServer(t, "0.0.0.0", "5672", false))

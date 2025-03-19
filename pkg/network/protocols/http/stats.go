@@ -208,6 +208,9 @@ func (r *RequestStats) AddRequest(statusCode uint16, latency float64, staticTags
 		return
 	}
 
+	// normalizes the status code into a status code family.
+	statusCode = (statusCode / 100) * 100
+
 	stats, exists := r.Data[statusCode]
 	if !exists {
 		stats = &RequestStat{}
