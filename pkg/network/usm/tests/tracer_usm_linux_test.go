@@ -253,9 +253,15 @@ func (s *USMSuite) TestHTTP2Stats() {
 		},
 	}
 
-	resp, err := client.Post("http://127.0.0.1:9090", "application/json", bytes.NewReader([]byte("test")))
-	require.NoError(t, err)
-	resp.Body.Close()
+	// Try until we have a success, the server might not be ready yet.
+	require.Eventually(t, func() bool {
+		resp, err := client.Post("http://127.0.0.1:9090", "application/json", bytes.NewReader([]byte("test")))
+		if err != nil {
+			return false
+		}
+		resp.Body.Close()
+		return true
+	}, time.Second*3, time.Millisecond*500, "Try to connect to the HTTP2 server")
 
 	require.Eventually(t, func() bool {
 		payload, err := tr.GetActiveConnections("http-testing-client")
@@ -268,7 +274,7 @@ func (s *USMSuite) TestHTTP2Stats() {
 		}
 
 		return len(payload.HTTP2) > 0
-	}, time.Second*30, time.Millisecond*100, "Expected to find HTTP2 stats, instead captured none")
+	}, time.Second*3, time.Millisecond*500, "Expected to find HTTP2 stats, instead captured none")
 }
 
 func (s *USMSuite) TestAMQPStatsOnExistingConnection() {

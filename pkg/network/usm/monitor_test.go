@@ -134,7 +134,7 @@ func (s *HTTPTestSuite) TestHTTPStats() {
 
 		for key, reqStats := range stats {
 			if key.Method == http.MethodGet && strings.HasSuffix(key.Path.Content.Get(), "/test") && (key.SrcPort == 8080 || key.DstPort == 8080) {
-				currentStats := reqStats.Data[204]
+				currentStats := reqStats.Data[200]
 				if currentStats != nil && currentStats.Count == 1 {
 					return true
 				}

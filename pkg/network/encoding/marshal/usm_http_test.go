@@ -27,7 +27,7 @@ func TestFormatHTTPStats(t *testing.T) {
 		clientPort  = uint16(52800)
 		serverPort  = uint16(8080)
 		localhost   = util.AddressFromString("127.0.0.1")
-		statusCodes = []uint16{101, 202, 307, 404, 503}
+		statusCodes = []uint16{100, 200, 300, 400, 500}
 	)
 
 	httpKey1 := http.NewKey(
@@ -118,7 +118,7 @@ func TestFormatHTTPStatsByPath(t *testing.T) {
 	assert.Equal(t, 2.0, latencies.GetCount())
 	verifyQuantile(t, latencies, 0.5, 12.5)
 
-	latencies = httpReqStats.Data[405].Latencies
+	latencies = httpReqStats.Data[400].Latencies
 	assert.Equal(t, 2.0, latencies.GetCount())
 	verifyQuantile(t, latencies, 0.5, 3.5)
 
@@ -167,7 +167,7 @@ func TestFormatHTTPStatsByPath(t *testing.T) {
 	assert.Equal(t, 2.0, sketch.GetCount())
 	verifyQuantile(t, sketch, 0.5, 12.5)
 
-	serializedLatencies = statsByResponseStatus[int32(405)].Latencies
+	serializedLatencies = statsByResponseStatus[int32(400)].Latencies
 	sketch = unmarshalSketch(t, serializedLatencies)
 	assert.Equal(t, 2.0, sketch.GetCount())
 	verifyQuantile(t, sketch, 0.5, 3.5)
@@ -222,7 +222,7 @@ func TestIDCollisionRegression(t *testing.T) {
 	// back a non-nil result
 	aggregations, _, _ := getHTTPAggregations(t, httpEncoder, in.Conns[0])
 	assert.Equal("/", aggregations.EndpointAggregations[0].Path)
-	assert.Equal(uint32(1), aggregations.EndpointAggregations[0].StatsByStatusCode[int32(104)].Count)
+	assert.Equal(uint32(1), aggregations.EndpointAggregations[0].StatsByStatusCode[int32(100)].Count)
 
 	// assert that the other connections sharing the same (source,destination)
 	// addresses but different PIDs *won't* be associated with the HTTP stats
@@ -300,11 +300,11 @@ func TestLocalhostScenario(t *testing.T) {
 	// will have HTTP stats
 	aggregations, _, _ := getHTTPAggregations(t, httpEncoder, in.Conns[0])
 	assert.Equal("/", aggregations.EndpointAggregations[0].Path)
-	assert.Equal(uint32(1), aggregations.EndpointAggregations[0].StatsByStatusCode[int32(103)].Count)
+	assert.Equal(uint32(1), aggregations.EndpointAggregations[0].StatsByStatusCode[int32(100)].Count)
 
 	aggregations, _, _ = getHTTPAggregations(t, httpEncoder, in.Conns[1])
 	assert.Equal("/", aggregations.EndpointAggregations[0].Path)
-	assert.Equal(uint32(1), aggregations.EndpointAggregations[0].StatsByStatusCode[int32(103)].Count)
+	assert.Equal(uint32(1), aggregations.EndpointAggregations[0].StatsByStatusCode[int32(100)].Count)
 }
 
 func getHTTPAggregations(t *testing.T, encoder *httpEncoder, c network.ConnectionStats) (*model.HTTPAggregations, uint64, map[string]struct{}) {
