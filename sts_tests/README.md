@@ -12,6 +12,8 @@ cd sts_tests
 ./runner.sh
 # Inside the container
 $SOURCEDIR/sts_tests/sts_run_tests.sh
+# With 'full-suite' argument we execute all tests, but it could be slow (6/7 min)
+$SOURCEDIR/sts_tests/sts_run_tests.sh full-suite
 ```
 
 ## Fresh Re-run (suggested if you change ebpf code)

@@ -46,46 +46,13 @@ export SKIP_STS_MARKED_TESTS=true
 # Run tests only in prebuilt mode
 export SKIP_NOT_EBPF_PREBUILT_TESTS=true
 
-# Selected test suites for testing
-echo "Running suites"
-
-# Run Config tests
-invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/config/.
-
-# Run protocols tests
-invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/protocols/.
-
-# Run Process Monitor tests
-# These tests need to run without concurrency
-invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/process/monitor/.
-
-# Run the tests for MongoDB
-# To also run the TLS test, provide a MONGODB_URI for a TLS-enabled instance, e.g.:
-# export MONGODB_URI="mongodb+srv://user:pass@my-cluster.mongodb.com/?retryWrites=true&w=majority"
-invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/. --test-run-name="^TestUSMSuite/prebuilt/.*Mongo.*"
-invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/. --test-run-name="^TestUSMSuite/prebuilt/TestProtocolClassification/without_nat/mongo$"
-
-# Run the tests for AMQP
-# There is also a TLS test available, but it needs manual intervention as of now.
-# See TestAMQPOverTLSStats in tracker_usm_linux_test.go
-invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/. --test-run-name="^TestUSMSuite/prebuilt/TestAMQPStats$"
- 
-# Run the tests for shared libraries (skipped for now)
-# invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/sharedlibraries/.
-
-# Run HTTP suite
-invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestHTTP/prebuilt/.*" --timeout=400
-
-# Run USM test suite (Quite slow could take up to 5 minutes)
-# - `TestUSMSuite/prebuilt/TestIgnoreTLSClassificationIfApplicationProtocolWasDetected/POSTGRES` could be flaky
-# - `TestUSMSuite/prebuilt/TestProtocolClassification/with_dnat/http2/http2_traffic_using_gRPC_-_irrelevant_literal_headers` fails
-invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/tests/. --timeout=400
-
-# Run tracer suite (Quite slow could take up to 5 minutes)
-invoke test --build-include=linux_bpf,test --targets=./pkg/network/tracer/. --timeout=400
-
-# Run full USM suite
-invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --timeout=1000
-
-# Run Network suite
-invoke test --build-include=linux_bpf,test --targets=./pkg/network/. --timeout=1000
+# With 'full-suite' argument we execute all tests, but it could be slow (6/7 min)
+# By default we only run some of them
+if [[ "$1" == "full-suite" ]]; then
+    echo "---------------------\nRun full test suite---------------------\n"
+    invoke test --build-include=linux_bpf,test --targets=./pkg/network/. --timeout=500
+else
+    echo "---------------------\nRun simple test suite---------------------\n"
+    invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestUSMSuite/prebuilt/.*"
+    invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestHTTP/prebuilt/.*"
+fi
