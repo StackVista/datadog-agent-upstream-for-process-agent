@@ -1076,7 +1076,10 @@ replace github.com/pahanini/go-grpc-bidirectional-streaming-example v0.0.0-20211
 // Fixing a CVE on a transitive dep of k8s/etcd, should be cleaned-up once k8s.io/apiserver dep is removed (but double-check with `go mod why` that no other dep pulls it)
 replace github.com/dgrijalva/jwt-go => github.com/golang-jwt/jwt v3.2.1+incompatible
 
-replace github.com/vishvananda/netlink => github.com/DataDog/netlink v1.0.1-0.20240223195320-c7a4f832a3d1
+// we use our own fork of netlink, because we have some patches in it.
+replace github.com/vishvananda/netlink => github.com/StackVista/netlink v0.0.0-20231207101142-91d41874606b
+
+// replace github.com/vishvananda/netlink => github.com/DataDog/netlink v1.0.1-0.20240223195320-c7a4f832a3d1
 
 // Use custom Trivy fork to reduce binary size
 // Pull in replacements needed by upstream Trivy

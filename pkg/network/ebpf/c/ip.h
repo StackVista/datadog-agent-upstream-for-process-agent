@@ -11,6 +11,7 @@
 #include "conn_tuple.h"
 
 #define TCPHDR_FIN 0x01
+#define TCPHDR_SYN 0x02
 #define TCPHDR_RST 0x04
 #define TCPHDR_ACK 0x10
 

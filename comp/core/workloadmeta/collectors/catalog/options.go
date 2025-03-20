@@ -24,6 +24,7 @@ import (
 	"github.com/DataDog/datadog-agent/comp/core/workloadmeta/collectors/internal/podman"
 	"github.com/DataDog/datadog-agent/comp/core/workloadmeta/collectors/internal/remote/processcollector"
 	remoteworkloadmeta "github.com/DataDog/datadog-agent/comp/core/workloadmeta/collectors/internal/remote/workloadmeta"
+	workloadmeta "github.com/DataDog/datadog-agent/comp/core/workloadmeta/def"
 )
 
 func getCollectorOptions() []fx.Option {
@@ -43,4 +44,35 @@ func getCollectorOptions() []fx.Option {
 		remoteWorkloadmetaParams(),
 		processcollector.GetFxOptions(),
 	}
+}
+
+// [STS] Our own function to get the collectors we use in the ProcessAgent
+func GetCollectors() []workloadmeta.Collector {
+	// These are the only ones that have the `workloadmeta.ProcessAgent` flag
+	providers := []func() (workloadmeta.CollectorProvider, error){
+		containerd.NewCollector,
+		docker.NewCollector,
+		kubelet.NewCollector,
+		kubemetadata.NewCollector,
+		// todo!: actually we are not compiling these packages in the process agent, if we look at the logs before the sync we don't have them
+		// crio.NewCollector,
+		// podman.NewCollector,
+
+		// It seems we don't use these ones.
+		// ecs.NewCollector,
+		// cfcontainer.NewCollector,
+		// cfvm.NewCollector,
+		// ecsfargate.NewCollector,
+		// kubeapiserver.NewCollector,
+		// remoteworkloadmeta.NewCollector,
+		// remoteWorkloadmetaParams,
+		// processcollector.NewCollector,
+	}
+
+	collectors := make([]workloadmeta.Collector, 0)
+	for _, p := range providers {
+		c, _ := p()
+		collectors = append(collectors, c.Collector)
+	}
+	return collectors
 }

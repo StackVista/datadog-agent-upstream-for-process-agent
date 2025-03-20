@@ -124,7 +124,6 @@ func ConnTupleToEBPFTuple(c *network.ConnectionTuple, tup *netebpf.ConnTuple) {
 	tup.Sport = c.SPort
 	tup.Dport = c.DPort
 	tup.Netns = c.NetNS
-	tup.Pid = c.Pid
 	if c.Family == network.AFINET {
 		tup.SetFamily(netebpf.IPv4)
 	} else {

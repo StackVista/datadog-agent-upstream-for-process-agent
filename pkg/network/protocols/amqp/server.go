@@ -22,13 +22,6 @@ import (
 	dockerutils "github.com/DataDog/datadog-agent/pkg/util/testutil/docker"
 )
 
-const (
-	// User is the user to use for authentication
-	User = "guest"
-	// Pass is the password to use for authentication
-	Pass = "guest"
-)
-
 type encryptionPoliciesMap map[bool]string
 type regexGeneratorsMap map[bool]func(testing.TB, string) *regexp.Regexp
 

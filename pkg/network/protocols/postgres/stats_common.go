@@ -24,9 +24,9 @@ type Key struct {
 }
 
 // NewKey creates a new postgres key
-func NewKey(saddr, daddr util.Address, sport, dport uint16, operation Operation, parameters string) Key {
+func NewKey(saddr, daddr util.Address, sport, dport uint16, operation Operation, parameters string, netns uint32) Key {
 	return Key{
-		ConnectionKey: types.NewConnectionKey(saddr, daddr, sport, dport),
+		ConnectionKey: types.NewConnectionKey(saddr, daddr, sport, dport, netns),
 		Operation:     operation,
 		Parameters:    parameters,
 	}

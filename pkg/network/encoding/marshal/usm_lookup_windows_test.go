@@ -22,7 +22,7 @@ func TestUSMLookup(t *testing.T) {
 		util.AddressFromString("1.1.1.1"),
 		util.AddressFromString("2.2.2.2"),
 		60000,
-		80,
+		80, 0,
 	)
 
 	val := new(USMConnectionData[struct{}, any])

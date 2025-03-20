@@ -16,9 +16,9 @@ type Key struct {
 }
 
 // NewKey creates a new redis key
-func NewKey(saddr, daddr util.Address, sport, dport uint16) Key {
+func NewKey(saddr, daddr util.Address, sport, dport uint16, netns uint32) Key {
 	return Key{
-		ConnectionKey: types.NewConnectionKey(saddr, daddr, sport, dport),
+		ConnectionKey: types.NewConnectionKey(saddr, daddr, sport, dport, netns),
 	}
 }
 

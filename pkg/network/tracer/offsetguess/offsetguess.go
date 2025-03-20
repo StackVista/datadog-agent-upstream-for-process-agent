@@ -152,8 +152,17 @@ func getIpv6Configuration(c *config.Config) (bool, bool) {
 func setupOffsetGuesser(guesser OffsetGuesser, config *config.Config, buf bytecode.AssetReader) error {
 	// Enable kernel probes used for offset guessing.
 	offsetMgr := guesser.Manager()
+
+	netDevQueueOffset, err := GetNetDevQueueSkbOffset()
+	if err != nil {
+		return fmt.Errorf("error finding offset for net_dev_queue skb field: %w", err)
+	}
+
 	offsetOptions := manager.Options{
 		RemoveRlimit: true,
+		ConstantEditors: []manager.ConstantEditor{
+			{Name: "offset_net_dev_queue_skb", Value: netDevQueueOffset},
+		},
 	}
 	enabledProbes, err := guesser.Probes(config)
 	if err != nil {

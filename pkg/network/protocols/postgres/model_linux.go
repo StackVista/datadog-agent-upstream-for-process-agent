@@ -58,6 +58,7 @@ func (e *EventWrapper) ConnTuple() types.ConnectionKey {
 		DstIPLow:  e.Tuple.Daddr_l,
 		SrcPort:   e.Tuple.Sport,
 		DstPort:   e.Tuple.Dport,
+		NetNs:     e.Tuple.Netns,
 	}
 }
 

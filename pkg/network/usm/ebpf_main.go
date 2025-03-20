@@ -11,7 +11,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path"
 	"slices"
+	"strings"
 	"unsafe"
 
 	manager "github.com/DataDog/ebpf-manager"
@@ -20,16 +23,17 @@ import (
 
 	ddebpf "github.com/DataDog/datadog-agent/pkg/ebpf"
 	"github.com/DataDog/datadog-agent/pkg/ebpf/bytecode"
-	"github.com/DataDog/datadog-agent/pkg/ebpf/prebuilt"
 	ebpftelemetry "github.com/DataDog/datadog-agent/pkg/ebpf/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/network"
 	"github.com/DataDog/datadog-agent/pkg/network/config"
 	netebpf "github.com/DataDog/datadog-agent/pkg/network/ebpf"
 	"github.com/DataDog/datadog-agent/pkg/network/ebpf/probes"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/amqp"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http2"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/kafka"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/mongo"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/postgres"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/redis"
 	"github.com/DataDog/datadog-agent/pkg/network/tracer/offsetguess"
@@ -48,6 +52,8 @@ var (
 		kafka.Spec,
 		postgres.Spec,
 		redis.Spec,
+		mongo.Spec,
+		amqp.Spec,
 		// opensslSpec is unique, as we're modifying its factory during runtime to allow getting more parameters in the
 		// factory.
 		opensslSpec,
@@ -125,6 +131,8 @@ func newEBPFProgram(c *config.Config, connectionProtocolMap *ebpf.Map) (*ebpfPro
 					EBPFFuncName: protocolDispatcherSocketFilterFunction,
 					UID:          probeUID,
 				},
+				// we need it because it is required by the `CloneProgram` API of the manager.
+				KeepProgramSpec: true,
 			},
 		},
 	}
@@ -165,6 +173,13 @@ func newEBPFProgram(c *config.Config, connectionProtocolMap *ebpf.Map) (*ebpfPro
 	return program, nil
 }
 
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // Init initializes the ebpf program.
 func (e *ebpfProgram) Init() error {
 	var err error
@@ -202,9 +217,10 @@ func (e *ebpfProgram) Init() error {
 		log.Warnf("runtime compilation failed: attempting fallback: %s", err)
 	}
 
-	if prebuilt.IsDeprecated() {
-		log.Warn("using deprecated prebuilt USM monitor")
-	}
+	// [STS] We always use the preuilt monitor so we don't want a warning.
+	// if prebuilt.IsDeprecated() {
+	// 	log.Warn("using deprecated prebuilt USM monitor")
+	// }
 
 	e.buildMode = buildmode.Prebuilt
 	err = e.initPrebuilt()
@@ -413,7 +429,10 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 		manager.ConstantEditor{Name: "ephemeral_range_end", Value: uint64(end)})
 
 	for _, p := range e.Manager.Probes {
-		options.ActivatedProbes = append(options.ActivatedProbes, &manager.ProbeSelector{ProbeIdentificationPair: p.ProbeIdentificationPair})
+		// [STS] Difference with Datadog. Instead of loading the socketfilter in the root namespace only, we attach a socket filter for each namesapce with netlink callbacks. So we don't need to attach the socket filter now and here.
+		if p.ProbeIdentificationPair.EBPFFuncName != protocolDispatcherSocketFilterFunction {
+			options.ActivatedProbes = append(options.ActivatedProbes, &manager.ProbeSelector{ProbeIdentificationPair: p.ProbeIdentificationPair})
+		}
 	}
 
 	// Some parts of USM (https capturing, and part of the classification) use `read_conn_tuple`, and has some if
@@ -423,6 +442,13 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 	options.DefaultKProbeMaxActive = maxActive
 	options.DefaultKprobeAttachMethod = kprobeAttachMethod
 	options.BypassEnabled = e.cfg.BypassEnabled
+	options.VerifierOptions.Programs.LogDisabled = false
+	options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelStats
+
+	if e.cfg.ProbeDebugLog {
+		log.Warn("Running EBPF probe with debug output")
+		options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelInstruction | ebpf.LogLevelStats
+	}
 
 	supported, notSupported := e.getProtocolsForBuildMode()
 	cleanup := e.configureManagerWithSupportedProtocols(supported)
@@ -462,16 +488,66 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 		}
 	}
 
-	err := e.InitWithOptions(buf, &options)
+	err := withoutHardenedBpfJit(func() error {
+		return e.InitWithOptions(buf, &options)
+	})
+
 	if err != nil {
+		var err2 *ebpf.VerifierError
+		if errors.As(err, &err2) {
+			_ = log.Errorf("Error verifying program: last 500 lines")
+			for _, l := range err2.Log[max(len(err2.Log)-500, 0):] {
+				_ = log.Errorf(l)
+			}
+			err2.Log = []string{}
+		}
 		cleanup()
+		return err
 	} else {
 		// Update the protocols lists to reflect the ones we actually enabled
 		e.enabledProtocols = supported
 		e.disabledProtocols = notSupported
 	}
 
-	return err
+	return nil
+}
+
+// withoutHardenedBpfJit disables hardening of the bpf jit. this is required to load the http probes, which are big and trip up the jit.
+func withoutHardenedBpfJit(f func() error) error {
+	if value := os.Getenv("STS_DISABLE_BPF_JIT_HARDEN"); value != "true" {
+		return f()
+	}
+
+	var proc = "/proc"
+	if value := os.Getenv("HOST_PROC"); value != "" {
+		proc = value
+	}
+
+	hardenPath := path.Join(proc, "sys", "net", "core", "bpf_jit_harden")
+
+	curValue, err := os.ReadFile(hardenPath)
+	if err != nil {
+		return fmt.Errorf("could not read bpf_jit_harden setting: %w", err)
+	}
+
+	if strings.TrimSpace(string(curValue)) != "0" {
+		log.Infof("Encountered bpf_jit_harden = %s, going to set to 0", strings.TrimSpace(string(curValue)))
+	}
+
+	err = os.WriteFile(hardenPath, []byte("0"), 0644)
+	if err != nil {
+		return fmt.Errorf("could not write to %s to set bpf_jit_harden to 0: %w", hardenPath, err)
+	}
+
+	execErr := f()
+
+	log.Infof("Resetting bpf_jit_harden to %s", strings.TrimSpace(string(curValue)))
+	err = os.WriteFile(hardenPath, curValue, 0644)
+	if err != nil {
+		return fmt.Errorf("could not reset bpf_jit_harden to %s: %w", string(curValue), err)
+	}
+
+	return execErr
 }
 
 func getAssetName(module string, debug bool) string {

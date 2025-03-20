@@ -53,7 +53,7 @@ func (s *PostgresSuite) TestFormatPostgresStats() {
 		postgresClientPort,
 		postgresServerPort,
 		postgres.SelectOP,
-		tableName,
+		tableName, 0,
 	)
 	insertKey := postgres.NewKey(
 		localhost,
@@ -61,7 +61,7 @@ func (s *PostgresSuite) TestFormatPostgresStats() {
 		postgresClientPort,
 		postgresServerPort,
 		postgres.InsertOP,
-		tableName,
+		tableName, 0,
 	)
 	updateKey := postgres.NewKey(
 		localhost,
@@ -69,7 +69,7 @@ func (s *PostgresSuite) TestFormatPostgresStats() {
 		postgresClientPort,
 		postgresServerPort,
 		postgres.UpdateOP,
-		tableName,
+		tableName, 0,
 	)
 	createKey := postgres.NewKey(
 		localhost,
@@ -77,7 +77,7 @@ func (s *PostgresSuite) TestFormatPostgresStats() {
 		postgresClientPort,
 		postgresServerPort,
 		postgres.CreateTableOP,
-		tableName,
+		tableName, 0,
 	)
 	dropKey := postgres.NewKey(
 		localhost,
@@ -85,7 +85,7 @@ func (s *PostgresSuite) TestFormatPostgresStats() {
 		postgresClientPort,
 		postgresServerPort,
 		postgres.DropTableOP,
-		tableName,
+		tableName, 0,
 	)
 	deleteKey := postgres.NewKey(
 		localhost,
@@ -93,7 +93,7 @@ func (s *PostgresSuite) TestFormatPostgresStats() {
 		postgresClientPort,
 		postgresServerPort,
 		postgres.DeleteTableOP,
-		tableName,
+		tableName, 0,
 	)
 	alterKey := postgres.NewKey(
 		localhost,
@@ -101,7 +101,7 @@ func (s *PostgresSuite) TestFormatPostgresStats() {
 		postgresClientPort,
 		postgresServerPort,
 		postgres.AlterTableOP,
-		tableName,
+		tableName, 0,
 	)
 	truncateKey := postgres.NewKey(
 		localhost,
@@ -109,7 +109,7 @@ func (s *PostgresSuite) TestFormatPostgresStats() {
 		postgresClientPort,
 		postgresServerPort,
 		postgres.TruncateTableOP,
-		tableName,
+		tableName, 0,
 	)
 
 	in := &network.Connections{
@@ -273,7 +273,7 @@ func (s *PostgresSuite) TestPostgresIDCollisionRegression() {
 		postgresClientPort,
 		postgresServerPort,
 		postgres.SelectOP,
-		tableName,
+		tableName, 0,
 	)
 
 	in := &network.Connections{
@@ -333,7 +333,7 @@ func (s *PostgresSuite) TestPostgresLocalhostScenario() {
 		postgresClientPort,
 		postgresServerPort,
 		postgres.InsertOP,
-		tableName,
+		tableName, 0,
 	)
 
 	in := &network.Connections{
@@ -408,7 +408,7 @@ func generateBenchMarkPayloadPostgres(sourcePortsMax, destPortsMax uint16) netwo
 				sport+1,
 				dport+1,
 				postgres.SelectOP,
-				tableName,
+				tableName, 0,
 			)] = &postgres.RequestStat{
 				Count:              10,
 				FirstLatencySample: 5,

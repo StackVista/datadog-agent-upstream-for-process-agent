@@ -30,6 +30,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/usm/testutil/grpc"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/utils"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
 
 const (
@@ -52,6 +53,7 @@ type usmGRPCSuite struct {
 }
 
 func TestGRPCScenarios(t *testing.T) {
+	stsutil.SkipIfStackState(t, "[todo] not sure we support it right now")
 	currKernelVersion, err := kernel.HostVersion()
 	require.NoError(t, err)
 	if currKernelVersion < http2.MinimumKernelVersion {

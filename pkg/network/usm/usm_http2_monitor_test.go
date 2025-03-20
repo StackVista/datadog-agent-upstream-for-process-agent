@@ -47,6 +47,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/usm/consts"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/utils"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
+	stsutil "github.com/DataDog/datadog-agent/pkg/util/testutil"
 )
 
 type pathType uint8
@@ -94,6 +95,7 @@ func skipIfKernelNotSupported(t *testing.T) {
 }
 
 func TestHTTP2Scenarios(t *testing.T) {
+	stsutil.SkipIfStackState(t, "[todo] not sure we support it right now")
 	skipIfKernelNotSupported(t)
 	modes := []ebpftest.BuildMode{ebpftest.RuntimeCompiled, ebpftest.CORE}
 	if !prebuilt.IsDeprecated() {

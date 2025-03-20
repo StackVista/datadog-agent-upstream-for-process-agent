@@ -1,6 +1,8 @@
 #ifndef __HTTP_H
 #define __HTTP_H
 
+#include "protocols/http/http_tracing.h"
+
 #include "bpf_builtins.h"
 #include "bpf_telemetry.h"
 
@@ -119,7 +121,16 @@ static __always_inline bool http_seen_before(http_transaction_t *http, skb_info_
         // to true before flushing and deleting the eBPF map data, setting it to
         // 0 here gives a chance for the late response to "cancel" the map
         // deletion.
-        http->tcp_seq = 0;
+        
+        // [STS] This code was introduced to fix a race condition between uprobes 
+        // and socket filters (https://github.com/DataDog/datadog-agent/pull/20829). 
+        // This is just a mitigation not a real fix, right now we prefer to keep our
+        // version since we've never seen this race condition but in the future
+        // we could face the same issue. 
+        // One real solution would be to use TC programs instead of socket filters, 
+        // in this way we will be always sure that the TC programs are executed before the uprobe.
+                
+        // http->tcp_seq = 0;
         return false;
     }
 
@@ -141,12 +152,26 @@ static __always_inline bool http_seen_before(http_transaction_t *http, skb_info_
         return true;
     }
 
-    // Update map entry with latest TCP sequence number
-    http->tcp_seq = skb_info->tcp_seq;
+    // [STS] We set the `http->tcp_seq` into `http_update_seen_before` so we don't need it here.
+    // todo!: Commenting this causes the the issue described above, we are flushing the same transaction twice to userspace.
+    // http->tcp_seq = skb_info->tcp_seq;
     return false;
 }
 
-static __always_inline http_transaction_t *http_fetch_state(conn_tuple_t *tuple, http_transaction_t *http, http_packet_t packet_type) {
+static __always_inline void http_update_seen_before(http_transaction_t *http, skb_info_t *skb_info) {
+    if (!skb_info || !skb_info->tcp_seq) {
+        return;
+    }
+
+    log_debug("http_update_seen_before: htx=%p old_seq=%d seq=%d\n", http, http->tcp_seq, skb_info->tcp_seq);
+    http->tcp_seq = skb_info->tcp_seq;
+}
+
+/** Global empty value to assist with initialization of the map items.
+*/
+static http_transaction_t init_zero;
+
+static __always_inline http_transaction_t *http_fetch_state(conn_tuple_t *tuple, http_packet_t packet_type) {
     if (packet_type == HTTP_PACKET_UNKNOWN) {
         return bpf_map_lookup_elem(&http_in_flight, tuple);
     }
@@ -168,7 +193,7 @@ static __always_inline http_transaction_t *http_fetch_state(conn_tuple_t *tuple,
     // Since http_in_flight is shared between programs running in different contexts, it gets effected by the
     // above scenario.
     // However the EBUSY error does not carry any signal for us since this is caused by a kernel bug.
-    bpf_map_update_with_telemetry(http_in_flight, tuple, http, BPF_NOEXIST, -EEXIST, -EBUSY);
+    bpf_map_update_with_telemetry(http_in_flight, tuple, &init_zero, BPF_NOEXIST, -EEXIST, -EBUSY);
 
     return bpf_map_lookup_elem(&http_in_flight, tuple);
 }
@@ -188,29 +213,33 @@ static __always_inline bool http_should_flush_previous_state(http_transaction_t 
 
 // http_process is responsible for parsing traffic and emitting events
 // representing HTTP transactions.
-static __always_inline void http_process(http_event_t *event, skb_info_t *skb_info, __u64 tags) {
-    conn_tuple_t *tuple = &event->tuple;
-    http_transaction_t *http = &event->http;
-    char *buffer = (char *)http->request_fragment;
-    http_packet_t packet_type = HTTP_PACKET_UNKNOWN;
-    http_method_t method = HTTP_METHOD_UNKNOWN;
-    http_parse_data(buffer, &packet_type, &method);
+static __always_inline void http_process(http_classification_t *http_class, skb_info_t *skb_info, __u64 tags) {
+    char *buffer = (char *)http_class->request_fragment;
+    // bpf_printk("[http_process]: type=%d, method=%d, trace_id: %s", http_class->packet_type, http_class->method, http_class->tracing_id);
 
-    http = http_fetch_state(tuple, http, packet_type);
-    if (!http || http_seen_before(http, skb_info, packet_type)) {
+    http_transaction_t *http = http_fetch_state(&http_class->tuple, http_class->packet_type);
+    if (!http || http_seen_before(http, skb_info, http_class->packet_type)) {
         return;
     }
 
-    if (http_should_flush_previous_state(http, packet_type)) {
-        http_batch_enqueue_wrapper(tuple, http);
-        bpf_memcpy(http, &event->http, sizeof(http_transaction_t));
+    if (http_should_flush_previous_state(http, http_class->packet_type)) {
+        http_batch_enqueue_wrapper(&http_class->tuple, http);
+        // Clear the transaction. Data about the transaction is filled in after this.
+        bpf_memset(http, 0, sizeof(http_transaction_t));
     }
 
-    log_debug("http_process: type=%d method=%d", packet_type, method);
-    if (packet_type == HTTP_REQUEST) {
-        http_begin_request(http, method, buffer);
-    } else if (packet_type == HTTP_RESPONSE) {
+    log_debug("http_process: type=%d method=%d", http_class->packet_type, http_class->method);
+
+    if (http_class->packet_type == HTTP_REQUEST) {
+        http_begin_request(http, http_class->method, buffer);
+        http_update_seen_before(http, skb_info);
+        bpf_memcpy(&http->request_tracing_id, &http_class->tracing_id, HTTP_TRACING_ID_SIZE);
+        http->request_parse_result = http_class->parse_result;
+    } else if (http_class->packet_type == HTTP_RESPONSE) {
         http_begin_response(http, buffer);
+        http_update_seen_before(http, skb_info);
+        bpf_memcpy(&http->response_tracing_id, &http_class->tracing_id, HTTP_TRACING_ID_SIZE);
+        http->response_parse_result = http_class->parse_result;
     }
 
     http->tags |= tags;
@@ -220,50 +249,46 @@ static __always_inline void http_process(http_event_t *event, skb_info_t *skb_in
     if (((skb_info && !is_payload_empty(skb_info)) || !skb_info) && http_responding(http)) {
         http->response_last_seen = bpf_ktime_get_ns();
     }
+    
+    // [STS] Part of the race condition work (https://github.com/DataDog/datadog-agent/pull/20829)
+    // See the comment above for more details.
 
-    if (http->tcp_seq == HTTP_TERMINATING) {
-        http_batch_enqueue_wrapper(tuple, http);
-        // Check a second time to minimize the chance of accidentally deleting a
-        // map entry if there is a race with a late response.
-        // Please refer to comments in `http_seen_before` for more context.
-        if (http->tcp_seq == HTTP_TERMINATING) {
-            bpf_map_delete_elem(&http_in_flight, tuple);
-        }
+    // if (http->tcp_seq == HTTP_TERMINATING) {
+    //     http_batch_enqueue_wrapper(&http_class->tuple, http);
+    //     // Check a second time to minimize the chance of accidentally deleting a
+    //     // map entry if there is a race with a late response.
+    //     // Please refer to comments in `http_seen_before` for more context.
+    //     if (http->tcp_seq == HTTP_TERMINATING) {
+    //         bpf_map_delete_elem(&http_in_flight, &http_class->tuple);
+    //     }
+    // }
+
+    // Instead we use the old version.
+    if (http_closed(skb_info)) {
+        // bpf_printk("[push batch]: method type=%d, request trace id=%s, response trace_id: %s", http->request_method, http->request_tracing_id, http->response_tracing_id);
+        http_batch_enqueue_wrapper(&http_class->tuple, http);
+        bpf_map_delete_elem(&http_in_flight, &http_class->tuple);
     }
-}
-
-// this function is called by the socket-filter program to decide whether or not we should inspect
-// the contents of a certain packet, in order to avoid the cost of processing packets that are not
-// of interest such as empty ACKs, or encrypted traffic.
-static __always_inline bool http_allow_packet(conn_tuple_t *tuple, skb_info_t *skb_info) {
-    bool empty_payload = is_payload_empty(skb_info);
-    if (empty_payload) {
-        // if the payload data is empty or encrypted packet, we only
-        // process it if the packet represents a TCP termination
-        return skb_info->tcp_flags&(TCPHDR_FIN|TCPHDR_RST);
-    }
-
-    return true;
 }
 
 SEC("socket/http_filter")
 int socket__http_filter(struct __sk_buff* skb) {
     skb_info_t skb_info;
-    http_event_t event;
-    bpf_memset(&event, 0, sizeof(http_event_t));
+    http_classification_t http_class;
+    bpf_memset(&http_class, 0, sizeof(http_classification_t));
 
-    if (!fetch_dispatching_arguments(&event.tuple, &skb_info)) {
+    if (!fetch_dispatching_arguments(&http_class.tuple, &skb_info)) {
         log_debug("http_filter failed to fetch arguments for tail call");
         return 0;
     }
+    // bpf_printk("[socket filter]: tcp_seq=%u, tcp_flags=%d, src port: %d", skb_info.tcp_seq, skb_info.tcp_flags, http_class.tuple.sport);
 
-    if (!http_allow_packet(&event.tuple, &skb_info)) {
-        return 0;
-    }
-    normalize_tuple(&event.tuple);
+    http_classify_skb(&http_class, &skb_info, skb);
 
-    read_into_buffer_skb((char *)event.http.request_fragment, skb, skb_info.data_off);
-    http_process(&event, &skb_info, NO_TAGS);
+    // STS: Putting normalize after classify, because any branching in front of trace parsing may double the instruction count
+    normalize_tuple(&http_class.tuple);
+
+    http_process(&http_class, &skb_info, NO_TAGS);
     return 0;
 }
 
@@ -275,11 +300,12 @@ int uprobe__http_process(struct pt_regs *ctx) {
         return 0;
     }
 
-    http_event_t event;
-    bpf_memset(&event, 0, sizeof(http_event_t));
-    bpf_memcpy(&event.tuple, &args->tup, sizeof(conn_tuple_t));
-    read_into_user_buffer_http(event.http.request_fragment, args->buffer_ptr);
-    http_process(&event, NULL, args->tags);
+    http_classification_t http_class;
+    bpf_memset(&http_class, 0, sizeof(http_classification_t));
+    bpf_memcpy(&http_class.tuple, &args->tup, sizeof(conn_tuple_t));
+
+    http_classify_user(&http_class, args->buffer_ptr, args->data_end);
+    http_process(&http_class, NULL, args->tags);
     http_batch_flush(ctx);
 
     return 0;
@@ -293,12 +319,12 @@ int uprobe__http_termination(struct pt_regs *ctx) {
         return 0;
     }
 
-    http_event_t event;
-    bpf_memset(&event, 0, sizeof(http_event_t));
-    bpf_memcpy(&event.tuple, &args->tup, sizeof(conn_tuple_t));
+    http_classification_t http_class;
+    bpf_memset(&http_class, 0, sizeof(http_classification_t));
+    bpf_memcpy(&http_class.tuple, &args->tup, sizeof(conn_tuple_t));
     skb_info_t skb_info = {0};
     skb_info.tcp_flags |= TCPHDR_FIN;
-    http_process(&event, &skb_info, NO_TAGS);
+    http_process(&http_class, &skb_info, NO_TAGS);
     http_batch_flush(ctx);
 
     return 0;

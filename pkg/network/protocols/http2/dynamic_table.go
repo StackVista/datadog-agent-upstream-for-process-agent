@@ -121,7 +121,6 @@ func (dt *DynamicTable) setupDynamicTableMapCleaner(mgr *manager.Manager, cfg *c
 				Sport:    key.Tup.Dport,
 				Dport:    key.Tup.Sport,
 				Netns:    key.Tup.Netns,
-				Pid:      key.Tup.Pid,
 				Metadata: key.Tup.Metadata,
 			}]
 			return ok

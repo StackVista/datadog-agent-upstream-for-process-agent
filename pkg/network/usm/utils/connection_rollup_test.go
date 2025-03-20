@@ -22,7 +22,7 @@ func TestRollupKey(t *testing.T) {
 		srcIP := util.AddressFromString("1.1.1.1")
 		dstIP := util.AddressFromString("2.2.2.2")
 
-		c1 := types.NewConnectionKey(srcIP, dstIP, 6000, 80)
+		c1 := types.NewConnectionKey(srcIP, dstIP, 6000, 80, 0)
 		t1 := aggregator.RollupKey(c1)
 		t2 := aggregator.RollupKey(c1)
 
@@ -35,10 +35,10 @@ func TestRollupKey(t *testing.T) {
 		srcIP := util.AddressFromString("1.1.1.1")
 		dstIP := util.AddressFromString("2.2.2.2")
 
-		c1 := types.NewConnectionKey(srcIP, dstIP, 6000, 80)
+		c1 := types.NewConnectionKey(srcIP, dstIP, 6000, 80, 0)
 		t1 := aggregator.RollupKey(c1)
 
-		c2 := types.NewConnectionKey(dstIP, srcIP, 80, 6000)
+		c2 := types.NewConnectionKey(dstIP, srcIP, 80, 6000, 0)
 		t2 := aggregator.RollupKey(c2)
 
 		assert.Equal(t, c1, t1)
@@ -50,10 +50,10 @@ func TestRollupKey(t *testing.T) {
 		srcIP := util.AddressFromString("1.1.1.1")
 		dstIP := util.AddressFromString("2.2.2.2")
 
-		c1 := types.NewConnectionKey(srcIP, dstIP, 6000, 80)
+		c1 := types.NewConnectionKey(srcIP, dstIP, 6000, 80, 0)
 		t1 := aggregator.RollupKey(c1)
 
-		c2 := types.NewConnectionKey(dstIP, srcIP, 7000, 53)
+		c2 := types.NewConnectionKey(dstIP, srcIP, 7000, 53, 0)
 		t2 := aggregator.RollupKey(c2)
 
 		// In this case both keys are preserved, which wouldn't trigger a rollup
@@ -67,14 +67,14 @@ func TestRollupKey(t *testing.T) {
 		srcIP := util.AddressFromString("1.1.1.1")
 		dstIP := util.AddressFromString("2.2.2.2")
 
-		c1 := types.NewConnectionKey(srcIP, dstIP, 6000, 80)
+		c1 := types.NewConnectionKey(srcIP, dstIP, 6000, 80, 0)
 		t1 := aggregator.RollupKey(c1)
 
-		c2 := types.NewConnectionKey(srcIP, dstIP, 6001, 80)
+		c2 := types.NewConnectionKey(srcIP, dstIP, 6001, 80, 0)
 		t2 := aggregator.RollupKey(c2)
 
 		// Let's also try a different tuple order
-		c3 := types.NewConnectionKey(dstIP, srcIP, 80, 6002)
+		c3 := types.NewConnectionKey(dstIP, srcIP, 80, 6002, 0)
 		t3 := aggregator.RollupKey(c3)
 
 		// c1, c2 and c3 should all translate to c1
@@ -90,7 +90,7 @@ func TestClearEphemeralPort(t *testing.T) {
 		srcIP := util.AddressFromString("1.1.1.1")
 		dstIP := util.AddressFromString("2.2.2.2")
 
-		c1 := types.NewConnectionKey(srcIP, dstIP, 6000, 80)
+		c1 := types.NewConnectionKey(srcIP, dstIP, 6000, 80, 0)
 
 		// Nothing should happen in this case
 		assert.Equal(t, c1, aggregator.ClearEphemeralPort(c1))
@@ -101,14 +101,14 @@ func TestClearEphemeralPort(t *testing.T) {
 		srcIP := util.AddressFromString("1.1.1.1")
 		dstIP := util.AddressFromString("2.2.2.2")
 
-		c1 := types.NewConnectionKey(srcIP, dstIP, 6001, 80)
+		c1 := types.NewConnectionKey(srcIP, dstIP, 6001, 80, 0)
 		_ = aggregator.RollupKey(c1)
-		c2 := types.NewConnectionKey(srcIP, dstIP, 6002, 80)
+		c2 := types.NewConnectionKey(srcIP, dstIP, 6002, 80, 0)
 		_ = aggregator.RollupKey(c2)
 
 		// In this case both c1 and c2 should generated the same redacted key
 		// with the ephemeral port side set to 0
-		expected := types.NewConnectionKey(srcIP, dstIP, 0, 80)
+		expected := types.NewConnectionKey(srcIP, dstIP, 0, 80, 0)
 
 		assert.Equal(t, expected, aggregator.ClearEphemeralPort(c1))
 		assert.Equal(t, expected, aggregator.ClearEphemeralPort(c2))
@@ -119,19 +119,19 @@ func TestClearEphemeralPort(t *testing.T) {
 		srcIP := util.AddressFromString("1.1.1.1")
 		dstIP := util.AddressFromString("2.2.2.2")
 
-		c1 := types.NewConnectionKey(srcIP, dstIP, 6001, 80)
+		c1 := types.NewConnectionKey(srcIP, dstIP, 6001, 80, 0)
 		_ = aggregator.RollupKey(c1)
-		c2 := types.NewConnectionKey(dstIP, srcIP, 80, 6002)
+		c2 := types.NewConnectionKey(dstIP, srcIP, 80, 6002, 0)
 		_ = aggregator.RollupKey(c2)
 
 		// The order of the tuples should be preserved, but 6001/6002 ports
 		// should still be correctly cleared
 		assert.Equal(t,
-			types.NewConnectionKey(srcIP, dstIP, 0, 80),
+			types.NewConnectionKey(srcIP, dstIP, 0, 80, 0),
 			aggregator.ClearEphemeralPort(c1),
 		)
 		assert.Equal(t,
-			types.NewConnectionKey(dstIP, srcIP, 80, 0),
+			types.NewConnectionKey(dstIP, srcIP, 80, 0, 0),
 			aggregator.ClearEphemeralPort(c2),
 		)
 	})

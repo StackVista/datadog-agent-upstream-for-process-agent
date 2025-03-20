@@ -65,7 +65,7 @@ func (s *KafkaSuite) TestFormatKafkaStats() {
 		serverPort,
 		topicName,
 		kafka.ProduceAPIKey,
-		apiVersion1,
+		apiVersion1, 0,
 	)
 	kafkaKey2 := kafka.NewKey(
 		localhost,
@@ -74,7 +74,7 @@ func (s *KafkaSuite) TestFormatKafkaStats() {
 		serverPort,
 		topicName,
 		kafka.FetchAPIKey,
-		apiVersion2,
+		apiVersion2, 0,
 	)
 
 	in := &network.Connections{
@@ -155,7 +155,7 @@ func (s *KafkaSuite) TestKafkaIDCollisionRegression() {
 		serverPort,
 		topicName,
 		kafka.ProduceAPIKey,
-		apiVersion1,
+		apiVersion1, 0,
 	)
 
 	in := &network.Connections{
@@ -216,7 +216,7 @@ func (s *KafkaSuite) TestKafkaLocalhostScenario() {
 		serverPort,
 		topicName,
 		kafka.FetchAPIKey,
-		apiVersion2,
+		apiVersion2, 0,
 	)
 
 	in := &network.Connections{
@@ -281,7 +281,7 @@ func generateBenchMarkPayloadKafka(entries uint16) network.Connections {
 			1111,
 			fmt.Sprintf("%s-%d", topicName, index+1),
 			kafka.ProduceAPIKey,
-			apiVersion1,
+			apiVersion1, 0,
 		)] = &kafka.RequestStats{
 			ErrorCodeToStat: map[int32]*kafka.RequestStat{0: {Count: 10}},
 		}

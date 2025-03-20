@@ -25,7 +25,6 @@ import (
 	ddebpf "github.com/DataDog/datadog-agent/pkg/ebpf"
 	"github.com/DataDog/datadog-agent/pkg/ebpf/bytecode"
 	"github.com/DataDog/datadog-agent/pkg/ebpf/maps"
-	"github.com/DataDog/datadog-agent/pkg/ebpf/prebuilt"
 	ebpftelemetry "github.com/DataDog/datadog-agent/pkg/ebpf/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/network"
 	"github.com/DataDog/datadog-agent/pkg/network/config"
@@ -122,9 +121,10 @@ func NewEBPFConntracker(cfg *config.Config, telemetrycomp telemetryComp.Componen
 		isPrebuilt = true
 	}
 
-	if isPrebuilt && prebuilt.IsDeprecated() {
-		log.Warn("using deprecated prebuilt conntracker")
-	}
+	// [STS] we always use the prebuilt mode and we don't want the warning message
+	// if isPrebuilt && prebuilt.IsDeprecated() {
+	// 	log.Warn("using deprecated prebuilt conntracker")
+	// }
 
 	err = m.Start()
 	if err != nil {

@@ -17,14 +17,10 @@ import (
 	"github.com/cilium/ebpf"
 	"go.uber.org/atomic"
 
-	manager "github.com/DataDog/ebpf-manager"
-
 	ddebpf "github.com/DataDog/datadog-agent/pkg/ebpf"
 	"github.com/DataDog/datadog-agent/pkg/network/config"
-	filterpkg "github.com/DataDog/datadog-agent/pkg/network/filter"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/telemetry"
-	usmconfig "github.com/DataDog/datadog-agent/pkg/network/usm/config"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/consts"
 	usmstate "github.com/DataDog/datadog-agent/pkg/network/usm/state"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/utils"
@@ -47,8 +43,7 @@ type Monitor struct {
 
 	processMonitor *monitor.ProcessMonitor
 
-	// termination
-	closeFilterFn func()
+	probes *MonitorProbes
 
 	lastUpdateTime *atomic.Int64
 }
@@ -79,25 +74,28 @@ func NewMonitor(c *config.Config, connectionProtocolMap *ebpf.Map) (m *Monitor, 
 		return nil, fmt.Errorf("error initializing ebpf program: %w", err)
 	}
 
-	filter, _ := mgr.GetProbe(manager.ProbeIdentificationPair{EBPFFuncName: protocolDispatcherSocketFilterFunction, UID: probeUID})
-	if filter == nil {
-		return nil, fmt.Errorf("error retrieving socket filter")
-	}
+	// We are disabling the socket filter injection in the root namespace because we will do it into `NewMonitorProbes` since it is a namespace like the others in the end.
+	//
+	// filter, _ := mgr.GetProbe(manager.ProbeIdentificationPair{EBPFFuncName: protocolDispatcherSocketFilterFunction, UID: probeUID})
+	// if filter == nil {
+	// 	return nil, fmt.Errorf("error retrieving socket filter")
+	// }
 	ddebpf.AddNameMappings(mgr.Manager.Manager, "usm_monitor")
 
-	closeFilterFn, err := filterpkg.HeadlessSocketFilter(c, filter)
-	if err != nil {
-		return nil, fmt.Errorf("error enabling traffic inspection: %s", err)
-	}
+	// closeFilterFn, err := filterpkg.HeadlessSocketFilter(c, filter)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("error enabling traffic inspection: %s", err)
+	// }
 
 	processMonitor := monitor.GetProcessMonitor()
+	probes := NewMonitorProbes(c, processMonitor, mgr)
 
 	usmstate.Set(usmstate.Running)
 
 	usmMonitor := &Monitor{
 		cfg:            c,
 		ebpfProgram:    mgr,
-		closeFilterFn:  closeFilterFn,
+		probes:         probes,
 		processMonitor: processMonitor,
 	}
 
@@ -128,16 +126,28 @@ func (m *Monitor) Start() error {
 		}
 	}()
 
+	// [STS] Please note that we call `attach` for the socket filter but the `fd` is `0`. the manager doesn't attach it and hides the error.
 	err = m.ebpfProgram.Start()
 	if err != nil {
+		return fmt.Errorf("error starting ebpf program for usm: %w", err)
+	}
+
+	// Starting with updateAllNsProbes.
+	// We run this synchronously here instead of waiting for the NsNetMonitor to be sure all probes are started after this function
+	// returns
+	err = m.probes.Start()
+	if err != nil {
+		m.ebpfProgram.Close()
 		return err
 	}
 
-	// Need to explicitly save the error in `err` so the defer function could save the startup error.
-	if usmconfig.NeedProcessMonitor(m.cfg) {
-		err = m.processMonitor.Initialize(m.cfg.EnableUSMEventStream)
-	}
-
+	// [STS] we always need the process monitor for our logic otherwise we will never attach socket filters to new namespaces.
+	// Please note that even without the process monitor we still attach the socket filters to
+	// all namespaces that exist at startup time but we don't attach/detach new/dead namespaces.
+	// In Datadog they only need it for TLS logic (to attach uprobes) but we need it always.
+	//
+	// [STS] we force the `EnableUSMEventStream` to false because we don't support it yet.
+	err = m.processMonitor.Initialize(false)
 	return err
 }
 
@@ -146,7 +156,11 @@ func (m *Monitor) Pause() error {
 	if m == nil {
 		return nil
 	}
-
+	if m.ebpfProgram.cfg.BypassEnabled {
+		// [STS] We don't want to use this feature because it will disable all the socker filters. Moreover we dinamically attach/detach probes so we don't want to pause/resume since we don't have a static set of programs. BTW Datadog uses this feature just in tests.
+		// We panic only in case of `BypassEnabled` because without this flag the method does nothing.
+		panic("[STS] Don't use the pause/resume feature in production.")
+	}
 	return m.ebpfProgram.Pause()
 }
 
@@ -155,7 +169,11 @@ func (m *Monitor) Resume() error {
 	if m == nil {
 		return nil
 	}
-
+	if m.ebpfProgram.cfg.BypassEnabled {
+		// [STS] We don't want to use this feature because it will disable all the socker filters. Moreover we dinamically attach/detach probes so we don't want to pause/resume since we don't have a static set of programs. BTW Datadog uses this feature just in tests.
+		// We panic only in case of `BypassEnabled` because without this flag the method does nothing.
+		panic("[STS] Don't use the pause/resume feature in production.")
+	}
 	return m.ebpfProgram.Resume()
 }
 
@@ -201,13 +219,13 @@ func (m *Monitor) Stop() {
 	if m == nil {
 		return
 	}
-
 	m.processMonitor.Stop()
 
 	ddebpf.RemoveNameMappings(m.ebpfProgram.Manager.Manager)
 
 	m.ebpfProgram.Close()
-	m.closeFilterFn()
+	// After the detach of the eBPF program, we can close the FDs associated with the socket filters.
+	m.probes.Stop()
 	usmstate.Set(usmstate.Stopped)
 }
 

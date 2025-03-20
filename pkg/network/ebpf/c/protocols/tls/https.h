@@ -34,8 +34,6 @@
 #include "protocols/tls/tags-types.h"
 #include "protocols/tls/tls-maps.h"
 
-static __always_inline void http_process(http_event_t *event, skb_info_t *skb_info, __u64 tags);
-
 /* this function is called by all TLS hookpoints (OpenSSL, GnuTLS and GoTLS, JavaTLS) and */
 /* it's used for classify the subset of protocols that is supported by `classify_protocol_for_dispatcher` */
 static __always_inline void classify_decrypted_payload(protocol_stack_t *stack, conn_tuple_t *t, void *buffer, size_t len) {
@@ -51,9 +49,10 @@ static __always_inline void classify_decrypted_payload(protocol_stack_t *stack, 
     }
 
     // Protocol is not HTTP/HTTP2/gRPC
-    if (is_amqp(buffer, len)) {
-        proto = PROTOCOL_AMQP;
-    } else if (is_redis(buffer, len)) {
+    // Even if we check the redis protocol inside `classify_protocol_for_dispatcher` 
+    // maybe there are scenarios in which we just have the tracer enabled and not the USM
+    // so this further check could be useful.
+    if (is_redis(buffer, len)) {
         proto = PROTOCOL_REDIS;
     } else if (is_mysql(t, buffer, len)) {
         proto = PROTOCOL_MYSQL;
@@ -67,7 +66,6 @@ static __always_inline void tls_process(struct pt_regs *ctx, conn_tuple_t *t, vo
     conn_tuple_t final_tuple = {0};
     conn_tuple_t normalized_tuple = *t;
     normalize_tuple(&normalized_tuple);
-    normalized_tuple.pid = 0;
     normalized_tuple.netns = 0;
 
     protocol_stack_t *stack = get_or_create_protocol_stack(&normalized_tuple);
@@ -125,6 +123,18 @@ static __always_inline void tls_process(struct pt_regs *ctx, conn_tuple_t *t, vo
         prog = PROG_POSTGRES;
         final_tuple = normalized_tuple;
         break;
+    case PROTOCOL_MONGO:
+        prog = PROG_MONGO;
+        // [STS] it seems having the simple tuple (not normalized) is it enough for 2 reasons:
+        // - both mongo and amqp normalize the tuple as soon as they start processing the data
+        // - we want to emulate the socket filter flow, the socket filter provide the simple tuple not normalized
+        final_tuple = *t;
+        break;
+    case PROTOCOL_AMQP:
+        prog = PROG_AMQP;
+        // [STS] Same as Mongo
+        final_tuple = *t;
+        break;
     default:
         return;
     }
@@ -159,7 +169,6 @@ static __always_inline void tls_dispatch_kafka(struct pt_regs *ctx)
 
     conn_tuple_t normalized_tuple = args->tup;
     normalize_tuple(&normalized_tuple);
-    normalized_tuple.pid = 0;
     normalized_tuple.netns = 0;
 
     read_into_user_buffer_classification(request_fragment, args->buffer_ptr);
@@ -181,7 +190,6 @@ static __always_inline void tls_finish(struct pt_regs *ctx, conn_tuple_t *t, boo
     conn_tuple_t final_tuple = {0};
     conn_tuple_t normalized_tuple = *t;
     normalize_tuple(&normalized_tuple);
-    normalized_tuple.pid = 0;
     normalized_tuple.netns = 0;
 
     // Using __get_protocol_stack_if_exists as `conn_tuple_copy` is already normalized.
@@ -280,7 +288,7 @@ static __always_inline void map_ssl_ctx_to_sock(struct sock *skp) {
     bpf_map_delete_elem(&ssl_ctx_by_pid_tgid, &pid_tgid);
 
     ssl_sock_t ssl_sock = {};
-    if (!read_conn_tuple(&ssl_sock.tup, skp, pid_tgid, CONN_TYPE_TCP)) {
+    if (!read_conn_tuple(&ssl_sock.tup, skp, CONN_TYPE_TCP)) {
         return;
     }
 

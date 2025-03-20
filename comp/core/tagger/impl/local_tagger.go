@@ -42,7 +42,8 @@ type localTagger struct {
 	telemetryStore *telemetry.Store
 }
 
-func newLocalTagger(cfg config.Component, wmeta workloadmeta.Component, telemetryStore *telemetry.Store) (tagger.Component, error) {
+// [STS] We need to export it becuase we use it in the process-agent
+func NewLocalTagger(cfg config.Component, wmeta workloadmeta.Component, telemetryStore *telemetry.Store) (tagger.Component, error) {
 	return &localTagger{
 		tagStore:       tagstore.NewTagStore(telemetryStore),
 		workloadStore:  wmeta,

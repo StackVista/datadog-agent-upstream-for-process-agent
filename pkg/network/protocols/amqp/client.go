@@ -17,6 +17,13 @@ import (
 	"github.com/streadway/amqp"
 )
 
+const (
+	// User is the user to use for authentication
+	User = "guest"
+	// Pass is the password to use for authentication
+	Pass = "guest"
+)
+
 // Options is a struct to hold the options for the amqp client
 type Options struct {
 	ServerAddress string

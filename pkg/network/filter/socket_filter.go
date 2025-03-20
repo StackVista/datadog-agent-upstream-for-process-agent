@@ -13,9 +13,9 @@ import (
 	"runtime"
 
 	manager "github.com/DataDog/ebpf-manager"
+	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
 
-	"github.com/DataDog/datadog-agent/pkg/network/config"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
 )
 
@@ -32,18 +32,12 @@ func (h *headlessSocketFilter) Close() {
 	runtime.SetFinalizer(h, nil)
 }
 
-// HeadlessSocketFilter creates a raw socket attached to the given socket filter.
+// HeadlessSocketFilterFromNamespace creates a raw socket attached to the given socket filter.
 // The underlying raw socket isn't polled and the filter is not meant to accept any packets.
 // The purpose is to use this for pure eBPF packet inspection.
 // TODO: After the proof-of-concept we might want to replace the SOCKET_FILTER program by a TC classifier
-func HeadlessSocketFilter(cfg *config.Config, filter *manager.Probe) (closeFn func(), err error) {
+func HeadlessSocketFilterFromNamespace(filter *manager.Probe, ns netns.NsHandle) (closeFn func(), err error) {
 	hsf := &headlessSocketFilter{}
-	ns, err := cfg.GetRootNetNs()
-	if err != nil {
-		return nil, err
-	}
-	defer ns.Close()
-
 	err = kernel.WithNS(ns, func() error {
 		hsf.fd, err = unix.Socket(unix.AF_PACKET, unix.SOCK_RAW, int(htons(unix.ETH_P_ALL)))
 		if err != nil {

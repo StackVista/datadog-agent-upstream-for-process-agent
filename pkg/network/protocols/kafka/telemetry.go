@@ -49,7 +49,5 @@ func (t *Telemetry) Count(tx *KafkaTransaction) {
 
 // Log logs the kafka stats summary
 func (t *Telemetry) Log() {
-	if log.ShouldLog(log.DebugLvl) {
-		log.Debugf("kafka stats summary: %s", t.metricGroup.Summary())
-	}
+	log.Infof("kafka stats summary: %s", t.metricGroup.Summary())
 }

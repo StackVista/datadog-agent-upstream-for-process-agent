@@ -501,6 +501,14 @@ def ninja_cgo_type_files(nw: NinjaWriter):
             "pkg/network/protocols/redis/types.go": [
                 "pkg/network/ebpf/c/protocols/redis/types.h",
             ],
+            "pkg/network/protocols/mongo/types.go": [
+                "pkg/network/ebpf/c/tracer/tracer.h",
+                "pkg/network/ebpf/c/protocols/mongo/types.h",
+            ],
+            "pkg/network/protocols/amqp/types.go": [
+                "pkg/network/ebpf/c/tracer/tracer.h",
+                "pkg/network/ebpf/c/protocols/amqp/types.h",
+            ],
             "pkg/ebpf/telemetry/types.go": [
                 "pkg/ebpf/c/telemetry_types.h",
             ],
@@ -756,6 +764,12 @@ def build_sysprobe_binary(
 
     build_tags = get_default_build_tags(build="system-probe")
     build_tags = add_fips_tags(build_tags, fips_mode)
+    # [STS] we want to append some tags for the various container runtimes we support
+    build_tags.append("kubelet")
+    build_tags.append("kubeapiserver")
+    build_tags.append("docker")
+    build_tags.append("containerd")
+    
     if bundle_ebpf:
         build_tags.append(BUNDLE_TAG)
     if strip_binary:

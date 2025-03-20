@@ -19,8 +19,10 @@ import (
 
 	"github.com/DataDog/datadog-agent/pkg/network/dns"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/amqp"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/kafka"
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/mongo"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/postgres"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/redis"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/tls"
@@ -110,6 +112,12 @@ const (
 	EphemeralFalse EphemeralPortType = 2 // not ephemeral
 )
 
+// TCPSeq represnts tcp sequence information (seq/ack)
+type TCPSeq struct {
+	Seq     uint32
+	Ack_seq uint32
+}
+
 // BufferedData encapsulates data whose underlying memory can be recycled
 type BufferedData struct {
 	Conns  []ConnectionStats
@@ -130,6 +138,9 @@ type Connections struct {
 	Kafka                       map[kafka.Key]*kafka.RequestStats
 	Postgres                    map[postgres.Key]*postgres.RequestStat
 	Redis                       map[redis.Key]*redis.RequestStat
+	Mongo                       map[mongo.Key]*mongo.RequestStat
+	AMQP                        map[amqp.Key]*amqp.RequestStat
+	HTTPObservations            []http.TransactionObservation
 }
 
 // NewConnections create a new Connections object
@@ -290,6 +301,8 @@ type ConnectionStats struct {
 	ProtocolStack   protocols.Stack
 	TLSTags         tls.Tags
 
+	InitialTCPSeq TCPSeq
+
 	// keep these fields last because they are 1 byte each and otherwise inflate the struct size due to alignment
 	SPortIsEphemeral EphemeralPortType
 	IntraHost        bool
@@ -428,12 +441,13 @@ func ConnectionSummary(c *ConnectionStats, names map[util.Address][]dns.Hostname
 
 	if c.Type == TCP {
 		str += fmt.Sprintf(
-			", %d retransmits (+%d), RTT %s (± %s), %d established (+%d), %d closed (+%d)",
+			", %d retransmits (+%d), RTT %s (± %s), %d established (+%d), %d closed (+%d), %d seq, %d ack",
 			c.Monotonic.Retransmits, c.Last.Retransmits,
 			time.Duration(c.RTT)*time.Microsecond,
 			time.Duration(c.RTTVar)*time.Microsecond,
 			c.Monotonic.TCPEstablished, c.Last.TCPEstablished,
 			c.Monotonic.TCPClosed, c.Last.TCPClosed,
+			c.InitialTCPSeq.Seq, c.InitialTCPSeq.Ack_seq,
 		)
 	}
 

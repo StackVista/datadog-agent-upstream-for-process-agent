@@ -18,9 +18,9 @@ var (
 )
 
 // NewKey generates a new Key
-func NewKey(saddr, daddr util.Address, sport, dport uint16, topicName string, requestAPIKey, requestAPIVersion uint16) Key {
+func NewKey(saddr, daddr util.Address, sport, dport uint16, topicName string, requestAPIKey, requestAPIVersion uint16, netns uint32) Key {
 	return Key{
-		ConnectionKey:  types.NewConnectionKey(saddr, daddr, sport, dport),
+		ConnectionKey:  types.NewConnectionKey(saddr, daddr, sport, dport, netns),
 		TopicName:      testInterner.GetString(topicName),
 		RequestAPIKey:  requestAPIKey,
 		RequestVersion: requestAPIVersion,

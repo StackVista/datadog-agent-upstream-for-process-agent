@@ -228,6 +228,9 @@ func newTracer(cfg *config.Config, telemetryComponent telemetryComponent.Compone
 		cfg.MaxRedisStatsBuffered,
 		cfg.EnableNPMConnectionRollup,
 		cfg.EnableProcessEventMonitoring,
+		cfg.MaxMongoStatsBuffered,
+		cfg.MaxAMQPStatsBuffered,
+		cfg.MaxHTTPObservationsBuffered,
 	)
 
 	return tr, nil
@@ -459,6 +462,9 @@ func (t *Tracer) GetActiveConnections(clientID string) (*network.Connections, er
 	conns.Kafka = delta.Kafka
 	conns.Postgres = delta.Postgres
 	conns.Redis = delta.Redis
+	conns.Mongo = delta.Mongo
+	conns.AMQP = delta.AMQP
+	conns.HTTPObservations = delta.HTTPObservations
 	conns.ConnTelemetry = t.state.GetTelemetryDelta(clientID, t.getConnTelemetry(len(active)))
 	conns.CompilationTelemetryByAsset = t.getRuntimeCompilationTelemetry()
 	conns.KernelHeaderFetchResult = int32(kernel.HeaderProvider.GetResult())
@@ -538,6 +544,7 @@ func (t *Tracer) getConnections(activeBuffer *network.ConnectionBuffer) (latestU
 		return 0, nil, fmt.Errorf("error retrieving latest timestamp: %s", err)
 	}
 
+	// These are the expired connections, we checked them in the conntrack
 	var expired []network.ConnectionStats
 	err = t.ebpfTracer.GetConnections(activeBuffer, func(c *network.ConnectionStats) bool {
 		if t.connectionExpired(c, uint64(latestTime), cachedConntrack) {
@@ -586,6 +593,7 @@ func (t *Tracer) getConnections(activeBuffer *network.ConnectionBuffer) (latestU
 	t.removeEntries(expired)
 
 	// check for expired clients in the state
+	// [STS] we only use a client in the process-agent
 	t.state.RemoveExpiredClients(time.Now())
 
 	latestTime, err = ddebpf.NowNanoseconds()
@@ -771,6 +779,7 @@ func (t *Tracer) connectionExpired(conn *network.ConnectionStats, latestTime uin
 		log.Warnf("error checking conntrack for connection %s: %s", conn.String(), err)
 	}
 	if !exists {
+		// usually pods on a node share one unique conntrack that's the reason why we fallback in the root namespace
 		exists, err = ctr.ExistsInRootNS(conn)
 		if err != nil {
 			log.Warnf("error checking conntrack for connection in root ns %s: %s", conn.String(), err)

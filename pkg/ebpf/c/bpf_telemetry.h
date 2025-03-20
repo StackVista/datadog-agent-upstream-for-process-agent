@@ -21,6 +21,10 @@
 BPF_HASH_MAP(map_err_telemetry_map, unsigned long, map_err_telemetry_t, 0)
 BPF_HASH_MAP(helper_err_telemetry_map, unsigned long, helper_err_telemetry_t, 0)
 
+// STS: Making this configurable, because the telemetry helpers here cause very many instructions to be generated, due
+// to the conditionals in the telemetry code.
+// #define ENABLE_BPF_TELEMETRY
+#ifdef ENABLE_BPF_TELEMETRY
 #define PATCH_TARGET_TELEMETRY -1
 static void *(*bpf_telemetry_update_patch)(unsigned long, ...) = (void *)PATCH_TARGET_TELEMETRY;
 
@@ -97,6 +101,9 @@ static void *(*bpf_telemetry_update_patch)(unsigned long, ...) = (void *)PATCH_T
         }                                                                                       \
         errno_ret;                                                                              \
     })
+#else
+#define helper_with_telemetry(fn, ...) fn(__VA_ARGS__)
+#endif // ENABLE_BPF_TELEMETRY
 
 #define __NEQ(one, two) ((one) != (two))
 #define __AND(a, b) ((a) && (b))
@@ -119,6 +126,7 @@ static void *(*bpf_telemetry_update_patch)(unsigned long, ...) = (void *)PATCH_T
 #define __nth(_, _1, _2, _3, N, ...) N
 #define __nargs(...) __nth(_, ##__VA_ARGS__, 3, 2, 1, 0)
 
+#ifdef ENABLE_BPF_TELEMETRY
 #define bpf_map_update_with_telemetry(map, key, val, flags,...)        \
     ({                                                                                          \
         long errno_ret = bpf_map_update_elem(&map, key, val, flags);            \
@@ -127,6 +135,9 @@ static void *(*bpf_telemetry_update_patch)(unsigned long, ...) = (void *)PATCH_T
         }                                                                                       \
         errno_ret;                                                                             \
     })
+#else
+#define bpf_map_update_with_telemetry(map, key, val, flags,...) bpf_map_update_elem(&map, key, val, flags)
+#endif // ENABLE_BPF_TELEMETRY
 
 #define bpf_probe_read_with_telemetry(...) \
     helper_with_telemetry(bpf_probe_read, __VA_ARGS__)

@@ -30,4 +30,16 @@ typedef struct {
     __u16 method_id;
 } amqp_header;
 
+// Additional defintions we need for the parsing
+
+// RabbitMQ supported methods types for the basic class.
+#define AMQP_METHOD_GET_OK 71
+
+// RabbitMQ supported methods for the connection class.
+#define AMQP_METHOD_CONNECTION_CLOSE 50
+
+// Since the AMQP transction entries contain the exchange name or routing key,
+// each indiviual batch entry is rather large, so the batch has to be smaller.
+#define AMQP_BATCH_SIZE 13
+
 #endif
