@@ -700,7 +700,7 @@ require (
 	github.com/DataDog/datadog-agent/pkg/util/uuid v0.62.2
 	github.com/DataDog/datadog-agent/pkg/util/winutil v0.62.2
 	github.com/DataDog/datadog-agent/pkg/version v0.62.2
-	github.com/DataDog/go-libddwaf/v3 v3.5.1
+	github.com/DataDog/go-libddwaf/v3 v3.5.4
 	github.com/DataDog/go-sqllexer v0.0.17
 	github.com/Datadog/dublin-traceroute v0.0.2
 	github.com/aquasecurity/trivy v0.49.2-0.20240227072422-e1ea02c7b80d
@@ -818,7 +818,7 @@ require (
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
 	github.com/eapache/queue/v2 v2.0.0-20230407133247-75960ed334e4 // indirect
-	github.com/ebitengine/purego v0.8.1 // indirect
+	github.com/ebitengine/purego v0.8.2 // indirect
 	github.com/elastic/go-grok v0.3.1 // indirect
 	github.com/elastic/go-licenser v0.4.2 // indirect
 	github.com/elastic/lunes v0.1.0 // indirect
