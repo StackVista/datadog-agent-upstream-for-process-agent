@@ -188,7 +188,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575
-	github.com/cilium/ebpf v0.16.0
+	github.com/cilium/ebpf v0.17.3
 	github.com/clbanning/mxj v1.8.4
 	github.com/containerd/containerd v1.7.23
 	github.com/containernetworking/cni v1.2.3
@@ -309,7 +309,7 @@ require (
 	golang.org/x/exp v0.0.0-20241210194714-1829a127f884
 	golang.org/x/net v0.33.0
 	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.28.0
+	golang.org/x/sys v0.30.0
 	golang.org/x/text v0.21.0
 	golang.org/x/time v0.8.0
 	golang.org/x/tools v0.28.0
