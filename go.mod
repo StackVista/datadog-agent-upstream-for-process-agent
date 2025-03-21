@@ -269,7 +269,7 @@ require (
 	github.com/spf13/afero v1.11.0
 	github.com/spf13/cast v1.7.0
 	github.com/spf13/cobra v1.8.1
-	github.com/spf13/pflag v1.0.5
+	github.com/spf13/pflag v1.0.6
 	github.com/streadway/amqp v1.1.0
 	github.com/stretchr/testify v1.10.0
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
@@ -284,7 +284,7 @@ require (
 	github.com/vmihailenco/msgpack/v4 v4.3.13
 	github.com/wI2L/jsondiff v0.6.1
 	github.com/xeipuuv/gojsonschema v1.2.0
-	go.etcd.io/bbolt v1.3.11
+	go.etcd.io/bbolt v1.4.0
 	go.etcd.io/etcd/client/v2 v2.306.0-alpha.0
 	go.mongodb.org/mongo-driver v1.15.1
 	go.opentelemetry.io/collector v0.115.0 // indirect
@@ -309,7 +309,7 @@ require (
 	golang.org/x/exp v0.0.0-20241210194714-1829a127f884
 	golang.org/x/net v0.33.0
 	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.28.0
+	golang.org/x/sys v0.29.0
 	golang.org/x/text v0.21.0
 	golang.org/x/time v0.8.0
 	golang.org/x/tools v0.28.0
