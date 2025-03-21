@@ -162,7 +162,7 @@ require (
 	github.com/DataDog/datadog-operator v0.7.1-0.20241219210556-f517775059d1
 	github.com/DataDog/ebpf-manager v0.7.6
 	github.com/DataDog/gopsutil v1.2.2
-	github.com/DataDog/nikos v1.12.9
+	github.com/DataDog/nikos v1.12.12
 	github.com/DataDog/opentelemetry-mapping-go/pkg/otlp/attributes v0.22.0
 	github.com/DataDog/opentelemetry-mapping-go/pkg/otlp/metrics v0.22.0
 	github.com/DataDog/opentelemetry-mapping-go/pkg/quantile v0.22.0
@@ -214,7 +214,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.4
-	github.com/google/go-cmp v0.6.0
+	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.20.2
 	github.com/google/gofuzz v1.2.0
 	github.com/google/gopacket v1.1.19
@@ -268,8 +268,8 @@ require (
 	github.com/smira/go-xz v0.1.0
 	github.com/spf13/afero v1.11.0
 	github.com/spf13/cast v1.7.0
-	github.com/spf13/cobra v1.8.1
-	github.com/spf13/pflag v1.0.5
+	github.com/spf13/cobra v1.9.1
+	github.com/spf13/pflag v1.0.6
 	github.com/streadway/amqp v1.1.0
 	github.com/stretchr/testify v1.10.0
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
@@ -309,7 +309,7 @@ require (
 	golang.org/x/exp v0.0.0-20241210194714-1829a127f884
 	golang.org/x/net v0.33.0
 	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.28.0
+	golang.org/x/sys v0.31.0
 	golang.org/x/text v0.21.0
 	golang.org/x/time v0.8.0
 	golang.org/x/tools v0.28.0
@@ -361,7 +361,7 @@ require (
 	github.com/Masterminds/semver v1.5.0
 	github.com/NYTimes/gziphandler v1.1.1 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
-	github.com/ProtonMail/go-crypto v1.1.3
+	github.com/ProtonMail/go-crypto v1.1.6
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/agnivade/levenshtein v1.2.0 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
@@ -436,7 +436,7 @@ require (
 	github.com/karrick/godirwalk v1.17.0 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/kjk/lzma v0.0.0-20161016003348-3fd93898850d // indirect
-	github.com/klauspost/compress v1.17.11 // indirect
+	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/knqyf263/go-deb-version v0.0.0-20230223133812-3ed183d23422 // indirect
 	github.com/knqyf263/go-rpm-version v0.0.0-20220614171824-631e686d1075 // indirect
@@ -581,7 +581,7 @@ require (
 )
 
 require (
-	github.com/shirou/gopsutil/v4 v4.24.11
+	github.com/shirou/gopsutil/v4 v4.25.2
 	go.opentelemetry.io/collector/component/componenttest v0.115.0
 )
 
@@ -818,7 +818,7 @@ require (
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
 	github.com/eapache/queue/v2 v2.0.0-20230407133247-75960ed334e4 // indirect
-	github.com/ebitengine/purego v0.8.1 // indirect
+	github.com/ebitengine/purego v0.8.2 // indirect
 	github.com/elastic/go-grok v0.3.1 // indirect
 	github.com/elastic/go-licenser v0.4.2 // indirect
 	github.com/elastic/lunes v0.1.0 // indirect
