@@ -168,7 +168,7 @@ require (
 	github.com/DataDog/opentelemetry-mapping-go/pkg/quantile v0.22.0
 	github.com/DataDog/sketches-go v1.4.6
 	github.com/DataDog/viper v1.14.0
-	github.com/DataDog/watermarkpodautoscaler v0.5.3-0.20241023200123-ab786c1724cf
+	github.com/DataDog/watermarkpodautoscaler v0.10.0-tracing.6
 	github.com/DataDog/zstd v1.5.6
 	github.com/DataDog/zstd_0 v0.0.0-20210310093942-586c1286621f // indirect
 	github.com/Masterminds/semver/v3 v3.3.1
@@ -315,7 +315,7 @@ require (
 	golang.org/x/tools v0.28.0
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
 	google.golang.org/genproto v0.0.0-20240903143218-8af14fe29dc1 // indirect
-	google.golang.org/grpc v1.67.1
+	google.golang.org/grpc v1.69.0
 	google.golang.org/grpc/examples v0.0.0-20221020162917-9127159caf5a
 	google.golang.org/protobuf v1.35.2
 	gopkg.in/DataDog/dd-trace-go.v1 v1.69.1
@@ -565,7 +565,7 @@ require (
 	github.com/DataDog/datadog-agent/pkg/config/structure v0.62.2
 	github.com/DataDog/datadog-agent/pkg/util/defaultpaths v0.62.2
 	github.com/DataDog/datadog-agent/pkg/util/utilizationtracker v0.62.2
-	github.com/DataDog/dd-trace-go/v2 v2.0.0-beta.11
+	github.com/DataDog/dd-trace-go/v2 v2.0.0-rc.3
 	github.com/NVIDIA/go-nvml v0.12.4-0
 	github.com/cloudflare/cbpfc v0.0.0-20240920015331-ff978e94500b
 	github.com/containerd/containerd/api v1.8.0
@@ -770,8 +770,11 @@ require (
 	github.com/DataDog/datadog-agent/pkg/util/system/socket v0.62.2 // indirect
 	github.com/DataDog/datadog-api-client-go/v2 v2.33.0 // indirect
 	github.com/DataDog/dd-sensitive-data-scanner/sds-go/go v0.0.0-20240816154533-f7f9beb53a42 // indirect
+	github.com/DataDog/dd-trace-go/contrib/net/http/v2 v2.0.0-rc.3 // indirect
+	github.com/DataDog/go-runtime-metrics-internal v0.0.4-0.20241206090539-a14610dc22b6 // indirect
 	github.com/DataDog/opentelemetry-mapping-go/pkg/inframetadata v0.22.0 // indirect
 	github.com/DataDog/opentelemetry-mapping-go/pkg/otlp/logs v0.22.0 // indirect
+	github.com/DataDog/watermarkpodautoscaler/apis v0.0.0-20250317135325-898678857e83 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.25.0 // indirect
 	github.com/Intevation/gval v1.3.0 // indirect
 	github.com/Intevation/jsonpath v0.2.1 // indirect
@@ -824,8 +827,9 @@ require (
 	github.com/elastic/lunes v0.1.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
-	github.com/envoyproxy/go-control-plane v0.13.0 // indirect
+	github.com/envoyproxy/go-control-plane v0.13.1 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.1.0 // indirect
+	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/glebarez/go-sqlite v1.22.0 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible // indirect
@@ -833,6 +837,7 @@ require (
 	github.com/go-git/go-billy/v5 v5.6.0 // indirect
 	github.com/go-git/go-git/v5 v5.13.0 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
+	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/analysis v0.23.0 // indirect
 	github.com/go-openapi/errors v0.22.0 // indirect
 	github.com/go-openapi/loads v0.22.0 // indirect
@@ -863,7 +868,7 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/hashicorp/go-secure-stdlib/parseutil v0.1.8 // indirect
 	github.com/hashicorp/go-secure-stdlib/strutil v0.1.2 // indirect
-	github.com/hashicorp/go-sockaddr v1.0.6 // indirect
+	github.com/hashicorp/go-sockaddr v1.0.7 // indirect
 	github.com/hashicorp/nomad/api v0.0.0-20240717122358-3d93bd3778f3 // indirect
 	github.com/hetznercloud/hcloud-go/v2 v2.10.2 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
@@ -1055,6 +1060,7 @@ require (
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20231121144256-b99613f794b6 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20240314144324-c7f7c6466f7f // indirect
 	golang.org/x/lint v0.0.0-20241112194109-818c5a804067 // indirect
+	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20241104194629-dd2ea8efbc28 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241104194629-dd2ea8efbc28 // indirect
 	gopkg.in/cheggaaa/pb.v1 v1.0.28 // indirect
@@ -1063,6 +1069,11 @@ require (
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	honnef.co/go/tools v0.5.1 // indirect
+	k8s.io/code-generator v0.31.2 // indirect
+	k8s.io/controller-manager v0.31.1 // indirect
+	k8s.io/gengo v0.0.0-20210813121822-485abfe95c7c // indirect
+	k8s.io/gengo/v2 v2.0.0-20240228010128-51d4e06bde70 // indirect
+	k8s.io/heapster v1.5.4 // indirect
 	k8s.io/kms v0.31.2 // indirect
 	k8s.io/sample-controller v0.31.2 // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
