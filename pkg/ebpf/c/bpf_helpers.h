@@ -320,7 +320,7 @@ This function produces 0 when equal and 1 when unequal, of type __u8.
 #define __bpf_no_branch_cmp_unequal(input, comp) \
      ({ \
         __u64 unequal = (input) ^ (comp); \
-        __u8 unequal_boolean; \
+        __u64 unequal_boolean; \
         /* We want to have a 1 or 0 value for inequality, so we use division to normalize for 1 or 0
          Using assembly instruction to do division, because division by 0 is actually defined by bpf, but not clang, so clang will optimize undefined away. */ \
         asm volatile( \
