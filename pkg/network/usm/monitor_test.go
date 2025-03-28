@@ -307,13 +307,26 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 	r, err := regexp.Compile("processed ([0-9]+) insns")
 	require.NoError(t, err)
 
+	mismatchMap := make(map[string]int)
+	mismatch := false
+
 	for name, p := range programs {
 		count, ok := instrCounts[name]
 		require.True(t, ok, fmt.Sprintf("instruction count for %s is missing", name))
 		match := r.FindStringSubmatch(p.VerifierLog)
 		insns, err := strconv.Atoi(match[1])
 		require.NoError(t, err)
-		require.Equal(t, insns, count, name)
+		if insns != count {
+			mismatchMap[name] = insns
+			mismatch = true
+		}
+	}
+
+	if mismatch {
+		for name, instr := range mismatchMap {
+			t.Logf("- mismatch for prog %s: expected %d != actual %d\n", name, instrCounts[name], instr)
+		}
+		t.Errorf("instruction count mismatch")
 	}
 }
 
