@@ -320,16 +320,19 @@ This function produces 0 when equal and 1 when unequal, of type __u8.
 #define __bpf_no_branch_cmp_unequal(input, comp) \
      ({ \
         __u64 unequal = (input) ^ (comp); \
+        __u64 tmp_unequal_boolean; \
         __u8 unequal_boolean; \
-        /* We normalize the inequality to 1 or 0 using division.
-           This is done via inline assembly because division by 0 is defined in BPF,
+        /* Normalize the inequality to 1 or 0 using division. \
+           This is done via inline assembly because division by 0 is defined in BPF, \
            but not by Clang, which would otherwise optimize undefined behavior away. */ \
         asm volatile( \
-                  "%[unequal_boolean] = %[unequal]\n\t" \
-                  "%[unequal_boolean] /= %[unequal]\n\t" \
-                  : [unequal_boolean]"=w"(unequal_boolean) /* Changed constraint from "=r" to "=w" */ \
-                  : [unequal]"r"(unequal) \
+                  "%[tmp] = %[unequal]\n\t" \
+                  "%[tmp] /= %[unequal]\n\t" \
+                  : [tmp] "=r"(tmp_unequal_boolean) /* Use "=r" constraint */ \
+                  : [unequal] "r"(unequal) \
                   ); \
+        /* Assign the lower 8 bits to maintain __u8 type */ \
+        unequal_boolean = (tmp_unequal_boolean != 0) ? 1 : 0; \
         unequal_boolean; \
      })
 
