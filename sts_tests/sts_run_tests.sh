@@ -46,6 +46,12 @@ export SKIP_STS_MARKED_TESTS=true
 # Run tests only in prebuilt mode
 export SKIP_NOT_EBPF_PREBUILT_TESTS=true
 
+# Quickly check if there is a verifier failure
+# invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestUSMSuite/prebuilt/TestVerifierComplexity.*"
+
+# See the number of instructions for each program
+# invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestHTTP/prebuilt/TestHTTPMonitorInstructionCounts"
+
 # With 'full-suite' argument we execute all tests, but it could be slow (6/7 min)
 # By default we only run some of them
 if [[ "$1" == "full-suite" ]]; then
