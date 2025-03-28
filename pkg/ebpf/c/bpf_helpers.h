@@ -321,12 +321,13 @@ This function produces 0 when equal and 1 when unequal, of type __u8.
      ({ \
         __u64 unequal = (input) ^ (comp); \
         __u8 unequal_boolean; \
-        /* We want to have a 1 or 0 value for inequality, so we use division to normalize for 1 or 0
-         Using assembly instruction to do division, because division by 0 is actually defined by bpf, but not clang, so clang will optimize undefined away. */ \
+        /* We normalize the inequality to 1 or 0 using division.
+           This is done via inline assembly because division by 0 is defined in BPF,
+           but not by Clang, which would otherwise optimize undefined behavior away. */ \
         asm volatile( \
                   "%[unequal_boolean] = %[unequal]\n\t" \
                   "%[unequal_boolean] /= %[unequal]\n\t" \
-                  : [unequal_boolean]"=r"(unequal_boolean) \
+                  : [unequal_boolean]"=w"(unequal_boolean) /* Changed constraint from "=r" to "=w" */ \
                   : [unequal]"r"(unequal) \
                   ); \
         unequal_boolean; \
