@@ -54,6 +54,7 @@ static __always_inline void handle_new_query(pktbuf_t pkt, conn_tuple_t *conn_tu
     pktbuf_read_into_buffer_postgres_query((char *)new_transaction.request_fragment, pkt, data_off);
     new_transaction.original_query_size = query_len;
     new_transaction.tags = tags;
+    debug_postgres("Store transaction: tcp_seq %u, netns %u, query: %s", pkt.skb_info->tcp_seq, conn_tuple->netns, new_transaction.request_fragment);
     bpf_map_update_elem(&postgres_in_flight, conn_tuple, &new_transaction, BPF_ANY);
 }
 
@@ -67,8 +68,7 @@ static __always_inline void handle_command_complete(conn_tuple_t *conn_tuple, po
 
 // Handles a TCP termination event by deleting the connection tuple from the in-flight map.
 static void __always_inline postgres_tcp_termination(conn_tuple_t *tup) {
-    bpf_map_delete_elem(&postgres_in_flight, tup);
-    flip_tuple(tup);
+    // in the in-flight map, we use only the normalized tuple so we don't need to delete the connection in both direction. `tup` is the normalized tuple.
     bpf_map_delete_elem(&postgres_in_flight, tup);
 }
 
@@ -175,6 +175,7 @@ static __always_inline void postgres_handle_message(pktbuf_t pkt, conn_tuple_t *
     // If the message is a new query, we store the query in the in-flight map.
     // If we had a transaction for the connection, we override it and drops the previous one.
     if (header->message_tag == POSTGRES_QUERY_MAGIC_BYTE) {
+        debug_postgres("Query: ifx %u, type %u, tcp_seq %u, netns %u, sport %u, dport %u", pkt.skb->ifindex, pkt.skb->pkt_type, pkt.skb_info->tcp_seq, conn_tuple->netns, conn_tuple->sport, conn_tuple->dport);
         // Read first message header
         // Advance the data offset to the end of the first message header.
         pktbuf_advance(pkt, sizeof(struct pg_message_header));
@@ -221,6 +222,11 @@ static __always_inline void postgres_handle_parse_message(pktbuf_t pkt, conn_tup
     // So if we want to know the size of the payload, we need to subtract the size of the message length.
     __u32 payload_data_length = header.message_len - sizeof(__u32);
     int length = skip_string(pkt, payload_data_length);
+
+    // After the length of message we have the name of the prepared statement, which is a null-terminated string.
+    // It could also be an empty string if we have an unnamed prepared statement).
+    // In any case we try to skip this string because we want to reach the query string.
+    // https://www.postgresql.org/docs/17/protocol-message-formats.html#PROTOCOL-MESSAGE-FORMATS-PARSE
     if (length <= 0 || length >= payload_data_length) {
         // We failed to find the null terminator within the first 128 bytes of the message, so we cannot read the
         // query string. We ignore the message. If length is 0, we failed to find the null terminator, and if it's
@@ -286,9 +292,9 @@ static __always_inline bool handle_response(pktbuf_t pkt, conn_tuple_t conn_tupl
     iteration_value->total_msg_count += messages_count;
 
     if (found_command_complete) {
+        debug_postgres("Complete: tcp_seq %u, netns %u, sport %u, dport %u", pkt.skb_info->tcp_seq, conn_tuple.netns, conn_tuple.sport, conn_tuple.dport);
         handle_command_complete(&conn_tuple, transaction);
         update_msg_count_telemetry(pg_msg_counts, iteration_value->total_msg_count);
-
         return 0;
     }
 
@@ -337,14 +343,17 @@ int socket__postgres_handle(struct __sk_buff* skb) {
         return 0;
     }
 
+    normalize_tuple(&conn_tuple);
+
     if (is_tcp_termination(&skb_info)) {
+        // we can also use RCU map and avoid the cleanup here
         postgres_tcp_termination(&conn_tuple);
+        debug_postgres("tcp_termination: tcp_seq %u, netns %u, sport %u, dport %u", skb_info.tcp_seq, conn_tuple.netns, conn_tuple.sport, conn_tuple.dport);
         return 0;
     }
 
-    normalize_tuple(&conn_tuple);
-
     pktbuf_t pkt = pktbuf_from_skb(skb, &skb_info);
+    // todo!: We could receive the startup postgres message here, but we don't handle it yet. It could probably cause some false positives.
     struct pg_message_header header;
     if (!read_message_header(pkt, &header)) {
         return 0;
@@ -365,11 +374,8 @@ int socket__postgres_handle_response(struct __sk_buff* skb) {
         return 0;
     }
 
-    if (is_tcp_termination(&skb_info)) {
-        postgres_tcp_termination(&conn_tuple);
-        return 0;
-    }
-
+    // Here we can receive everything that is not a query (Q) or parse (P) message.
+    debug_postgres("Not Q/P: ifx %u, type %u, tcp_seq %u, netns %u, sport %u, dport %u", skb->ifindex, skb->pkt_type, skb_info.tcp_seq, conn_tuple.netns, conn_tuple.sport, conn_tuple.dport);
     normalize_tuple(&conn_tuple);
 
     pktbuf_t pkt = pktbuf_from_skb(skb, &skb_info);
@@ -392,6 +398,7 @@ int socket__postgres_process_parse_message(struct __sk_buff* skb) {
         return 0;
     }
 
+    debug_postgres("Parse: ifx %u, type %u, tcp_seq %u, netns %u, sport %u, dport %u", skb->ifindex, skb->pkt_type, skb_info.tcp_seq, conn_tuple.netns, conn_tuple.sport, conn_tuple.dport);
     normalize_tuple(&conn_tuple);
 
     pktbuf_t pkt = pktbuf_from_skb(skb, &skb_info);

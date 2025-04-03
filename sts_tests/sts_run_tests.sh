@@ -55,10 +55,14 @@ export SKIP_NOT_EBPF_PREBUILT_TESTS=true
 # With 'full-suite' argument we execute all tests, but it could be slow (6/7 min)
 # By default we only run some of them
 if [[ "$1" == "full-suite" ]]; then
-    echo "---------------------\nRun full test suite---------------------\n"
+    echo "--------------------- Run full test suite---------------------"
     invoke test --build-include=linux_bpf,test --targets=./pkg/network/. --timeout=500
 else
-    echo "---------------------\nRun simple test suite---------------------\n"
-    invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestUSMSuite/prebuilt/.*"
+    echo "--------------------- Run simple test suite---------------------"
+    # Run tests on postgres protocol enrichment
+    invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestPostgres.*"
+    # Run tests on protocol enrichment (no postgres) + protocol classification
+    invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestUSMSuite/prebuilt/.*" --timeout=300
+    # Run tests on HTTP protocol enrichment
     invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestHTTP/prebuilt/.*"
 fi

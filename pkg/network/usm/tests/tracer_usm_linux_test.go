@@ -1741,6 +1741,7 @@ func testPostgresProtocolClassificationWrapper(enableTLS bool) func(t *testing.T
 	}
 }
 
+// In these tests we just try to understand if we can classify the connection as Postgres or not. We don't look at the transaction in userspace.
 func testPostgresProtocolClassification(t *testing.T, tr *tracer.Tracer, clientHost, targetHost, serverHost string, enableTLS bool) {
 	skippers := []func(t *testing.T, ctx testContext){skipIfUsingNAT}
 	if enableTLS {
@@ -1764,7 +1765,7 @@ func testPostgresProtocolClassification(t *testing.T, tr *tracer.Tracer, clientH
 	require.NoError(t, pgutils.RunServer(t, serverHost, postgresPort, enableTLS))
 	// Verifies that the postgres server is up and running.
 	// It tries to connect to the server until it succeeds or the timeout is reached.
-	// We need that function (and cannot relay on the RunServer method) as the target regex is being logged a couple os
+	// We need that function (and cannot relay on the RunServer method) as the target regex is being logged a couple of
 	// milliseconds before the server is actually ready to accept connections.
 	waitForPostgresServer(t, serverAddress, enableTLS)
 

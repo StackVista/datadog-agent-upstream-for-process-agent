@@ -149,7 +149,9 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
 
     protocol_t cur_fragment_protocol = get_protocol_from_stack(stack, LAYER_APPLICATION);
     if (tcp_termination) {
+        // We saved the current protocol in `cur_fragment_protocol` variable so we don't need the entry in the table anymore, we can delete it.
         dispatcher_delete_protocol_stack(&skb_tup, stack);
+        // we don't want to return here, we want to tail call into the specific protocol's logic because usually we have to cleanup something. In postgres, for example, we have to cleanup the inflight map.
     } else if (is_protocol_layer_known(stack, LAYER_ENCRYPTION)) {
         // If we have a TLS connection and we're not in the middle of a TCP termination, we can skip the packet.
         return;

@@ -105,7 +105,6 @@ type postgresProtocolParsingSuite struct {
 }
 
 func TestPostgresMonitoring(t *testing.T) {
-	stsutil.SkipIfStackState(t, "[todo] right now we don't support postgres monitoring")
 	skipTestIfKernelNotSupported(t)
 	ebpftest.TestBuildModes(t, stsutil.OnlyPrebuiltModeIfSelected(), "", func(t *testing.T) {
 		suite.Run(t, new(postgresProtocolParsingSuite))
@@ -149,6 +148,62 @@ func (s *postgresProtocolParsingSuite) TestDecoding() {
 	}
 }
 
+func (s *postgresProtocolParsingSuite) TestSimplePostGresPlaintextQuery() {
+	t := s.T()
+
+	isTLS := false
+	serverHost := "127.0.0.1"
+	serverAddress := net.JoinHostPort(serverHost, postgresPort)
+
+	// Create and Wait for the server
+	require.NoError(t, postgres.RunServer(t, serverHost, postgresPort, isTLS))
+	waitForPostgresServer(t, serverAddress, isTLS)
+
+	// Create a new client and ping
+	pg, err := postgres.NewPGXClient(postgres.ConnectionOptions{
+		ServerAddress: serverAddress,
+		EnableTLS:     isTLS,
+	})
+	require.NoError(t, err)
+
+	// This actually a double ping because if it is elapsed more than 1 sec from the last connection usage we ping it again before doing the real query (in this case another ping).
+	require.NoError(t, pg.Ping())
+
+	// Start monitor
+	monitor := setupUSMTLSMonitor(t, getPostgresDefaultTestConfiguration(isTLS))
+
+	// `RunQuery(createTableQuery)` will create a Parse message, we are not able to classify the traffic with a Parse, for this reason we first send a simple Query.
+	// Please note that Ping() executes an SQL query with body  `-- ping` via the PostgreSQL simple query protocol. So in ebpf we will always see a simple query with `-- ping` body.
+	require.NoError(t, pg.Ping())
+	require.NoError(t, pg.RunQuery(createTableQuery))
+	require.NoError(t, monitor.Pause())
+
+	// We expect an output like this:
+	// [POSTGRES]: Parse: ifx 1, type 4, tcp_seq 1751348852, netns 4026531840, sport 55776, dport 5432
+	// [POSTGRES]: Store transaction: tcp_seq 1751348852, netns 4026531840, query: CREATE TABLE dummy (id SERIAL PRIMARY KEY, foo TEXT)
+	// [POSTGRES]: Parse: ifx 148, type 4, tcp_seq 1883934954, netns 4026531840, sport 33148, dport 5432
+	// [POSTGRES]: Store transaction: tcp_seq 1883934954, netns 4026531840, query: CREATE TABLE dummy (id SERIAL PRIMARY KEY, foo
+	// [POSTGRES]: Parse: ifx 149, type 0, tcp_seq 1883934954, netns 4026533616, sport 33148, dport 5432
+	// [POSTGRES]: Store transaction: tcp_seq 1883934954, netns 4026533616, query: CREATE TABLE dummy (id SERIAL PRIMARY KEY, foo
+	// [POSTGRES]: Not Q/P: ifx 149, type 4, tcp_seq 174590870, netns 4026533616, sport 5432, dport 33148
+	// [POSTGRES]: Complete: tcp_seq 174590870, netns 4026533616, sport 33148, dport 5432
+	// [POSTGRES]: Not Q/P: ifx 150, type 3, tcp_seq 174590870, netns 4026531840, sport 5432, dport 33148
+	// [POSTGRES]: Complete: tcp_seq 174590870, netns 4026531840, sport 33148, dport 5432
+	// [POSTGRES]: Not Q/P: ifx 1, type 4, tcp_seq 1589602143, netns 4026531840, sport 5432, dport 55776
+	// [POSTGRES]: Complete: tcp_seq 1589602143, netns 4026531840, sport 55776, dport 5432
+
+	validatePostgres(t, monitor, map[string]map[postgres.Operation]int{
+		"dummy": {
+			// As you can see we store the same SQL query under 3 different views.
+			// 1. From the client (our docker running in the root ns) to the docker-proxy through the loopback interface (ifx 1)
+			// 2. From the docker-proxy to the postgres server through the docker-br interface (ifx 148). Always in the root ns.
+			// 3. From the docker-proxy to the postgres server through the veth interface (ifx 149) inside the docker network ns.
+			// At the same way we see 3 different view of the same response and so we send 3 transactions for the same query in userspace.
+			postgres.CreateTableOP: 3,
+		},
+	}, isTLS)
+}
+
 // waitForPostgresServer verifies that the postgres server is up and running.
 // It tries to connect to the server until it succeeds or the timeout is reached.
 // We need that function (and cannot relay on the RunServer method) as the target regex is being logged a couple os
@@ -176,15 +231,14 @@ func testDecoding(t *testing.T, isTLS bool) {
 	// milliseconds before the server is actually ready to accept connections.
 	waitForPostgresServer(t, serverAddress, isTLS)
 
-	// With non-TLS, we need to double the stats since we use Docker and the
-	// packets are seen twice. This is not needed in the TLS case since there
-	// the data comes from uprobes on the binary.
+	// With non-TLS, we need to triple the stats since we go through Docker proxy and the container network namespace.
+	// See a concrete example in TestSimplePostGresPlaintextQuery.
 	adjustCount := func(count int) int {
 		if isTLS {
 			return count
 		}
 
-		return count * 2
+		return count * 3
 	}
 
 	monitor := setupUSMTLSMonitor(t, getPostgresDefaultTestConfiguration(isTLS))
@@ -679,6 +733,8 @@ func testDecoding(t *testing.T, isTLS bool) {
 			// Since we cannot classify 'Parse' message, we need to send a harmless message that we know how
 			// to classify to ensure the monitor is able to process the messages.
 			// That's a workaround until we can classify the 'Parse' message.
+			//
+			// Please note that Ping() executes an SQL query with body  `-- ping` via the PostgreSQL simple query protocol. So in ebpf we will always see a simple query with `-- ping` body.
 			require.NoError(t, pgClient.Ping())
 			tt.postMonitorSetup(t, tt.context)
 			require.NoError(t, monitor.Pause())

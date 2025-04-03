@@ -48,20 +48,17 @@ func (s *StatKeeper) Process(tx *EventWrapper) {
 		requestStats = new(RequestStat)
 		s.stats[key] = requestStats
 	}
-	requestStats.StaticTags = uint64(tx.Tx.Tags)
-	requestStats.Count++
-	if requestStats.Count == 1 {
-		requestStats.FirstLatencySample = tx.RequestLatency()
-		return
-	}
-	if requestStats.Latencies == nil {
+
+	if requestStats.Count == 0 {
+		// This is the first transaction for this key
+		// If we fail here we will try again at the next transaction so we don't increment the count
 		if err := requestStats.initSketch(); err != nil {
 			return
 		}
-		if err := requestStats.Latencies.Add(requestStats.FirstLatencySample); err != nil {
-			return
-		}
+		requestStats.FirstLatencySample = tx.RequestLatency()
 	}
+	requestStats.StaticTags = uint64(tx.Tx.Tags)
+	requestStats.Count++
 	if err := requestStats.Latencies.Add(tx.RequestLatency()); err != nil {
 		log.Debugf("could not add request latency to ddsketch: %v", err)
 	}

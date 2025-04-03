@@ -220,7 +220,7 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 		"uprobe__http_process":                                     101546,
 		"uprobe__postgres_tls_handle_response":                     5051,
 		"uprobe__SSL_read_ex":                                      75,
-		"socket__postgres_handle_response":                         4606,
+		"socket__postgres_handle_response":                         4012,
 		"uprobe__redis_tls_process":                                2,
 		"socket__http_filter":                                      78343,
 		"socket__kafka_filter":                                     6932,
@@ -242,7 +242,7 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 		"uretprobe__SSL_do_handshake":                              9,
 		"socket__protocol_dispatcher_kafka":                        18984,
 		"uretprobe__SSL_connect":                                   9,
-		"socket__postgres_handle":                                  1180,
+		"socket__postgres_handle":                                  1164,
 		"socket__kafka_fetch_response_record_batch_parser_v0":      3754,
 		"uprobe__http2_dynamic_table_cleaner":                      3964,
 		"tracepoint__net__netif_receive_skb":                       2189,
@@ -260,7 +260,7 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 		"uretprobe__gnutls_record_send":                            4911,
 		"socket__postgres_process_parse_message":                   54511,
 		"istio_uretprobe__SSL_write":                               4918,
-		"uprobe__postgres_tls_termination":                         43,
+		"uprobe__postgres_tls_termination":                         26,
 		"uprobe__kafka_tls_fetch_response_record_batch_parser_v12": 3970,
 		"socket__http2_filter":                                     125275,
 		"uprobe__postgres_tls_handle":                              200,
@@ -324,7 +324,11 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 
 	if mismatch {
 		for name, instr := range mismatchMap {
-			t.Logf("- mismatch for prog %s: expected %d != actual %d\n", name, instrCounts[name], instr)
+			msg := "++"
+			if instr < instrCounts[name] {
+				msg = "--"
+			}
+			t.Logf("- [%s] mismatch for prog %s: expected %d != actual %d\n", msg, name, instrCounts[name], instr)
 		}
 		t.Errorf("instruction count mismatch")
 	}

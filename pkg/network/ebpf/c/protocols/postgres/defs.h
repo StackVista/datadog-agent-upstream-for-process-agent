@@ -9,7 +9,9 @@
 #define POSTGRES_STARTUP_MIN_LEN 13
 
 // Postgres protocol version, in big endian, as described in the protocol
-// specification. This is version "3.0".
+// specification. This is version "3.0". Version "3.0" of the protocol has been
+// in use since PostgreSQL 7.4, released more than 20 years ago, so we will focus on this.
+// https://www.postgresql.org/docs/current/protocol-message-formats.html#PROTOCOL-MESSAGE-FORMATS-STARTUPMESSAGE
 #define PG_STARTUP_VERSION 196608
 #define PG_STARTUP_USER_PARAM "user"
 
@@ -23,7 +25,11 @@
 #define POSTGRES_MIN_PAYLOAD_LEN 4
 // Assume typical query message size is below an artificial limit.
 // 30000 is copied from postgres code base:
-// https://github.com/postgres/postgres/tree/master/src/interfaces/libpq/fe-protocol3.c#L94
+// https://github.com/postgres/postgres/blob/0164a0f9ee12e0eff9e4c661358a272ecd65c2d4/src/interfaces/libpq/fe-protocol3.c#L97
+// Please note that there is no guarantee that this is the maximum size of a message, if you see the postgres code there is also
+// there is a double condition `(msgLength > 30000 && !VALID_LONG_MESSAGE_TYPE(id))`. 
+// If the message is a `VALID_LONG_MESSAGE_TYPE` (e.g. 'E' message) it could be longer than 30000. Today we only parse 'Q' and 'C' messages,
+// so we should be fine with this limit.
 #define POSTGRES_MAX_PAYLOAD_LEN 30000
 
 #define POSTGRES_QUERY_MAGIC_BYTE 'Q'

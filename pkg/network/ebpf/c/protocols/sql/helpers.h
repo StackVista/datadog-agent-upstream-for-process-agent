@@ -11,8 +11,18 @@
 #define check_command(buf, command, buf_size) \
     (!bpf_memcmp((buf), &(command), sizeof(command) - 1))
 
-// is_sql_command check that there is an SQL query in buf. We only check the
-// most commonly used SQL queries
+// is_sql_command check that there is an SQL command in buf. We only check the
+// most commonly used SQL command. We can find an SQL command both in the 'Q' message and in the 'C' one.
+//
+// Example Query message:
+// 'Q'
+// [int32 length = (length of SQL string + 4 bytes for length field)]
+// "SELECT * FROM mytable;" 0
+//
+// Example Complete message:
+// 'C'
+// [int32 length]
+// "SELECT 3" 0
 static __always_inline bool is_sql_command(const char *buf, __u32 buf_size) {
     char tmp[SQL_COMMAND_MAX_SIZE];
 

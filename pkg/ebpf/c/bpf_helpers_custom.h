@@ -28,6 +28,13 @@ extern void __format_check(const char *fmt, ...) __attribute__ ((format(printf, 
 #define log_debug(fmt, ...)
 #endif
 
+#define DEBUG_POSTGRES 0
+#if DEBUG_POSTGRES
+#define debug_postgres(fmt, ...) bpf_printk("[POSTGRES]: " fmt, ##__VA_ARGS__)
+#else
+#define debug_postgres(fmt, ...)
+#endif
+
 /* llvm builtin functions that eBPF C program may use to
  * emit BPF_LD_ABS and BPF_LD_IND instructions
  */

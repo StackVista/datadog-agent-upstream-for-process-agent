@@ -218,6 +218,8 @@ static __always_inline void tls_finish(struct pt_regs *ctx, conn_tuple_t *t, boo
         final_tuple = *t;
         break;
     case PROTOCOL_POSTGRES:
+        // we need the normalized tuple because the termination phase wants a normalized tuple, 
+        // otherwise we would have to clean the in-flight map in both directions.
         prog = PROG_POSTGRES_TERMINATION;
         final_tuple = normalized_tuple;
         break;

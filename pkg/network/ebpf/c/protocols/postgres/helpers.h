@@ -10,7 +10,7 @@ static __always_inline bool is_postgres_connect(const char *buf, __u32 buf_size)
 
     struct pg_startup_header *hdr = (struct pg_startup_header *)buf;
 
-    if (bpf_ntohl(hdr->version) != PG_STARTUP_VERSION) {
+    if (hdr->version != bpf_htonl(PG_STARTUP_VERSION)) {
         return false;
     }
 
@@ -40,6 +40,8 @@ static __always_inline bool is_postgres_query(const char *buf, __u32 buf_size) {
     struct pg_message_header *hdr = (struct pg_message_header *)buf;
 
     // We only classify queries for now
+    // Relying only on the first byte to be 'C' or 'Q' is probably not enough, could cause many false positives.
+    // That's why we also add some checks on the SQL query  at the end of the method
     if (hdr->message_tag != POSTGRES_QUERY_MAGIC_BYTE && hdr->message_tag != POSTGRES_COMMAND_COMPLETE_MAGIC_BYTE) {
         return false;
     }
@@ -53,6 +55,7 @@ static __always_inline bool is_postgres_query(const char *buf, __u32 buf_size) {
 }
 
 static __always_inline bool is_postgres(const char *buf, __u32 buf_size) {
+    // putting `is_postgres_connect` before should reduce the execution time because for new connections we should always face the startup message first, but it also increase the number of instructions in the verifier ~+500 so at the moment we keep them in this order.
     return is_postgres_query(buf, buf_size) || is_postgres_connect(buf, buf_size);
 }
 

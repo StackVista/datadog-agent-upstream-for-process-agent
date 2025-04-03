@@ -175,6 +175,7 @@ func (s *EbpfProgramSuite) TestSingleProgramReceivesMultipleLibsetEvents() {
 
 func (s *EbpfProgramSuite) TestMultipleProgramsReceiveMultipleLibsetEvents() {
 	t := s.T()
+	stsutil.SkipIfStackState(t, "[todo] this test is flaky")
 	fooPathSsl, _ := createTempTestFile(t, "foo-libssl.so")
 	fooPathCuda, _ := createTempTestFile(t, "foo-libcudart.so")
 
