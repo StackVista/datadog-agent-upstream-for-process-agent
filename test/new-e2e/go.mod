@@ -59,7 +59,7 @@ require (
 	// Example: 	github.com/DataDog/test-infra-definitions v0.0.0-YYYYMMDDHHmmSS-0123456789AB
 	// => TEST_INFRA_DEFINITIONS_BUILDIMAGES: 0123456789AB
 	github.com/DataDog/test-infra-definitions v0.0.0-20241224112147-36860d3c29b4
-	github.com/aws/aws-sdk-go-v2 v1.32.7
+	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.28.7
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.190.0
 	github.com/aws/aws-sdk-go-v2/service/eks v1.51.0
@@ -109,23 +109,23 @@ require (
 	github.com/alessio/shellescape v1.4.2 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.7 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.10 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.48 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.22 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.26 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.26 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.34 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.34 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.1 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.26 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.34 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.36.8 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ecs v1.53.1
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.12.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.4.7 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.7 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.18.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.12.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.7.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.15 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.18.15 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.24.8 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.3 // indirect
-	github.com/aws/smithy-go v1.22.1 // indirect
+	github.com/aws/smithy-go v1.22.2 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0
@@ -284,7 +284,7 @@ require (
 	github.com/DataDog/datadog-agent/pkg/trace v0.62.2
 	github.com/DataDog/datadog-go/v5 v5.6.0
 	github.com/aws/aws-sdk-go v1.55.5
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.71.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.79.1
 	github.com/aws/session-manager-plugin v0.0.0-20241119210807-82dc72922492
 	github.com/digitalocean/go-libvirt v0.0.0-20240812180835-9c6c0a310c6c
 	github.com/hairyhenderson/go-codeowners v0.7.0
