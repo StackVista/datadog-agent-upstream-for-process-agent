@@ -43,6 +43,15 @@ static __always_inline bool read_message_header(pktbuf_t pkt, struct pg_message_
     return true;
 }
 
+static __always_inline void handle_new_extended_query(conn_tuple_t *conn_tuple, __u8 tags) {
+    postgres_transaction_t new_transaction = {};
+    new_transaction.request_started = bpf_ktime_get_ns();
+    // we put `0` because in bind we don't have the SQL query.
+    new_transaction.original_query_size = 0;
+    new_transaction.tags = tags;
+    bpf_map_update_elem(&postgres_in_flight, conn_tuple, &new_transaction, BPF_ANY);
+}
+
 // Handles a new query by creating a new transaction and storing it in the map.
 // If a transaction already exists for the given connection, it is aborted.
 // Query message format - https://www.postgresql.org/docs/current/protocol-message-formats.html#PROTOCOL-MESSAGE-FORMATS-QUERY
@@ -182,6 +191,13 @@ static __always_inline void postgres_handle_message(pktbuf_t pkt, conn_tuple_t *
         // message_len includes size of the payload, 4 bytes of the message length itself, but not the message tag.
         // So if we want to know the size of the payload, we need to subtract the size of the message length.
         handle_new_query(pkt, conn_tuple, header->message_len - sizeof(__u32), tags);
+        return;
+    }
+
+    // If we jump we have already recognized the postgres protocol, so we can assert against the single byte of bind `B` without worrying about false positives.    
+    if (header->message_tag == POSTGRES_BIND_MAGIC_BYTE) {
+        debug_postgres("Bind: ifx %u, type %u, tcp_seq %u, netns %u, sport %u, dport %u", pkt.skb->ifindex, pkt.skb->pkt_type, pkt.skb_info->tcp_seq, conn_tuple->netns, conn_tuple->sport, conn_tuple->dport);
+        handle_new_extended_query(conn_tuple, tags);
         return;
     }
 

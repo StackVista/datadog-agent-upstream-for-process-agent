@@ -19,18 +19,14 @@ static __always_inline bool is_postgres_connect(const char *buf, __u32 buf_size)
     return !bpf_memcmp(buf + sizeof(*hdr), PG_STARTUP_USER_PARAM, sizeof(PG_STARTUP_USER_PARAM));
 }
 
-// Classify ping query of postgres.
-static __always_inline bool is_ping(const char *buf, __u32 buf_size) {
-    if (buf_size < sizeof(POSTGRES_PING_BODY)) {
-        return false;
-    }
-    char tmp[sizeof(POSTGRES_PING_BODY)] = {0};
-    // Cannot use bpf_memcpy here because of verifier error of "misaligned stack access".
-#pragma unroll (sizeof(POSTGRES_PING_BODY))
-    for (int i = 0; i < sizeof(POSTGRES_PING_BODY); i++) {
-        tmp[i] = buf[i];
-    }
-    return check_command(tmp, POSTGRES_PING_BODY, sizeof(POSTGRES_PING_BODY));
+// Ideally we would like to catch the bind message but we can only assert against
+// the first byte of the message (== 'B'). This is not enough to avoid false positives.
+// For this reason we check the bind complete message instead where we can assert at least 5 bytes.
+// https://www.postgresql.org/docs/current/protocol-message-formats.html#PROTOCOL-MESSAGE-FORMATS-BINDCOMPLETE
+static __always_inline bool is_bind_complete(struct pg_message_header *hdr) {
+    return hdr->message_tag == POSTGRES_BIND_COMPLETE_MAGIC_BYTE && hdr->message_len == bpf_htonl(4);
+    // we could also improve the assertion looking at the next message code but let's see if we really need it
+    // https://github.com/coroot/coroot-node-agent/blob/4a2859b211ecd88a7ed0bd909712d31e133f418e/ebpftracer/ebpf/l7/postgres.c#L34-L47
 }
 
 // is_postgres_query checks if the buffer is a regular Postgres message.
@@ -39,6 +35,10 @@ static __always_inline bool is_postgres_query(const char *buf, __u32 buf_size) {
 
     struct pg_message_header *hdr = (struct pg_message_header *)buf;
 
+    if(is_bind_complete(hdr)) {
+        return true;
+    }
+    
     // We only classify queries for now
     // Relying only on the first byte to be 'C' or 'Q' is probably not enough, could cause many false positives.
     // That's why we also add some checks on the SQL query  at the end of the method
@@ -51,7 +51,7 @@ static __always_inline bool is_postgres_query(const char *buf, __u32 buf_size) {
         return false;
     }
 
-    return is_sql_command(buf + sizeof(*hdr), buf_size - sizeof(*hdr)) || is_ping(buf + sizeof(*hdr), buf_size - sizeof(*hdr));
+    return is_sql_command(buf + sizeof(*hdr), buf_size - sizeof(*hdr));
 }
 
 static __always_inline bool is_postgres(const char *buf, __u32 buf_size) {

@@ -31,6 +31,8 @@ const (
 	TruncateTableOP
 	// ShowOP represents a command SHOW
 	ShowOP
+	// UnsupportedOP represents an unsupported operation.
+	UnsupportedOP
 )
 
 // String returns the string representation of the operation.
@@ -54,6 +56,8 @@ func (op Operation) String() string {
 		return "ALTER"
 	case ShowOP:
 		return "SHOW"
+	case UnsupportedOP:
+		return "UNSUPPORTED"
 	default:
 		return "UNKNOWN"
 	}
@@ -80,6 +84,8 @@ func FromString(op string) Operation {
 		return AlterTableOP
 	case "SHOW":
 		return ShowOP
+	case "UNSUPPORTED":
+		return UnsupportedOP
 	default:
 		return UnknownOP
 	}
