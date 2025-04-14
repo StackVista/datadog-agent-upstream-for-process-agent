@@ -68,7 +68,9 @@ func verifyOSVersion(kernelCode kernel.Version, platform string, exclusionList [
 		return true, nil
 	}
 
-	// Before injecting ebpf programs we need to bump the rlimit for memlock
+	// Before injecting ebpf code we need to bump the rlimit for memlock.
+	// This is the first place where we inject ebpf code (we call it before opening the Tracer)
+	// and we need to make sure that the rlimit is set correctly.
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return false, fmt.Errorf("cannot remove memory limit: %w", err)
 	}
