@@ -219,6 +219,9 @@ static __always_inline void postgres_handle_message(pktbuf_t pkt, conn_tuple_t *
             .index = PROG_POSTGRES_HANDLE_RESPONSE,
         },
     };
+    // Here we could have a startup postgres message, we don't handle it any particular way,
+    // we just call handle_response and the message will be ignored. We could short circuit it but
+    // not sure this is worth since we add complexity and we should receive it only at the beginning of the connection.
     pktbuf_tail_call_compact(pkt, handle_response_tail_call_array);
     return;
 }
@@ -369,7 +372,6 @@ int socket__postgres_handle(struct __sk_buff* skb) {
     }
 
     pktbuf_t pkt = pktbuf_from_skb(skb, &skb_info);
-    // todo!: We could receive the startup postgres message here, but we don't handle it yet. It could probably cause some false positives.
     struct pg_message_header header;
     if (!read_message_header(pkt, &header)) {
         return 0;
