@@ -13,6 +13,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/features"
+	"github.com/cilium/ebpf/rlimit"
 
 	pkgconfigsetup "github.com/DataDog/datadog-agent/pkg/config/setup"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
@@ -65,6 +66,13 @@ func verifyOSVersion(kernelCode kernel.Version, platform string, exclusionList [
 
 	if !NeedsEBPF() {
 		return true, nil
+	}
+
+	// Before injecting ebpf code we need to bump the rlimit for memlock.
+	// This is the first place where we inject ebpf code (we call it before opening the Tracer)
+	// and we need to make sure that the rlimit is set correctly.
+	if err := rlimit.RemoveMemlock(); err != nil {
+		return false, fmt.Errorf("cannot remove memory limit: %w", err)
 	}
 
 	var requiredFuncs = []asm.BuiltinFunc{
