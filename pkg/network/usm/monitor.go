@@ -156,11 +156,6 @@ func (m *Monitor) Pause() error {
 	if m == nil {
 		return nil
 	}
-	if m.ebpfProgram.cfg.BypassEnabled {
-		// [STS] We don't want to use this feature because it will disable all the socker filters. Moreover we dinamically attach/detach probes so we don't want to pause/resume since we don't have a static set of programs. BTW Datadog uses this feature just in tests.
-		// We panic only in case of `BypassEnabled` because without this flag the method does nothing.
-		panic("[STS] Don't use the pause/resume feature in production.")
-	}
 	return m.ebpfProgram.Pause()
 }
 
@@ -168,11 +163,6 @@ func (m *Monitor) Pause() error {
 func (m *Monitor) Resume() error {
 	if m == nil {
 		return nil
-	}
-	if m.ebpfProgram.cfg.BypassEnabled {
-		// [STS] We don't want to use this feature because it will disable all the socker filters. Moreover we dinamically attach/detach probes so we don't want to pause/resume since we don't have a static set of programs. BTW Datadog uses this feature just in tests.
-		// We panic only in case of `BypassEnabled` because without this flag the method does nothing.
-		panic("[STS] Don't use the pause/resume feature in production.")
 	}
 	return m.ebpfProgram.Resume()
 }

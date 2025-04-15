@@ -14,7 +14,7 @@ import (
 // will be between 99 and 101
 const RelativeAccuracy = 0.01
 
-// Key is an identifier for a Mongo connection
+// Key is an identifier for a AMQP connection
 // Many requests and responses will generally be observed over a single connection
 type Key struct {
 	types.ConnectionKey
@@ -22,7 +22,7 @@ type Key struct {
 	QueueName    string
 }
 
-// RequestStat stores stats for a given Mongo connection
+// RequestStat stores stats for a given AMQP connection
 type RequestStat struct {
 	MessagesDelivered uint64
 	MessagesPublished uint64

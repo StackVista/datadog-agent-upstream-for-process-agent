@@ -76,8 +76,13 @@ func getFragment(e *ebpf.EbpfTx) []byte {
 // Operation returns the operation of the query (SELECT, INSERT, UPDATE, DROP, etc.)
 func (e *EventWrapper) Operation() Operation {
 	if !e.operationSet {
-		op, _, _ := bytes.Cut(getFragment(&e.Tx), []byte(" "))
-		e.operation = FromString(string(op))
+		// This happens when we have an extendend postgres query
+		if e.Tx.Original_query_size == 0 {
+			e.operation = UnsupportedOP
+		} else {
+			op, _, _ := bytes.Cut(getFragment(&e.Tx), []byte(" "))
+			e.operation = FromString(string(op))
+		}
 		e.operationSet = true
 	}
 	return e.operation
@@ -122,14 +127,16 @@ func (e *EventWrapper) extractTableName() string {
 // Parameters returns the table name or run-time parameter.
 func (e *EventWrapper) Parameters() string {
 	if !e.parametersSet {
-		if e.operation == ShowOP {
+		switch e.Operation() {
+		case ShowOP:
 			e.parameters = e.extractParameters()
-		} else {
+		case UnsupportedOP:
+			e.parameters = e.Operation().String()
+		default:
 			e.parameters = e.extractTableName()
 		}
 		e.parametersSet = true
 	}
-
 	return e.parameters
 }
 

@@ -68,6 +68,14 @@ func (c *PGXClient) Close() {
 	c.DB.Close()
 }
 
+// RunSimpleQuery runs a simple query without a prepared statement.
+func (c *PGXClient) RunSimpleQuery(query string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_, err := c.DB.Exec(ctx, query, pgx.QueryExecModeSimpleProtocol)
+	return err
+}
+
 // RunQuery runs a query on the database.
 func (c *PGXClient) RunQuery(query string, args ...any) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
