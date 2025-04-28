@@ -608,7 +608,7 @@ require (
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/DataDog/agent-payload/v5 v5.0.138
+	github.com/DataDog/agent-payload/v5 v5.0.149
 	github.com/DataDog/datadog-agent/comp/api/api/def v0.62.2
 	github.com/DataDog/datadog-agent/comp/core/config v0.62.2
 	github.com/DataDog/datadog-agent/comp/core/flare/types v0.62.2
