@@ -111,6 +111,5 @@ func (t *Telemetry) Count(tx Transaction) {
 
 // Log logs the telemetry.
 func (t *Telemetry) Log() {
-	// todo!: do we want to log this as info or debug? datadog uses debug, we use info.
 	log.Infof("%s stats summary: %s", t.protocol, t.metricGroup.Summary())
 }

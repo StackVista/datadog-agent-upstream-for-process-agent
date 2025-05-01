@@ -8,7 +8,7 @@
 // Check that we can read the amount of memory we want, then to the comparison.
 // Note: we use `sizeof(command) - 1` to *not* compare with the null-terminator of
 // the strings.
-#define check_command(buf, command, buf_size) \
+#define check_command(buf, command) \
     (!bpf_memcmp((buf), &(command), sizeof(command) - 1))
 
 // is_sql_command check that there is an SQL command in buf. We only check the
@@ -23,7 +23,7 @@
 // 'C'
 // [int32 length]
 // "SELECT 3" 0
-static __always_inline bool is_sql_command(const char *buf, __u32 buf_size) {
+static __always_inline bool is_sql_command(const char *buf) {
     char tmp[SQL_COMMAND_MAX_SIZE];
 
     // Convert what would be the query to uppercase to match queries like
@@ -37,13 +37,13 @@ static __always_inline bool is_sql_command(const char *buf, __u32 buf_size) {
         }
     }
 
-    return check_command(tmp, SQL_ALTER, buf_size)
-        || check_command(tmp, SQL_CREATE, buf_size)
-        || check_command(tmp, SQL_DELETE, buf_size)
-        || check_command(tmp, SQL_DROP, buf_size)
-        || check_command(tmp, SQL_INSERT, buf_size)
-        || check_command(tmp, SQL_SELECT, buf_size)
-        || check_command(tmp, SQL_UPDATE, buf_size);
+    return check_command(tmp, SQL_ALTER)
+        || check_command(tmp, SQL_CREATE)
+        || check_command(tmp, SQL_DELETE)
+        || check_command(tmp, SQL_DROP)
+        || check_command(tmp, SQL_INSERT)
+        || check_command(tmp, SQL_SELECT)
+        || check_command(tmp, SQL_UPDATE);
 }
 
 #endif // __SQL_HELPERS_H

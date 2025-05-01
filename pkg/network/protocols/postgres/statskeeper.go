@@ -22,12 +22,16 @@ type StatKeeper struct {
 }
 
 // NewStatkeeper creates a new StatKeeper
-func NewStatkeeper(c *config.Config) *StatKeeper {
+func NewStatkeeper(c *config.Config) (*StatKeeper, error) {
+	if err := initializeCaches(); err != nil {
+		return nil, err
+	}
+
 	newStatKeeper := &StatKeeper{
 		maxEntries: c.MaxPostgresStatsBuffered,
 	}
 	newStatKeeper.resetNoLock()
-	return newStatKeeper
+	return newStatKeeper, nil
 }
 
 // Process processes the postgres transaction
@@ -35,10 +39,16 @@ func (s *StatKeeper) Process(tx *EventWrapper) {
 	s.statsMutex.Lock()
 	defer s.statsMutex.Unlock()
 
+	isStatusOnly := tx.process()
+	if isStatusOnly {
+		return
+	}
+
 	key := Key{
-		Operation:     tx.Operation(),
-		Parameters:    tx.Parameters(),
+		Operation:     tx.getSQLCommand(),
+		TableName:     tx.getTableName(),
 		ConnectionKey: tx.ConnTuple(),
+		DatabaseName:  tx.getDatabaseName(),
 	}
 	requestStats, ok := s.stats[key]
 	if !ok {
@@ -57,7 +67,8 @@ func (s *StatKeeper) Process(tx *EventWrapper) {
 		}
 		requestStats.FirstLatencySample = tx.RequestLatency()
 	}
-	requestStats.StaticTags = uint64(tx.Tx.Tags)
+	// today we don't use tags
+	requestStats.StaticTags = 0
 	requestStats.Count++
 	if err := requestStats.Latencies.Add(tx.RequestLatency()); err != nil {
 		log.Debugf("could not add request latency to ddsketch: %v", err)

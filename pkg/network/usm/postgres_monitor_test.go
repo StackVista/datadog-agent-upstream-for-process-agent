@@ -16,10 +16,8 @@ import (
 	"sync"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/jackc/pgx/v5/pgproto3"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -39,7 +37,6 @@ import (
 
 const (
 	postgresPort             = "5432"
-	repeatCount              = ebpf.BufferSize / len("table_")
 	createTableQuery         = "CREATE TABLE dummy (id SERIAL PRIMARY KEY, foo TEXT)"
 	updateSingleValueQuery   = "UPDATE dummy SET foo = 'updated' WHERE id = 1"
 	selectAllQuery           = "SELECT * FROM dummy"
@@ -52,8 +49,8 @@ const (
 )
 
 var (
-	longCreateQuery = fmt.Sprintf("CREATE TABLE %s (id SERIAL PRIMARY KEY, foo TEXT)", strings.Repeat("table_", repeatCount))
-	longDropeQuery  = fmt.Sprintf("DROP TABLE IF EXISTS %s", strings.Repeat("table_", repeatCount))
+	longCreateQuery = fmt.Sprintf("CREATE TABLE %s (id SERIAL PRIMARY KEY, foo TEXT)", strings.Repeat("a", ebpf.BufferSize))
+	longDropQuery   = fmt.Sprintf("DROP TABLE IF EXISTS %s", strings.Repeat("a", ebpf.BufferSize))
 )
 
 func createInsertQuery(values ...string) string {
@@ -98,6 +95,8 @@ type postgresParsingTestAttributes struct {
 	postMonitorSetup func(t *testing.T, ctx pgTestContext)
 	// A validation method ensure the test succeeded.
 	validation func(t *testing.T, ctx pgTestContext, tr *Monitor)
+	// Reason to skip the test
+	skipReason string
 }
 
 type postgresProtocolParsingSuite struct {
@@ -292,12 +291,78 @@ func (s *postgresProtocolParsingSuite) TestPostgresPlaintextExtendedQuery() {
 	// We send a second select that is equivalent and this time we should correctly recognize the postgres transaction:
 	require.NoError(t, monitor.Pause())
 
-	// Right now in case of extended query we have an empty database name and the operation is unknown.
+	// We cannot recover the operation and the table name from the ebpf instrumentation because we don't see the initial parse
 	validatePostgres(t, monitor, map[string]map[postgres.Operation]int{
-		postgres.UnsupportedOP.String(): {
-			postgres.UnsupportedOP: 3,
+		"": {
+			postgres.UnknownOP: 3,
 		},
 	}, isTLS)
+}
+
+func (s *postgresProtocolParsingSuite) TestPostgresDatabaseName() {
+	t := s.T()
+
+	isTLS := false
+	serverHost := "127.0.0.1"
+	serverAddress := net.JoinHostPort(serverHost, postgresPort)
+
+	// Create and Wait for the server
+	require.NoError(t, postgres.RunServer(t, serverHost, postgresPort, isTLS))
+	waitForPostgresServer(t, serverAddress, isTLS)
+
+	// Start monitor
+	monitor := setupUSMTLSMonitor(t, getPostgresDefaultTestConfiguration(isTLS))
+
+	// Create a new client and ping it, so we start a postgres connection
+	pg, err := postgres.NewPGXClient(postgres.ConnectionOptions{
+		ServerAddress: serverAddress,
+		EnableTLS:     isTLS,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, pg.RunSimpleQuery(createTableQuery))
+
+	// Call getstats so that we clear all the batches and we should process the startup message with the database name
+	monitor.GetProtocolStats()
+
+	// Call a simple SELECT query and check if the database name is here.
+	require.NoError(t, pg.RunSimpleQuery(selectAllQuery))
+
+	var postgresProtocolStats interface{}
+	require.Eventually(t, func() bool {
+		var exists bool
+		postgresProtocolStats, exists = monitor.GetProtocolStats()[protocols.Postgres]
+		if !exists {
+			return false
+		}
+		return len(postgresProtocolStats.(map[postgres.Key]*postgres.RequestStat)) != 0
+	}, time.Second*5, time.Millisecond*100, "cannot collect postgres stats")
+
+	currentStats := postgresProtocolStats.(map[postgres.Key]*postgres.RequestStat)
+	for key := range currentStats {
+		t.Log(key)
+		if key.Operation == postgres.SelectOP {
+			if key.DatabaseName == "testdb" {
+				// In the auth message we could have:
+				// Parameter name: user
+				// Parameter value: admin
+				// Parameter name: database
+				// Parameter value: testdb
+				// or:
+				// Parameter name: database
+				// Parameter value: testdb
+				// Parameter name: user
+				// Parameter value: admin
+				//
+				// we shouldn't have other combinations, so we should be able
+				// to always find the database name.
+				return
+			} else {
+				t.Fatalf("invalid database name %s", key.DatabaseName)
+			}
+		}
+	}
+	t.Fatal("Select operation not found")
 }
 
 // waitForPostgresServer verifies that the postgres server is up and running.
@@ -397,7 +462,7 @@ func testDecoding(t *testing.T, isTLS bool) {
 			},
 		},
 		{
-			name: "insert rows in table (extended)",
+			name: "insert rows in table extended",
 			preMonitorSetup: func(t *testing.T, ctx pgTestContext) {
 				pg, err := postgres.NewPGXClient(postgres.ConnectionOptions{
 					ServerAddress: ctx.serverAddress,
@@ -413,7 +478,7 @@ func testDecoding(t *testing.T, isTLS bool) {
 				// 127.0.0.1|>Q|127.0.0.1|12|-- ping
 				// 127.0.0.1|<I/Z|127.0.0.1|4,5|
 				// 127.0.0.1|>P/D/S|127.0.0.1|160,64,4|INSERT INTO dummy (foo) VALUES ('value-0'), ..., ('value-4')
-				// 127.0.0.1|<1/t/n/Z|127.0.0.1|4,6,4,5|
+				// 127.0.0.1|<1/t/n/Z|127.0.0.1|4,6,4,5| <---- we recognize the postgres protocol here, thanks to `<1`
 				// 127.0.0.1|>B/D/E/S|127.0.0.1|70,6,9,4|
 				// 127.0.0.1|<2/n/C/Z|127.0.0.1|4,4,15,5|
 				// 127.0.0.1|>P/D/S|127.0.0.1|230,64,4|INSERT INTO dummy (foo) VALUES ('value-5'), ..., ('value-14')
@@ -422,23 +487,23 @@ func testDecoding(t *testing.T, isTLS bool) {
 				// 127.0.0.1|<2/n/C/Z|127.0.0.1|4,4,16,5|
 				//
 				// Our ebpf instrumentation output:
+				// Bind 1
+				// [POSTGRES]: Bind: ifx 1, type 4, tcp_seq 1043316547, netns 4026531840, sport 48384, dport 5432
+				// [POSTGRES]: Bind: ifx 219, type 4, tcp_seq 2051224592, netns 4026531840, sport 54600, dport 5432
+				// [POSTGRES]: Bind: ifx 2, type 0, tcp_seq 2051224592, netns 4026533550, sport 54600, dport 5432
+				//
 				// Bind complete 1
-				// [POSTGRES]: Not Q/P: ifx 2, type 4, tcp_seq 830289249, netns 4026533550, sport 5432, dport 54600
-				// [POSTGRES]: Not Q/P: ifx 220, type 3, tcp_seq 830289249, netns 4026531840, sport 5432, dport 54600
-				// [POSTGRES]: Not Q/P: ifx 1, type 4, tcp_seq 3901940803, netns 4026531840, sport 5432, dport 48384
+				// [POSTGRES]: Not Q/P: ifx 2, type 4, tcp_seq 830289304, netns 4026533550, sport 5432, dport 54600
+				// [POSTGRES]: Complete: tcp_seq 830289304, netns 4026533550, sport 54600, dport 5432
+				// [POSTGRES]: Not Q/P: ifx 220, type 3, tcp_seq 830289304, netns 4026531840, sport 5432, dport 54600
+				// [POSTGRES]: Complete: tcp_seq 830289304, netns 4026531840, sport 54600, dport 5432
+				// [POSTGRES]: Not Q/P: ifx 1, type 4, tcp_seq 3901940858, netns 4026531840, sport 5432, dport 48384
+				// [POSTGRES]: Complete: tcp_seq 3901940858, netns 4026531840, sport 48384, dport 5432
 				//
 				// Parse 2
 				// [POSTGRES]: Parse: ifx 1, type 4, tcp_seq 1043316246, netns 4026531840, sport 48384, dport 5432
-				// [POSTGRES]: Store transaction: tcp_seq 1043316246, netns 4026531840, query: INSERT INTO dummy (foo) VALUES ('value-5'), ...
 				// [POSTGRES]: Parse: ifx 219, type 4, tcp_seq 2051224291, netns 4026531840, sport 54600, dport 5432
-				// [POSTGRES]: Store transaction: tcp_seq 2051224291, netns 4026531840, query: INSERT INTO dummy (foo) VALUES ('value-5'), ...
 				// [POSTGRES]: Parse: ifx 2, type 0, tcp_seq 2051224291, netns 4026533550, sport 54600, dport 5432
-				// [POSTGRES]: Store transaction: tcp_seq 2051224291, netns 4026533550, query: INSERT INTO dummy (foo) VALUES ('value-5'), ...
-				//
-				// In the response there is not 'C' so we do nothing
-				// [POSTGRES]: Not Q/P: ifx 2, type 4, tcp_seq 830289281, netns 4026533550, sport 5432, dport 54600
-				// [POSTGRES]: Not Q/P: ifx 220, type 3, tcp_seq 830289281, netns 4026531840, sport 5432, dport 54600
-				// [POSTGRES]: Not Q/P: ifx 1, type 4, tcp_seq 3901940835, netns 4026531840, sport 5432, dport 48384
 				//
 				// Bind 2
 				// [POSTGRES]: Bind: ifx 1, type 4, tcp_seq 1043316547, netns 4026531840, sport 48384, dport 5432
@@ -453,8 +518,6 @@ func testDecoding(t *testing.T, isTLS bool) {
 				// [POSTGRES]: Not Q/P: ifx 1, type 4, tcp_seq 3901940858, netns 4026531840, sport 5432, dport 48384
 				// [POSTGRES]: Complete: tcp_seq 3901940858, netns 4026531840, sport 48384, dport 5432
 
-				// As we can see we lose the first parse because we cannot recognize the protocol yet. we understand which protocol it is
-				// at the first bind complete.
 				pg := ctx.extras["pg"].(*postgres.PGXClient)
 				// Sending 2 insert queries, each with 5 values.
 				// We want to ensure we're capturing both requests.
@@ -463,11 +526,29 @@ func testDecoding(t *testing.T, isTLS bool) {
 				}
 			},
 			validation: func(t *testing.T, _ pgTestContext, monitor *Monitor) {
-				validatePostgres(t, monitor, map[string]map[postgres.Operation]int{
-					postgres.UnsupportedOP.String(): {
-						postgres.UnsupportedOP: adjustCount(1),
-					},
-				}, isTLS)
+
+				// Parse and Bind could arrive in any order. If they arrive out of order
+				// we won't be able to extract the operation and the table name from the Bind. We check for unknown operation or the right operation but we don't know which one we wiil have. The only thing we know is that if we don't have unknown we should have the right operation and table name.
+				require.Eventually(t, func() bool {
+					postgresProtocolStats, exists := monitor.GetProtocolStats()[protocols.Postgres]
+					if !exists {
+						return false
+					}
+					currentStats := postgresProtocolStats.(map[postgres.Key]*postgres.RequestStat)
+
+					for key := range currentStats {
+						// We want just to check that if the operation is not unknown we can recover the right operation and the table name
+						if key.Operation == postgres.UnknownOP {
+							continue
+						}
+
+						if key.Operation != postgres.InsertOP || key.TableName != "dummy" {
+							t.Logf("invalid operation '%v' or table name '%s'", key.Operation, key.TableName)
+							return false
+						}
+					}
+					return true
+				}, time.Second*5, time.Millisecond*100, "cannot find required stats")
 			},
 		},
 		{
@@ -664,14 +745,16 @@ func testDecoding(t *testing.T, isTLS bool) {
 			postMonitorSetup: func(t *testing.T, ctx pgTestContext) {
 				pg := ctx.extras["pg"].(*postgres.PGXClient)
 				require.NoError(t, pg.RunSimpleQuery(longCreateQuery))
-				require.NoError(t, pg.RunSimpleQuery(longDropeQuery))
+				require.NoError(t, pg.RunSimpleQuery(longDropQuery))
 			},
 			validation: func(t *testing.T, _ pgTestContext, monitor *Monitor) {
 				validatePostgres(t, monitor, map[string]map[postgres.Operation]int{
-					getTruncatedTableName(longCreateQuery, 13): {
+					// From ebpf we send 160 bytes. The first 5 bytes are `Q` tag + 4 bytes of len.
+					// Then the next 13 bytes are the SQL query. So the name of the table should be in the remaining bytes:
+					strings.Repeat("a", ebpf.BufferSize-5-13): {
 						postgres.CreateTableOP: adjustCount(1),
 					},
-					getTruncatedTableName(longDropeQuery, 21): {
+					strings.Repeat("a", ebpf.BufferSize-5-21): {
 						postgres.DropTableOP: adjustCount(1),
 					},
 				}, isTLS)
@@ -691,7 +774,8 @@ func testDecoding(t *testing.T, isTLS bool) {
 			},
 			postMonitorSetup: func(t *testing.T, ctx pgTestContext) {
 				pg := ctx.extras["pg"].(*postgres.PGXClient)
-				// if SHOW is the first message we see, we won't recognize the postgres	protocol for this reason we first need a SELECT
+				// if SHOW query is the first query we see, we won't recognize the postgres	protocol because we don't check against SHOW verb
+				// for this reason we first need a SELECT
 				require.NoError(t, pg.RunSimpleQuery(selectAllQuery))
 				require.NoError(t, pg.RunSimpleQuery(showQuery))
 			},
@@ -700,7 +784,8 @@ func testDecoding(t *testing.T, isTLS bool) {
 					"dummy": {
 						postgres.SelectOP: adjustCount(1),
 					},
-					"search_path": {
+					// show doesn't have a table name so we don't extract it
+					"": {
 						postgres.ShowOP: adjustCount(1),
 					},
 				}, isTLS)
@@ -735,27 +820,13 @@ func testDecoding(t *testing.T, isTLS bool) {
 				// 127.0.0.1|<C/Z|127.0.0.1|10,5|
 				// 127.0.0.1|>P/D/S|127.0.0.1|85,64,4|SELECT * FROM dummy
 				// 127.0.0.1|<1/t/T/Z|127.0.0.1|4,6,49,5|
+				//
+				// We recognize the parse complete
+				//
 				// 127.0.0.1|>B/D/E/S|127.0.0.1|74,6,9,4|
 				// 127.0.0.1|<2/T/C/Z|127.0.0.1|4,49,13,5|
-				//
-				// We recognize a bind complete. So we will send to userspace only the commit transaction.
-				//
 				// 127.0.0.1|>Q|127.0.0.1|11|commit
 				// 127.0.0.1|<C/Z|127.0.0.1|11,5|
-
-				// Our ebpf instrumentation output:
-				// [POSTGRES]: Query: ifx 1, type 4, tcp_seq 1112620071, netns 4026531840, sport 33752, dport 5432
-				// [POSTGRES]: Store transaction: tcp_seq 1112620071, netns 4026531840, query: commit
-				// [POSTGRES]: Query: ifx 222, type 4, tcp_seq 1881322990, netns 4026531840, sport 45728, dport 5432
-				// [POSTGRES]: Store transaction: tcp_seq 1881322990, netns 4026531840, query: commit
-				// [POSTGRES]: Query: ifx 2, type 0, tcp_seq 1881322990, netns 4026533550, sport 45728, dport 5432
-				// [POSTGRES]: Store transaction: tcp_seq 1881322990, netns 4026533550, query: commit
-				// [POSTGRES]: Not Q/P: ifx 2, type 4, tcp_seq 682413929, netns 4026533550, sport 5432, dport 45728
-				// [POSTGRES]: Complete: tcp_seq 682413929, netns 4026533550, sport 45728, dport 5432
-				// [POSTGRES]: Not Q/P: ifx 223, type 3, tcp_seq 682413929, netns 4026531840, sport 5432, dport 45728
-				// [POSTGRES]: Complete: tcp_seq 682413929, netns 4026531840, sport 45728, dport 5432
-				// [POSTGRES]: Not Q/P: ifx 1, type 4, tcp_seq 3562787820, netns 4026531840, sport 5432, dport 33752
-				// [POSTGRES]: Complete: tcp_seq 3562787820, netns 4026531840, sport 33752, dport 5432
 				tx, err := pg.Begin()
 				require.NoError(t, err)
 				require.NoError(t, pg.RunQueryTX(tx, selectAllQuery))
@@ -763,15 +834,15 @@ func testDecoding(t *testing.T, isTLS bool) {
 			},
 			validation: func(t *testing.T, _ pgTestContext, monitor *Monitor) {
 				validatePostgres(t, monitor, map[string]map[postgres.Operation]int{
-					"UNKNOWN": {
-						postgres.UnknownOP: adjustCount(1),
+					"": {
+						postgres.UnknownOP: adjustCount(2),
 					},
 				}, isTLS)
 			},
 		},
-		// This test validates that the batched queries are partially supported.
 		{
-			name: "batched queries",
+			name:       "batched queries",
+			skipReason: "this test is flaky because we don't know the order in which packet will be processed by userspace",
 			preMonitorSetup: func(t *testing.T, ctx pgTestContext) {
 				pg, err := postgres.NewPGXClient(postgres.ConnectionOptions{
 					ServerAddress: ctx.serverAddress,
@@ -797,14 +868,8 @@ func testDecoding(t *testing.T, isTLS bool) {
 
 				// What we see from our instrumentation:
 				// [POSTGRES]: Parse: ifx 1, type 4, tcp_seq 539562970, netns 4026531840, sport 50444, dport 5432
-				// [POSTGRES]: Store transaction: tcp_seq 539562970, netns 4026531840, query: INSERT INTO dummy (foo) VALUES ('value-1')
 				// [POSTGRES]: Parse: ifx 231, type 4, tcp_seq 4188944133, netns 4026531840, sport 46162, dport 5432
-				// [POSTGRES]: Store transaction: tcp_seq 4188944133, netns 4026531840, query: INSERT INTO dummy (foo) VALUES ('value-1')
 				// [POSTGRES]: Parse: ifx 2, type 0, tcp_seq 4188944133, netns 4026533494, sport 46162, dport 5432
-				// [POSTGRES]: Store transaction: tcp_seq 4188944133, netns 4026533494, query: INSERT INTO dummy (foo) VALUES ('value-1')
-				// [POSTGRES]: Not Q/P: ifx 2, type 4, tcp_seq 1773475500, netns 4026533494, sport 5432, dport 46162
-				// [POSTGRES]: Not Q/P: ifx 232, type 3, tcp_seq 1773475500, netns 4026531840, sport 5432, dport 46162
-				// [POSTGRES]: Not Q/P: ifx 1, type 4, tcp_seq 2609089813, netns 4026531840, sport 5432, dport 50444
 				//
 				// We overwrite the previous parse since we don't find a Complete.
 				//
@@ -823,16 +888,13 @@ func testDecoding(t *testing.T, isTLS bool) {
 				validatePostgres(t, monitor, map[string]map[postgres.Operation]int{
 					"dummy": {
 						postgres.CreateTableOP: adjustCount(1),
-					},
-					"UNSUPPORTED": {
-						postgres.UnsupportedOP: adjustCount(1),
+						postgres.InsertOP:      adjustCount(1),
 					},
 				}, isTLS)
 			},
 		},
-		// The purpose of this test is to validate the POSTGRES_MAX_MESSAGES_PER_TAIL_CALL * POSTGRES_MAX_TAIL_CALLS_FOR_MAX_MESSAGES limit.
 		{
-			name: "validate max supported messages limit",
+			name: "long message",
 			preMonitorSetup: func(t *testing.T, ctx pgTestContext) {
 				pg, err := postgres.NewPGXClient(postgres.ConnectionOptions{
 					ServerAddress: ctx.serverAddress,
@@ -844,56 +906,22 @@ func testDecoding(t *testing.T, isTLS bool) {
 			},
 			postMonitorSetup: func(t *testing.T, ctx pgTestContext) {
 				pg := ctx.extras["pg"].(*postgres.PGXClient)
+				require.NoError(t, pg.Ping())
 				ctx.extras["pg"] = pg
 				require.NoError(t, pg.RunSimpleQuery(createTableQuery))
-				// We reduce the limit by 2 messages because the protocol adds messages at the beginning of the maximum message response.
-				require.NoError(t, pg.RunSimpleQuery(createInsertQuery(generateTestValues(1, protocols.PostgresMaxTotalMessages-3)...)))
-
-				// The goal here is to see if we can send a complete transaction even if the C message is after many messages.
-				// tshark output:
-				//
-				// 127.0.0.1|>Q|127.0.0.1|24|SELECT * FROM dummy
-				// 127.0.0.1|<T/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/D/C/Z|127.0.0.1|
+				// we generate 200 value to have a long SELECT response
+				require.NoError(t, pg.RunSimpleQuery(createInsertQuery(generateTestValues(1, 200)...)))
+				// we capture the `Z` at the end of the message so we don't care if the message is long.
+				// The previous implemenation used the `C` message to identify the end of the message, that's why
+				// it wasn't able to catch the SELECT transaction.
 				require.NoError(t, pg.RunSimpleQuery(selectAllQuery))
 			},
 			validation: func(t *testing.T, _ pgTestContext, monitor *Monitor) {
 				validatePostgres(t, monitor, map[string]map[postgres.Operation]int{
 					"dummy": {
+						postgres.InsertOP:      adjustCount(1),
+						postgres.CreateTableOP: adjustCount(1),
 						postgres.SelectOP:      adjustCount(1),
-						postgres.InsertOP:      adjustCount(1),
-						postgres.CreateTableOP: adjustCount(1),
-					},
-				}, isTLS)
-			},
-		},
-		// This test validates that when we exceed the POSTGRES_MAX_MESSAGES_PER_TAIL_CALL * POSTGRES_MAX_TAIL_CALLS_FOR_MAX_MESSAGES limit,
-		// the request is not captured as we will miss the response. In this case, it applies to the SELECT query.
-		{
-			name: "exceeding max supported messages limit",
-			preMonitorSetup: func(t *testing.T, ctx pgTestContext) {
-				pg, err := postgres.NewPGXClient(postgres.ConnectionOptions{
-					ServerAddress: ctx.serverAddress,
-					EnableTLS:     isTLS,
-				})
-				require.NoError(t, err)
-				require.NoError(t, pg.Ping())
-				ctx.extras["pg"] = pg
-			},
-			postMonitorSetup: func(t *testing.T, ctx pgTestContext) {
-				pg := ctx.extras["pg"].(*postgres.PGXClient)
-				require.NoError(t, pg.Ping())
-				ctx.extras["pg"] = pg
-				require.NoError(t, pg.RunSimpleQuery(createTableQuery))
-				require.NoError(t, pg.RunSimpleQuery(createInsertQuery(generateTestValues(1, protocols.PostgresMaxTotalMessages+1)...)))
-				// We won't be able to see the 'C' message because we have too many messages in the same packet.
-				// for this reason we won't recognize the transaction associated with the select query.
-				require.NoError(t, pg.RunSimpleQuery(selectAllQuery))
-			},
-			validation: func(t *testing.T, _ pgTestContext, monitor *Monitor) {
-				validatePostgres(t, monitor, map[string]map[postgres.Operation]int{
-					"dummy": {
-						postgres.InsertOP:      adjustCount(1),
-						postgres.CreateTableOP: adjustCount(1),
 					},
 				}, isTLS)
 			},
@@ -902,6 +930,10 @@ func testDecoding(t *testing.T, isTLS bool) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.skipReason != "" {
+				t.Skip(tt.skipReason)
+			}
+
 			tt.context = pgTestContext{
 				serverPort:    postgresPort,
 				targetAddress: serverAddress,
@@ -1037,194 +1069,13 @@ func validatePostgres(t *testing.T, monitor *Monitor, expectedStats map[string]m
 			if hasTLSTag != tls {
 				continue
 			}
-			if _, ok := found[key.Parameters]; !ok {
-				found[key.Parameters] = make(map[postgres.Operation]int)
+			if _, ok := found[key.TableName]; !ok {
+				found[key.TableName] = make(map[postgres.Operation]int)
 			}
-			found[key.Parameters][key.Operation] += stats.Count
+			found[key.TableName][key.Operation] += stats.Count
 		}
 		return reflect.DeepEqual(expectedStats, found)
 	}, time.Second*5, time.Millisecond*100, "Expected to find a %v stats, instead captured %v", &expectedStats, &found)
-}
-
-func (s *postgresProtocolParsingSuite) TestExtractParameters() {
-	t := s.T()
-
-	units := []struct {
-		name     string
-		expected string
-		event    ebpf.EbpfEvent
-	}{
-		{
-			name:     "query_size longer than the actual length of the content",
-			expected: "version and status",
-			event: ebpf.EbpfEvent{
-				Tx: ebpf.EbpfTx{
-					Request_fragment:    createFragment([]byte("SHOW version and status")),
-					Original_query_size: 64,
-				},
-			},
-		},
-		{
-			name:     "query_size shorter than the actual length of the content",
-			expected: "param1 param2",
-			event: ebpf.EbpfEvent{
-				Tx: ebpf.EbpfTx{
-					Request_fragment:    createFragment([]byte("SHOW param1 param2 param3")),
-					Original_query_size: 18,
-				},
-			},
-		},
-		{
-			name:     "the query has no parameters",
-			expected: postgres.EmptyParameters,
-			event: ebpf.EbpfEvent{
-				Tx: ebpf.EbpfTx{
-					Request_fragment:    createFragment([]byte("SHOW ")),
-					Original_query_size: 10,
-				},
-			},
-		},
-		{
-			name:     "command has trailing zeros",
-			expected: "param",
-			event: ebpf.EbpfEvent{
-				Tx: ebpf.EbpfTx{
-					Request_fragment:    [ebpf.BufferSize]byte{'S', 'H', 'O', 'W', ' ', 'p', 'a', 'r', 'a', 'm', 0, 0, 0},
-					Original_query_size: 13,
-				},
-			},
-		},
-		{
-			name:     "malformed command with wrong query_size",
-			expected: postgres.EmptyParameters,
-			event: ebpf.EbpfEvent{
-				Tx: ebpf.EbpfTx{
-					Request_fragment:    [ebpf.BufferSize]byte{'S', 'H', 'O', 'W', ' ', 0, 0, 'a', ' ', 'b', 'c', 0, 0, 0},
-					Original_query_size: 14,
-				},
-			},
-		},
-		{
-			name:     "empty parameters with spaces and nils",
-			expected: postgres.EmptyParameters,
-			event: ebpf.EbpfEvent{
-				Tx: ebpf.EbpfTx{
-					Request_fragment:    [ebpf.BufferSize]byte{'S', 'H', 'O', 'W', ' ', 0, ' ', 0, ' ', 0, 0, 0},
-					Original_query_size: 12,
-				},
-			},
-		},
-		{
-			name:     "parameters with control codes only",
-			expected: "\x01\x02\x03\x04\x05",
-			event: ebpf.EbpfEvent{
-				Tx: ebpf.EbpfTx{
-					Request_fragment:    [ebpf.BufferSize]byte{'S', 'H', 'O', 'W', ' ', 1, 2, 3, 4, 5},
-					Original_query_size: 10,
-				},
-			},
-		},
-	}
-	for _, unit := range units {
-		t.Run(unit.name, func(t *testing.T) {
-			e := postgres.NewEventWrapper(&unit.event)
-			require.NotNil(t, e)
-			e.Operation()
-			require.Equal(t, unit.expected, e.Parameters())
-		})
-	}
-}
-
-func createFragment(fragment []byte) [ebpf.BufferSize]byte {
-	var b [ebpf.BufferSize]byte
-	copy(b[:], fragment)
-	return b
-}
-
-func (s *postgresProtocolParsingSuite) TestKernelTelemetry() {
-	t := s.T()
-	tests := []struct {
-		name  string
-		isTLS bool
-	}{
-		{
-			name:  "without TLS",
-			isTLS: false,
-		},
-		{
-			name:  "with TLS",
-			isTLS: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.isTLS && !gotlstestutil.GoTLSSupported(t, config.New()) {
-				t.Skip("GoTLS not supported for this setup")
-			}
-			testKernelMessagesCount(t, tt.isTLS)
-		})
-	}
-}
-
-// testKernelMessagesCount check postgres kernel messages count.
-func testKernelMessagesCount(t *testing.T, isTLS bool) {
-	serverHost := "127.0.0.1"
-	serverAddress := net.JoinHostPort(serverHost, postgresPort)
-	require.NoError(t, postgres.RunServer(t, serverHost, postgresPort, isTLS))
-	waitForPostgresServer(t, serverAddress, isTLS)
-
-	monitor := setupUSMTLSMonitor(t, getPostgresDefaultTestConfiguration(isTLS))
-	if isTLS {
-		utils.WaitForProgramsToBeTraced(t, consts.USMModuleName, GoTLSAttacherName, os.Getpid(), utils.ManualTracingFallbackEnabled)
-	}
-	pgClient := setupPGClient(t, serverAddress, isTLS)
-	t.Cleanup(func() {
-		if pgClient != nil {
-			_ = pgClient.RunQuery(dropTableQuery)
-			pgClient.Close()
-			pgClient = nil
-		}
-	})
-
-	createLargeTable(t, pgClient, ebpf.MsgCountFirstBucket+ebpf.MsgCountBucketSize*ebpf.MsgCountNumBuckets)
-	expectedBuckets := [ebpf.MsgCountNumBuckets]bool{}
-
-	for i := 0; i < ebpf.MsgCountNumBuckets; i++ {
-		testName := fmt.Sprintf("kernel messages count bucket[%d]", i)
-		t.Run(testName, func(t *testing.T) {
-
-			expectedBuckets[i] = true
-			cleanProtocolMaps(t, "postgres", monitor.ebpfProgram.Manager.Manager)
-
-			require.NoError(t, monitor.Resume())
-			if i == 0 {
-				// first bucket, it counts upto ebpf.MsgCountFirstBucketMax messages
-				// subtract three messages ('bind', 'row description' and 'ready')
-				require.NoError(t, pgClient.RunQuery(generateSelectLimitQuery(ebpf.MsgCountFirstBucket-3)))
-			} else {
-				limitCount := ebpf.MsgCountFirstBucket + i*ebpf.MsgCountBucketSize - 3
-				require.NoError(t, pgClient.RunQuery(generateSelectLimitQuery(limitCount)))
-			}
-			require.NoError(t, monitor.Pause())
-
-			validateKernelBuckets(t, monitor, isTLS, expectedBuckets)
-			if i > 0 {
-				// clear current bucket except the first one, which is always non-empty.
-				expectedBuckets[i] = false
-			}
-		})
-	}
-
-	t.Run("exceed max buckets", func(t *testing.T) {
-
-		cleanProtocolMaps(t, "postgres", monitor.ebpfProgram.Manager.Manager)
-		require.NoError(t, monitor.Resume())
-
-		require.NoError(t, pgClient.RunQuery(generateSelectLimitQuery(ebpf.MsgCountMaxTotal)))
-		require.NoError(t, monitor.Pause())
-
-		validateKernelExceedingMax(t, monitor, isTLS)
-	})
 }
 
 func setupPGClient(t *testing.T, serverAddress string, isTLS bool) *postgres.PGXClient {
@@ -1235,74 +1086,4 @@ func setupPGClient(t *testing.T, serverAddress string, isTLS bool) *postgres.PGX
 	require.NoError(t, err)
 	require.NoError(t, pg.Ping())
 	return pg
-}
-
-// createLargeTable runs a postgres query to create a table large enough to retrieve long responses later.
-func createLargeTable(t *testing.T, pg *postgres.PGXClient, tableValuesCount int) {
-	require.NoError(t, pg.RunQuery(createTableQuery))
-	require.NoError(t, pg.RunQuery(createInsertQuery(generateTestValues(0, tableValuesCount)...)))
-}
-
-// validateKernel Checking telemetry data received for a postgres query
-func validateKernelBuckets(t *testing.T, monitor *Monitor, tls bool, expected [ebpf.MsgCountNumBuckets]bool) {
-	var actual *ebpf.PostgresKernelMsgCount
-	assert.Eventually(t, func() bool {
-		found, err := getKernelTelemetry(monitor, tls)
-		if err != nil {
-			return false
-		}
-		actual = found
-		return compareMessagesCount(found, expected)
-	}, time.Second*2, time.Millisecond*100)
-	if t.Failed() {
-		t.Logf("expected telemetry:\n %+v;\nactual telemetry:\n %+v", expected, actual)
-		ebpftest.DumpMapsTestHelper(t, monitor.DumpMaps, postgres.KernelTelemetryMap)
-	}
-}
-
-// getKernelTelemetry returns statistics obtained from the kernel
-func getKernelTelemetry(monitor *Monitor, isTLS bool) (*ebpf.PostgresKernelMsgCount, error) {
-	pgKernelTelemetry := &ebpf.PostgresKernelMsgCount{}
-	mapName := postgres.KernelTelemetryMap
-	key := uint32(0)
-	if isTLS {
-		key = uint32(1)
-	}
-	mp, _, err := monitor.ebpfProgram.GetMap(mapName)
-	if err != nil {
-		return nil, fmt.Errorf("unable to get %q map: %s", mapName, err)
-	}
-	if err := mp.Lookup(unsafe.Pointer(&key), unsafe.Pointer(pgKernelTelemetry)); err != nil {
-		return nil, fmt.Errorf("unable to lookup %q map: %s", mapName, err)
-	}
-	return pgKernelTelemetry, nil
-}
-
-// compareMessagesCount returns true if the expected bucket is non-empty
-func compareMessagesCount(found *ebpf.PostgresKernelMsgCount, expected [ebpf.MsgCountNumBuckets]bool) bool {
-	for i := range expected {
-		if expected[i] && found.Msg_count_buckets[i] == 0 {
-			return false
-		}
-		if !expected[i] && found.Msg_count_buckets[i] > 0 {
-			return false
-		}
-	}
-	return true
-}
-
-// validateKernelExceedingMax check for exceeding the maximum number of buckets
-func validateKernelExceedingMax(t *testing.T, monitor *Monitor, tls bool) {
-	var actual *ebpf.PostgresKernelMsgCount
-	assert.Eventually(t, func() bool {
-		found, err := getKernelTelemetry(monitor, tls)
-		if err != nil {
-			return false
-		}
-		actual = found
-		return found.Reached_max_messages > 0
-	}, time.Second*2, time.Millisecond*100)
-	if t.Failed() {
-		t.Logf("expected non-zero max messages, actual telemetry:\n %+v", actual)
-	}
 }

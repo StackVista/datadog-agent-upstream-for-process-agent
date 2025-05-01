@@ -1,47 +1,30 @@
 #ifndef __POSTGRES_DEFS_H
 #define __POSTGRES_DEFS_H
 
-// The minimum size we want to be able to check for a startup message. This size includes:
-// - The length field: 4 bytes
-// - The protocol major version: 2 bytes
-// - The protocol minor version: 2 bytes
-// - The "user" string, as the first connection parameter name: 5 bytes
-#define POSTGRES_STARTUP_MIN_LEN 13
-
 // Postgres protocol version, in big endian, as described in the protocol
 // specification. This is version "3.0". Version "3.0" of the protocol has been
 // in use since PostgreSQL 7.4, released more than 20 years ago, so we will focus on this.
 // https://www.postgresql.org/docs/current/protocol-message-formats.html#PROTOCOL-MESSAGE-FORMATS-STARTUPMESSAGE
 #define PG_STARTUP_VERSION 196608
 #define PG_STARTUP_USER_PARAM "user"
+#define PG_STARTUP_DATABASE_PARAM "database"
 
-// From https://www.postgresql.org/docs/current/protocol-overview.html:
-// The first byte of a message identifies the message type, and the next four
-// bytes specify the length of the rest of the message (this length count
-// includes itself, but not the message-type byte). The remaining contents of
-// the message are determined by the message type. Some messages do not have
-// a payload at all, so the minimum size, including the length itself, is
-// 4 bytes.
-#define POSTGRES_MIN_PAYLOAD_LEN 4
-// Assume typical query message size is below an artificial limit.
-// 30000 is copied from postgres code base:
-// https://github.com/postgres/postgres/blob/0164a0f9ee12e0eff9e4c661358a272ecd65c2d4/src/interfaces/libpq/fe-protocol3.c#L97
-// Please note that there is no guarantee that this is the maximum size of a message, if you see the postgres code there is also
-// there is a double condition `(msgLength > 30000 && !VALID_LONG_MESSAGE_TYPE(id))`. 
-// If the message is a `VALID_LONG_MESSAGE_TYPE` (e.g. 'E' message) it could be longer than 30000. Today we only parse 'Q' and 'C' messages,
-// so we should be fine with this limit.
-#define POSTGRES_MAX_PAYLOAD_LEN 30000
-
+// Frontend messages
 #define POSTGRES_QUERY_MAGIC_BYTE 'Q'
 #define POSTGRES_BIND_MAGIC_BYTE 'B'
 #define POSTGRES_PARSE_MAGIC_BYTE 'P'
-#define POSTGRES_COMMAND_COMPLETE_MAGIC_BYTE 'C'
+
+// Backend messages
+#define POSTGRES_PARSE_COMPLETE_MAGIC_BYTE '1'
 #define POSTGRES_BIND_COMPLETE_MAGIC_BYTE '2'
+// When we use a connection pool before sending the statement usually we close ('C') the previous one.
+// So in the response we can see a close complete message as a first message.
+#define POSTGRES_CLOSE_COMPLETE_MAGIC_BYTE '3'
+#define POSTGRES_READY_FOR_QUERY_MAGIC_BYTE 'Z'
 
-#define NULL_TERMINATOR '\0'
-
-#define POSTGRES_SKIP_STRING_ITERATIONS 8
-#define SKIP_STRING_FAILED 0
+// Fake Postgres codes created by us to uniform Startup message and TCP termination to postgres standard format message.
+#define POSTGRES_STARTUP_FAKE_MAGIC_BYTE '+'
+#define POSTGRES_TCP_TERMINATION_FAKE_MAGIC_BYTE '='
 
 // Regular format of postgres message: | byte tag | int32_t len | string payload |
 // From https://www.postgresql.org/docs/current/protocol-overview.html:

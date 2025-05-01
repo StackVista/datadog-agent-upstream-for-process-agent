@@ -8,19 +8,10 @@
 package postgres
 
 import (
-	"fmt"
-	"strconv"
-
 	"github.com/DataDog/datadog-agent/pkg/network/config"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/postgres/ebpf"
 	libtelemetry "github.com/DataDog/datadog-agent/pkg/network/protocols/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
-)
-
-const (
-	numberOfBuckets                         = 10
-	bucketLength                            = 15
-	numberOfBucketsSmallerThanMaxBufferSize = 3
 )
 
 type counterStateEnum int
@@ -90,74 +81,31 @@ func (c *extractionFailureCounter) get(state counterStateEnum) int64 {
 type Telemetry struct {
 	metricGroup *libtelemetry.MetricGroup
 
-	// queryLengthBuckets holds the counters for the different buckets of by the query length quires
-	queryLengthBuckets [numberOfBuckets]*extractionFailureCounter
 	// failedTableNameExtraction holds the counter for the failed table name extraction
 	failedTableNameExtraction *libtelemetry.Counter
 	// failedOperationExtraction holds the counter for the failed operation extraction
 	failedOperationExtraction *libtelemetry.Counter
-	// firstBucketLowerBoundary is the lower boundary of the first bucket.
-	// We inc 1 in order to include BufferSize as the upper boundary of the third bucket.
-	// Then the first three buckets will include query lengths shorter or equal to BufferSize,
-	// and the rest will include sizes equal to or above the buffer size.
-	firstBucketLowerBoundary int
-}
-
-// createQueryLengthBuckets initializes the query length buckets
-// The buckets are defined relative to a `BufferSize` and a `bucketLength` as follows:
-// Bucket 0: 0 to BufferSize - 2*bucketLength
-// Bucket 1: BufferSize - 2*bucketLength + 1 to BufferSize - bucketLength
-// Bucket 2: BufferSize - bucketLength + 1 to BufferSize
-// Bucket 3: BufferSize + 1 to BufferSize + bucketLength
-// Bucket 4: BufferSize + bucketLength + 1 to BufferSize + 2*bucketLength
-// Bucket 5: BufferSize + 2*bucketLength + 1 to BufferSize + 3*bucketLength
-// Bucket 6: BufferSize + 3*bucketLength + 1 to BufferSize + 4*bucketLength
-// Bucket 7: BufferSize + 4*bucketLength + 1 to BufferSize + 5*bucketLength
-// Bucket 8: BufferSize + 5*bucketLength + 1 to BufferSize + 6*bucketLength
-// Bucket 9: BufferSize + 6*bucketLength + 1 to BufferSize + 7*bucketLength
-func createQueryLengthBuckets(metricGroup *libtelemetry.MetricGroup) [numberOfBuckets]*extractionFailureCounter {
-	var buckets [numberOfBuckets]*extractionFailureCounter
-	for i := 0; i < numberOfBuckets; i++ {
-		buckets[i] = newExtractionFailureCounter(metricGroup, "query_length_bucket"+fmt.Sprint(i+1), libtelemetry.OptStatsd)
-	}
-	return buckets
 }
 
 // NewTelemetry creates a new Telemetry
 func NewTelemetry(cfg *config.Config) *Telemetry {
 	metricGroup := libtelemetry.NewMetricGroup("usm.postgres")
 
-	firstBucketLowerBoundary := cfg.MaxPostgresTelemetryBuffer - numberOfBucketsSmallerThanMaxBufferSize*bucketLength + 1
-	if firstBucketLowerBoundary < 0 {
-		log.Warnf("The first bucket lower boundary is negative: %d", firstBucketLowerBoundary)
-		firstBucketLowerBoundary = ebpf.BufferSize - numberOfBucketsSmallerThanMaxBufferSize*bucketLength + 1
-	}
-
 	return &Telemetry{
 		metricGroup:               metricGroup,
-		queryLengthBuckets:        createQueryLengthBuckets(metricGroup),
 		failedTableNameExtraction: metricGroup.NewCounter("failed_table_name_extraction", libtelemetry.OptStatsd),
 		failedOperationExtraction: metricGroup.NewCounter("failed_operation_extraction", libtelemetry.OptStatsd),
-		firstBucketLowerBoundary:  firstBucketLowerBoundary,
 	}
-}
-
-// getBucketIndex returns the index of the bucket for the given query size
-func (t *Telemetry) getBucketIndex(querySize int) int {
-	bucketIndex := max(0, querySize-t.firstBucketLowerBoundary) / bucketLength
-	return min(bucketIndex, numberOfBuckets-1)
 }
 
 // Count increments the telemetry counters based on the event data
 func (t *Telemetry) Count(tx *ebpf.EbpfEvent, eventWrapper *EventWrapper) {
-	querySize := int(tx.Tx.Original_query_size)
-
 	state := tableAndOperation
-	if eventWrapper.Operation() == UnknownOP {
+	if eventWrapper.getSQLCommand() == UnknownOP {
 		t.failedOperationExtraction.Add(1)
 		state = operationNotFound
 	}
-	if eventWrapper.Parameters() == "UNKNOWN" {
+	if eventWrapper.getTableName() == "UNKNOWN" {
 		t.failedTableNameExtraction.Add(1)
 		if state == operationNotFound {
 			state = tableAndOpNotFound
@@ -165,59 +113,9 @@ func (t *Telemetry) Count(tx *ebpf.EbpfEvent, eventWrapper *EventWrapper) {
 			state = tableNameNotFound
 		}
 	}
-	bucketIndex := t.getBucketIndex(querySize)
-	if bucketIndex >= 0 && bucketIndex < len(t.queryLengthBuckets) {
-		t.queryLengthBuckets[bucketIndex].inc(state)
-	}
 }
 
 // Log logs the postgres stats summary
 func (t *Telemetry) Log() {
 	log.Infof("postgres stats summary: %s", t.metricGroup.Summary())
-}
-
-// kernelTelemetry  provides empirical kernel statistics about the number of messages in each TCP packet
-type kernelTelemetry struct {
-	metricGroup        *libtelemetry.MetricGroup
-	reachedMaxMessages *libtelemetry.TLSAwareCounter
-	fragmentedPackets  *libtelemetry.TLSAwareCounter
-	msgCountBuckets    [ebpf.MsgCountNumBuckets]*libtelemetry.TLSAwareCounter // Postgres messages counters divided into buckets
-}
-
-// newKernelTelemetry this is the Postgres message counter store.
-func newKernelTelemetry() *kernelTelemetry {
-	metricGroup := libtelemetry.NewMetricGroup("usm.postgres", libtelemetry.OptStatsd)
-	kernelTel := &kernelTelemetry{
-		metricGroup: metricGroup,
-	}
-	kernelTel.reachedMaxMessages = libtelemetry.NewTLSAwareCounter(metricGroup, "max_messages")
-	kernelTel.fragmentedPackets = libtelemetry.NewTLSAwareCounter(metricGroup, "incomplete_messages")
-
-	for i := range kernelTel.msgCountBuckets {
-		kernelTel.msgCountBuckets[i] = libtelemetry.NewTLSAwareCounter(metricGroup, "messages_count_bucket_"+strconv.Itoa(i+1))
-	}
-	return kernelTel
-}
-
-// update the postgres message counter store with new counters from the kernel, return immediately if nothing to add.
-func (t *kernelTelemetry) update(kernCounts *ebpf.PostgresKernelMsgCount, isTLS bool) {
-	if kernCounts == nil {
-		return
-	}
-
-	t.reachedMaxMessages.Set(int64(kernCounts.Reached_max_messages), isTLS)
-	t.fragmentedPackets.Set(int64(kernCounts.Fragmented_packets), isTLS)
-
-	for i := range t.msgCountBuckets {
-		v := kernCounts.Msg_count_buckets[i]
-		t.msgCountBuckets[i].Set(int64(v), isTLS)
-	}
-}
-
-// Log logs summary of telemetry
-func (t *kernelTelemetry) Log() {
-	if log.ShouldLog(log.DebugLvl) {
-		s := t.metricGroup.Summary()
-		log.Debugf("postgres kernel telemetry, summary: %s", s)
-	}
 }

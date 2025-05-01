@@ -104,7 +104,7 @@ static __always_inline protocol_t classify_db_protocols(conn_tuple_t *tup, const
         return PROTOCOL_MONGO;
     }
 
-    if (is_postgres(buf, size)) {
+    if (is_postgres(buf)) {
         return PROTOCOL_POSTGRES;
     }
 

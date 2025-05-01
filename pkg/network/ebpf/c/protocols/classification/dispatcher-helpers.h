@@ -87,7 +87,7 @@ static __always_inline void classify_protocol_for_dispatcher(protocol_t *protoco
         *protocol = PROTOCOL_HTTP;
     } else if (is_http2_monitoring_enabled() && is_http2(buf, size)) {
         *protocol = PROTOCOL_HTTP2;
-    } else if (is_postgres_monitoring_enabled() && is_postgres(buf, size)) {
+    } else if (is_postgres_monitoring_enabled() && is_postgres(buf)) {
         *protocol = PROTOCOL_POSTGRES;
     } else if (is_redis_monitoring_enabled() && is_redis(buf, size)) {
         *protocol = PROTOCOL_REDIS;
@@ -264,6 +264,16 @@ static __always_inline bool fetch_dispatching_arguments(conn_tuple_t *tup, skb_i
     bpf_memcpy(tup, &args->tup, sizeof(conn_tuple_t));
     bpf_memcpy(skb_info, &args->skb_info, sizeof(skb_info_t));
 
+    return true;
+}
+
+static __always_inline bool fetch_skb_info(skb_info_t *skb_info) {
+    const __u32 zero = 0;
+    dispatcher_arguments_t *args = bpf_map_lookup_elem(&dispatcher_arguments, &zero);
+    if (args == NULL) {
+        return false;
+    }
+    bpf_memcpy(skb_info, &args->skb_info, sizeof(skb_info_t));
     return true;
 }
 

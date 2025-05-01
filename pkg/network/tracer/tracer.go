@@ -182,7 +182,10 @@ func newTracer(cfg *config.Config, telemetryComponent telemetryComponent.Compone
 	}
 
 	tr.reverseDNS = newReverseDNS(cfg, telemetryComponent)
-	tr.usmMonitor = newUSMMonitor(cfg, tr.ebpfTracer)
+	tr.usmMonitor, err = newUSMMonitor(cfg, tr.ebpfTracer)
+	if err != nil {
+		return nil, err
+	}
 
 	// Set up the connection_protocol map cleaner if protocol classification is enabled
 	if cfg.ProtocolClassificationEnabled || usmconfig.IsUSMSupportedAndEnabled(cfg) {
@@ -859,10 +862,10 @@ func (t *Tracer) DebugDumpProcessCache(_ context.Context) (interface{}, error) {
 	return nil, nil
 }
 
-func newUSMMonitor(c *config.Config, tracer connection.Tracer) *usm.Monitor {
+func newUSMMonitor(c *config.Config, tracer connection.Tracer) (*usm.Monitor, error) {
 	if !usmconfig.IsUSMSupportedAndEnabled(c) {
 		// If USM is not supported, or if USM is not enabled, we should not start the USM monitor.
-		return nil
+		return nil, nil
 	}
 
 	// Shared map between NPM and USM
@@ -873,16 +876,14 @@ func newUSMMonitor(c *config.Config, tracer connection.Tracer) *usm.Monitor {
 
 	monitor, err := usm.NewMonitor(c, connectionProtocolMap)
 	if err != nil {
-		log.Errorf("usm initialization failed: %s", err)
-		return nil
+		return nil, fmt.Errorf("usm initialization failed: %w", err)
 	}
 
 	if err := monitor.Start(); err != nil {
-		log.Errorf("usm startup failed: %s", err)
-		return nil
+		return nil, fmt.Errorf("usm startup failed: %w", err)
 	}
 
-	return monitor
+	return monitor, nil
 }
 
 // GetNetworkID retrieves the vpc_id (network_id) from IMDS

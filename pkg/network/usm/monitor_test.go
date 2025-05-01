@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -204,91 +205,87 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 	// This is the exact number of instruction we obtain compiling with clang-12 in our docker build image.
 	// To generate them again is enough to use the for loop above, disabling the assertions.
 	instrCounts := map[string]int{
-		"socket__mongo_filter":                                     397,
-		"kprobe__tcp_close":                                        779,
-		"uprobe__SSL_write_ex":                                     18,
-		"uprobe__gnutls_handshake":                                 14,
-		"uprobe__SSL_do_handshake":                                 14,
-		"uprobe__SSL_shutdown":                                     358,
-		"uretprobe__SSL_write_ex":                                  4862,
-		"uprobe__kafka_tls_filter":                                 6542,
-		"uprobe__SSL_write":                                        16,
-		"uprobe__gnutls_transport_set_int2":                        22,
-		"nodejs_uretprobe__SSL_write":                              4895,
-		"uretprobe__SSL_read_ex":                                   4847,
-		"istio_uretprobe__SSL_read":                                4850,
-		"uprobe__http_process":                                     101546,
-		"uprobe__postgres_tls_handle_response":                     5051,
-		"uprobe__SSL_read_ex":                                      75,
-		"socket__postgres_handle_response":                         4012,
-		"uprobe__redis_tls_process":                                2,
-		"socket__http_filter":                                      78343,
-		"socket__kafka_filter":                                     6932,
-		"uprobe__http2_tls_headers_parser":                         800877,
-		"socket__kafka_fetch_response_partition_parser_v0":         7483,
-		"kprobe__tcp_sendmsg":                                      593,
-		"uprobe__http_termination":                                 615,
+		"istio_uretprobe__SSL_read":                                4812,
+		"istio_uretprobe__SSL_write":                               4857,
 		"kprobe__sockfd_lookup_light":                              22,
-		"uprobe__gnutls_deinit":                                    358,
-		"uprobe__amqp_process":                                     295698,
-		"nodejs_uretprobe__SSL_write_ex":                           4862,
-		"socket__amqp_process":                                     290144,
-		"nodejs_uretprobe__SSL_read_ex":                            4847,
-		"uprobe__gnutls_bye":                                       358,
-		"uprobe__gnutls_transport_set_ptr":                         22,
-		"uprobe__SSL_set_fd":                                       22,
-		"socket__http2_eos_parser":                                 79818,
-		"uprobe__kafka_tls_fetch_response_partition_parser_v12":    5531,
-		"uretprobe__SSL_do_handshake":                              9,
-		"socket__protocol_dispatcher_kafka":                        18984,
-		"uretprobe__SSL_connect":                                   9,
-		"socket__postgres_handle":                                  1187,
-		"socket__kafka_fetch_response_record_batch_parser_v0":      3754,
-		"uprobe__http2_dynamic_table_cleaner":                      3964,
-		"tracepoint__net__netif_receive_skb":                       2189,
+		"kprobe__tcp_close":                                        779,
+		"kprobe__tcp_sendmsg":                                      593,
 		"kretprobe__sockfd_lookup_light":                           651,
-		"nodejs_uretprobe__SSL_read":                               4850,
-		"uprobe__gnutls_record_send":                               16,
-		"uretprobe__gnutls_handshake":                              9,
-		"uprobe__http2_tls_eos_parser":                             79815,
-		"uprobe__kafka_tls_produce_response_partition_parser_v9":   1297,
-		"uprobe__tls_protocol_dispatcher_kafka":                    31785,
-		"uprobe__gnutls_record_recv":                               16,
-		"uprobe__mongo_process":                                    417,
-		"uretprobe__BIO_new_socket":                                29,
-		"uprobe__kafka_tls_fetch_response_partition_parser_v0":     8889,
-		"uretprobe__gnutls_record_send":                            4888,
-		"socket__postgres_process_parse_message":                   54511,
-		"istio_uretprobe__SSL_write":                               4895,
-		"uprobe__postgres_tls_termination":                         26,
-		"uprobe__kafka_tls_fetch_response_record_batch_parser_v12": 3970,
+		"nodejs_uretprobe__SSL_read":                               4812,
+		"nodejs_uretprobe__SSL_read_ex":                            4827,
+		"nodejs_uretprobe__SSL_write":                              4857,
+		"nodejs_uretprobe__SSL_write_ex":                           4829,
+		"socket__amqp_process":                                     290144,
+		"socket__http2_dynamic_table_cleaner":                      3968,
+		"socket__http2_eos_parser":                                 79818,
 		"socket__http2_filter":                                     125275,
-		"uprobe__postgres_tls_handle":                              219,
 		"socket__http2_handle_first_frame":                         1116,
-		"uprobe__SSL_set_bio":                                      35,
-		"uprobe__postgres_tls_process_parse_message":               3205,
-		"socket__kafka_fetch_response_partition_parser_v12":        4862,
-		"uprobe__redis_tls_termination":                            2,
-		"uretprobe__SSL_write":                                     4895,
-		"uprobe__http2_tls_termination":                            107,
-		"uprobe__SSL_read":                                         73,
-		"uprobe__kafka_tls_produce_response_partition_parser_v0":   1193,
-		"uprobe__kafka_tls_termination":                            43,
-		"uprobe__http2_tls_handle_first_frame":                     955,
-		"uretprobe__gnutls_record_recv":                            4843,
-		"uretprobe__SSL_read":                                      4850,
-		"uprobe__BIO_new_socket":                                   14,
-		"socket__kafka_fetch_response_record_batch_parser_v12":     3754,
 		"socket__http2_headers_parser":                             779373,
-		"uprobe__SSL_connect":                                      14,
-		"uprobe__http2_tls_filter":                                 67862,
-		"uprobe__gnutls_transport_set_ptr2":                        22,
-		"uprobe__kafka_tls_fetch_response_record_batch_parser_v0":  3970,
-		"socket__protocol_dispatcher":                              16992,
+		"socket__http_filter":                                      78343,
+		"socket__kafka_fetch_response_partition_parser_v0":         7483,
+		"socket__kafka_fetch_response_partition_parser_v12":        4862,
+		"socket__kafka_fetch_response_record_batch_parser_v0":      3754,
+		"socket__kafka_fetch_response_record_batch_parser_v12":     3754,
+		"socket__kafka_filter":                                     6932,
 		"socket__kafka_produce_response_partition_parser_v0":       1123,
 		"socket__kafka_produce_response_partition_parser_v9":       1211,
+		"socket__mongo_filter":                                     397,
+		"socket__postgres_handle":                                  3773,
+		"socket__protocol_dispatcher":                              16775,
+		"socket__protocol_dispatcher_kafka":                        18984,
 		"socket__redis_process":                                    2,
-		"socket__http2_dynamic_table_cleaner":                      3968,
+		"tracepoint__net__netif_receive_skb":                       2189,
+		"uprobe__BIO_new_socket":                                   14,
+		"uprobe__SSL_connect":                                      14,
+		"uprobe__SSL_do_handshake":                                 14,
+		"uprobe__SSL_read":                                         73,
+		"uprobe__SSL_read_ex":                                      75,
+		"uprobe__SSL_set_bio":                                      35,
+		"uprobe__SSL_set_fd":                                       22,
+		"uprobe__SSL_shutdown":                                     358,
+		"uprobe__SSL_write":                                        16,
+		"uprobe__SSL_write_ex":                                     18,
+		"uprobe__amqp_process":                                     295698,
+		"uprobe__gnutls_bye":                                       358,
+		"uprobe__gnutls_deinit":                                    358,
+		"uprobe__gnutls_handshake":                                 14,
+		"uprobe__gnutls_record_recv":                               16,
+		"uprobe__gnutls_record_send":                               16,
+		"uprobe__gnutls_transport_set_int2":                        22,
+		"uprobe__gnutls_transport_set_ptr":                         22,
+		"uprobe__gnutls_transport_set_ptr2":                        22,
+		"uprobe__http2_dynamic_table_cleaner":                      3964,
+		"uprobe__http2_tls_eos_parser":                             79815,
+		"uprobe__http2_tls_filter":                                 67862,
+		"uprobe__http2_tls_handle_first_frame":                     955,
+		"uprobe__http2_tls_headers_parser":                         800877,
+		"uprobe__http2_tls_termination":                            107,
+		"uprobe__http_process":                                     101546,
+		"uprobe__http_termination":                                 615,
+		"uprobe__kafka_tls_fetch_response_partition_parser_v0":     8889,
+		"uprobe__kafka_tls_fetch_response_partition_parser_v12":    5531,
+		"uprobe__kafka_tls_fetch_response_record_batch_parser_v0":  3970,
+		"uprobe__kafka_tls_fetch_response_record_batch_parser_v12": 3970,
+		"uprobe__kafka_tls_filter":                                 6542,
+		"uprobe__kafka_tls_produce_response_partition_parser_v0":   1193,
+		"uprobe__kafka_tls_produce_response_partition_parser_v9":   1297,
+		"uprobe__kafka_tls_termination":                            43,
+		"uprobe__mongo_process":                                    417,
+		"uprobe__postgres_tls_handle":                              2832,
+		"uprobe__postgres_tls_termination":                         281,
+		"uprobe__redis_tls_process":                                2,
+		"uprobe__redis_tls_termination":                            2,
+		"uprobe__tls_protocol_dispatcher_kafka":                    31785,
+		"uretprobe__BIO_new_socket":                                29,
+		"uretprobe__SSL_connect":                                   9,
+		"uretprobe__SSL_do_handshake":                              9,
+		"uretprobe__SSL_read":                                      4812,
+		"uretprobe__SSL_read_ex":                                   4827,
+		"uretprobe__SSL_write":                                     4857,
+		"uretprobe__SSL_write_ex":                                  4829,
+		"uretprobe__gnutls_handshake":                              9,
+		"uretprobe__gnutls_record_recv":                            4805,
+		"uretprobe__gnutls_record_send":                            4850,
 	}
 
 	cfg := utils.NewUSMEmptyConfig()
@@ -323,13 +320,35 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 	}
 
 	if mismatch {
+		/////////////////////
+		// Dump the diff so we can check what is changed
+		/////////////////////
 		for name, instr := range mismatchMap {
 			msg := "++"
+			// `--` less instruction than before
 			if instr < instrCounts[name] {
 				msg = "--"
 			}
-			t.Logf("- [%s] mismatch for prog %s: expected %d != actual %d\n", msg, name, instrCounts[name], instr)
+			t.Logf("- [%s] mismatch for prog %q: expected %d != actual %d\n", msg, name, instrCounts[name], instr)
+			// Update to the new value so that at the end of the test we can create the new table to copy and paste
+			instrCounts[name] = instr
 		}
+
+		/////////////////////
+		// Dump the new table so we can copy and paste it
+		/////////////////////
+
+		// sort it by name
+		keys := make([]string, 0, len(instrCounts))
+		for k := range instrCounts {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		for _, k := range keys {
+			fmt.Printf("%q: %d,\n", k, instrCounts[k])
+		}
+
 		t.Errorf("instruction count mismatch")
 	}
 }

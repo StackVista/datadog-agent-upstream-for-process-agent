@@ -149,12 +149,18 @@ func (s *USMSuite) TestVerifierComplexity() {
 	t := s.T()
 	cfg := tracertestutil.Config()
 	cfg.EnableNativeTLSMonitoring = true
+	cfg.EnableHTTPMonitoring = true
+	cfg.EnableHTTP2Monitoring = true
+	cfg.EnableKafkaMonitoring = true
+	cfg.EnablePostgresMonitoring = true
+	cfg.EnableRedisMonitoring = true
+	cfg.EnableMongoMonitoring = true
+	cfg.EnableAMQPMonitoring = true
 	cfg.ServiceMonitoringEnabled = true
 	cfg.EnableGoTLSSupport = false
-	cfg.EnableAMQPMonitoring = true
-	cfg.EnableMongoMonitoring = true
 	cfg.MaxAMQPStatsBuffered = 1000
-	cfg.BPFDebug = true
+	// this enable ebpf debug logs
+	// cfg.BPFDebug = true
 	// log.SetupLogger(seelog.Default, "debug")
 	tr, err := tracer.NewTracer(cfg, nil)
 	require.NoError(t, err)
@@ -736,6 +742,8 @@ func (s *USMSuite) TestTLSClassification() {
 	cfg.ProtocolClassificationEnabled = true
 	cfg.CollectTCPv4Conns = true
 	cfg.CollectTCPv6Conns = true
+	// we don't support it in prebuilt mode
+	cfg.EnableGoTLSSupport = false
 
 	if !classificationSupported(cfg) {
 		t.Skip("TLS classification platform not supported")
