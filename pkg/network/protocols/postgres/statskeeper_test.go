@@ -58,6 +58,8 @@ func TestSimpleQueries(t *testing.T) {
 	cfg.MaxPostgresStatsBuffered = 100
 	s, err := NewStatkeeper(cfg)
 	require.NoError(t, err)
+
+	// we process 20 simple queries, we miss the startup so we don't have the database name
 	for i := 0; i < 20; i++ {
 		event := NewEventWrapper(&ebpf.EbpfEvent{
 			Tx: ebpf.EbpfTx{
@@ -67,7 +69,7 @@ func TestSimpleQueries(t *testing.T) {
 			},
 		})
 		s.Process(event)
-		require.Equal(t, "", event.getDatabaseName())
+		require.Equal(t, UnsupportedString, event.getDatabaseName())
 		require.Equal(t, SelectOP, event.getSQLCommand())
 		require.Equal(t, "foo", event.getTableName())
 	}
@@ -125,7 +127,7 @@ func TestFullFlow(t *testing.T) {
 	// we should have the database name in the table
 	require.Equal(t, databaseName, e.getDatabaseName())
 	require.Equal(t, UnknownOP, e.getSQLCommand())
-	require.Equal(t, "", e.getTableName())
+	require.Equal(t, UnsupportedString, e.getTableName())
 
 	// we shouldn't have any stats yet
 	require.Equal(t, 0, len(s.stats))
@@ -173,7 +175,7 @@ func TestFullFlow(t *testing.T) {
 	require.Equal(t, databaseName, e.getDatabaseName())
 	// this is a parse message, we shouldn't have these values
 	require.Equal(t, UnknownOP, e.getSQLCommand())
-	require.Equal(t, "", e.getTableName())
+	require.Equal(t, UnsupportedString, e.getTableName())
 	// no new stats
 	require.Equal(t, 1, len(s.stats))
 
@@ -315,7 +317,7 @@ func TestFullFlow(t *testing.T) {
 	// stats are untouched
 	require.Equal(t, 3, len(s.stats))
 	// we cannot retrieve the database name anymore
-	require.Equal(t, "", e.getDatabaseName())
+	require.Equal(t, UnsupportedString, e.getDatabaseName())
 	// we shouldn't have any statement anymore
 	require.Equal(t, 0, statementsCache.Len())
 }

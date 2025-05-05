@@ -66,6 +66,13 @@ type queryInfo struct {
 	tableName  string
 }
 
+func newQueryInfo() queryInfo {
+	return queryInfo{
+		sqlCommand: UnknownOP,
+		tableName:  UnsupportedString,
+	}
+}
+
 // EventWrapper wraps an ebpf event and provides additional methods to extract information from it.
 // We use this wrapper to avoid recomputing the same values (operation and table name) multiple times.
 type EventWrapper struct {
@@ -80,6 +87,7 @@ func NewEventWrapper(e *ebpf.EbpfEvent) *EventWrapper {
 	return &EventWrapper{
 		EbpfEvent:  e,
 		normalizer: sqllexer.NewNormalizer(sqllexer.WithCollectTables(true)),
+		info:       newQueryInfo(),
 	}
 }
 
@@ -140,7 +148,9 @@ func extractDatabaseName(payload []byte) string {
 		i += vEndRel + 1
 	}
 
-	// fallback: se non ho trovato database, ma avevo user completo
+	if userName == "" {
+		userName = UnsupportedString
+	}
 	return userName
 }
 
@@ -168,10 +178,10 @@ func extractSQLCommandAndTable(n *sqllexer.Normalizer, payload []byte) queryInfo
 	// todo!: Maybe we can evaluate other parsers to extract also the SQL command since today our detection is partial. https://github.com/xwb1989/sqlparser
 	// We need to evaluate what is the overhead in term of perfomance. We can use the go benchmark built-in
 	_, statementMetadata, err := n.Normalize(string(payload), postgresDBMS)
-	qinfo := queryInfo{}
+	qinfo := newQueryInfo()
 	if err != nil {
 		log.Warnf("unable to normalize SQL query due to: %s", err)
-	} else if len(statementMetadata.Tables) != 0 {
+	} else if len(statementMetadata.Tables) != 0 && statementMetadata.Tables[0] != "" {
 		// Currently, we do not support complex queries with multiple tables. Therefore, we will return only a single table.
 		qinfo.tableName = statementMetadata.Tables[0]
 	}
@@ -190,12 +200,12 @@ func extractStatementFromParse(n *sqllexer.Normalizer, payload []byte) (string, 
 	idx := bytes.IndexByte(payload, 0)
 	if idx == -1 {
 		log.Warnf("Postgres Parse message: Statement name too long: %s", payload)
-		return "", queryInfo{}
+		return "", newQueryInfo()
 	}
 	// extract the command and the table from the query
 	if len(payload)-idx < 4 {
 		// small optimization to avoid calling the normalizer if we don't have a query
-		return string(payload[:idx]), queryInfo{}
+		return string(payload[:idx]), newQueryInfo()
 	}
 	return string(payload[:idx]), extractSQLCommandAndTable(n, payload[idx+1:])
 }
@@ -258,7 +268,10 @@ func (e *EventWrapper) getTableName() string {
 }
 
 func (e *EventWrapper) getDatabaseName() string {
-	name, _ := databaseNamesCache.Get(e.ConnTuple())
+	name, ok := databaseNamesCache.Get(e.ConnTuple())
+	if !ok {
+		name = UnsupportedString
+	}
 	return name
 }
 
@@ -307,11 +320,16 @@ func (e *EventWrapper) handleParse() {
 }
 
 func (e *EventWrapper) handleBind() {
-	q := queryInfo{}
 	m, ok := statementsCache.Get(e.ConnTuple())
-	if ok {
-		statementName := extractStatementNameFromBind(e.getPayload())
-		q, _ = m.Get(statementName)
+	// if we don't find it we cannot do anything
+	if !ok {
+		return
+	}
+
+	statementName := extractStatementNameFromBind(e.getPayload())
+	q, ok := m.Get(statementName)
+	if !ok {
+		return
 	}
 	e.info = q
 }

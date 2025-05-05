@@ -30,6 +30,7 @@ func TestExtractSQLCommand(t *testing.T) {
 		},
 		{
 			name: "SELECT no space",
+			// There is no space between SELECT and the rest of the query so we cannot resolve it.
 			mes: []byte{
 				'S', 'E', 'L', 'E', 'C', 'T',
 			},
@@ -78,7 +79,7 @@ func TestExtractSQLCommandAndTable(t *testing.T) {
 		{
 			name:       "no table name",
 			query:      `DROP TABLE`,
-			tablesName: "",
+			tablesName: UnsupportedString,
 			sqlComm:    DropTableOP,
 		},
 		{
@@ -103,7 +104,7 @@ func TestExtractSQLCommandAndTable(t *testing.T) {
 		{
 			name:       "SHOW",
 			query:      `SHOW param1 param2 param3`,
-			tablesName: "",
+			tablesName: UnsupportedString,
 			sqlComm:    ShowOP,
 		},
 	}
@@ -159,7 +160,7 @@ func TestExtractDatabaseName(t *testing.T) {
 				'd', 'a', 't', 'a', 'b', 'a', 's', 'e', 0,
 			},
 			// we don't use the user name
-			databaseName: "",
+			databaseName: UnsupportedString,
 		},
 		{
 			name: "database key truncated",
@@ -187,7 +188,7 @@ func TestExtractDatabaseName(t *testing.T) {
 				'X', 'X', 'X', 'X',
 			},
 			// the user name is truncated we don't want it
-			databaseName: "",
+			databaseName: UnsupportedString,
 		},
 		{
 			name: "no database no user",
@@ -197,14 +198,14 @@ func TestExtractDatabaseName(t *testing.T) {
 				'o', 'p', 't', '2', 0,
 				'X', 'X', 'X', 'y', 0, 0,
 			},
-			databaseName: "",
+			databaseName: UnsupportedString,
 		},
 		{
 			name: "truncated user key",
 			startupMes: []byte{
 				'u', 's', 'e',
 			},
-			databaseName: "",
+			databaseName: UnsupportedString,
 		},
 	}
 	for _, tt := range tests {
@@ -232,7 +233,8 @@ func TestExtractStatementFromParse(t *testing.T) {
 			qinfo: queryInfo{
 				// we need a space to detect the SQL command
 				sqlCommand: UnknownOP,
-				tableName:  "",
+				// there is no table name in the message
+				tableName: UnsupportedString,
 			},
 		},
 		{
@@ -242,6 +244,7 @@ func TestExtractStatementFromParse(t *testing.T) {
 				'S', 'E', 'L', 'E', 'C', 'T',
 			},
 			statementName: "",
+			qinfo:         newQueryInfo(),
 		},
 		{
 			name: "statement+query",

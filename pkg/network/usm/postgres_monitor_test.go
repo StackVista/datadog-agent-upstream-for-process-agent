@@ -293,7 +293,7 @@ func (s *postgresProtocolParsingSuite) TestPostgresPlaintextExtendedQuery() {
 
 	// We cannot recover the operation and the table name from the ebpf instrumentation because we don't see the initial parse
 	validatePostgres(t, monitor, map[string]map[postgres.Operation]int{
-		"": {
+		postgres.UnsupportedString: {
 			postgres.UnknownOP: 3,
 		},
 	}, isTLS)
@@ -785,7 +785,7 @@ func testDecoding(t *testing.T, isTLS bool) {
 						postgres.SelectOP: adjustCount(1),
 					},
 					// show doesn't have a table name so we don't extract it
-					"": {
+					postgres.UnsupportedString: {
 						postgres.ShowOP: adjustCount(1),
 					},
 				}, isTLS)
@@ -819,10 +819,10 @@ func testDecoding(t *testing.T, isTLS bool) {
 				// 127.0.0.1|>Q|127.0.0.1|10|begin
 				// 127.0.0.1|<C/Z|127.0.0.1|10,5|
 				// 127.0.0.1|>P/D/S|127.0.0.1|85,64,4|SELECT * FROM dummy
-				// 127.0.0.1|<1/t/T/Z|127.0.0.1|4,6,49,5|
 				//
 				// We recognize the parse complete
 				//
+				// 127.0.0.1|<1/t/T/Z|127.0.0.1|4,6,49,5|
 				// 127.0.0.1|>B/D/E/S|127.0.0.1|74,6,9,4|
 				// 127.0.0.1|<2/T/C/Z|127.0.0.1|4,49,13,5|
 				// 127.0.0.1|>Q|127.0.0.1|11|commit
@@ -834,7 +834,7 @@ func testDecoding(t *testing.T, isTLS bool) {
 			},
 			validation: func(t *testing.T, _ pgTestContext, monitor *Monitor) {
 				validatePostgres(t, monitor, map[string]map[postgres.Operation]int{
-					"": {
+					postgres.UnsupportedString: {
 						postgres.UnknownOP: adjustCount(2),
 					},
 				}, isTLS)
