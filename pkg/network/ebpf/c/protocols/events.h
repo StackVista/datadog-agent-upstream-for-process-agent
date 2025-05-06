@@ -139,7 +139,16 @@ static __always_inline bool __enqueue_event(batch_data_t *batch, void *event, si
     return true;
 }
 
-#define _LOG(protocol, message, args...) \
-    log_debug(_STR(protocol) " " message, args);
+#define LOG_postgres(message, ...)  debug_postgres(message, ##__VA_ARGS__);
+#define LOG_amqp(message, ...)  log_debug("amqp " message, ##__VA_ARGS__);
+#define LOG_http(message, ...)  log_debug("http " message, ##__VA_ARGS__);
+#define LOG_http2(message, ...)  log_debug("http2 " message, ##__VA_ARGS__);
+#define LOG_terminated_http2(message, ...)  log_debug("terminated_http2 " message, ##__VA_ARGS__);
+#define LOG_kafka(message, ...)  log_debug("kafka " message, ##__VA_ARGS__);
+#define LOG_mongo(message, ...)  log_debug("mongo " message, ##__VA_ARGS__);
+#define LOG_redis(message, ...)  log_debug("redis " message, ##__VA_ARGS__);
+#define LOG_test(message, ...)  log_debug("test " message, ##__VA_ARGS__);
+
+#define _LOG(protocol, message, ...) LOG_##protocol(message, ##__VA_ARGS__)
 
 #endif

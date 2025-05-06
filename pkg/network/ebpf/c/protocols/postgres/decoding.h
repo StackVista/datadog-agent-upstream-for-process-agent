@@ -64,7 +64,6 @@ static __always_inline void postgres_handle_startup(pktbuf_t pkt, struct pg_star
     // https://www.postgresql.org/docs/current/protocol-message-formats.html#PROTOCOL-MESSAGE-FORMATS-STARTUPMESSAGE
     // The parameters are a pairs of key-value. Each string is `\0` terminated.
     // example: user\0postgres\0database\0default\0\0
-    debug_postgres("startup: tcp_seq %u", pkt.skb_info->tcp_seq);
     postgres_transaction_t t = {};
     // we create a fake header so that the userspace doesn't need handle it differently.
     struct pg_message_header *fake_hdr = (struct pg_message_header *)t.request_fragment;
@@ -73,13 +72,14 @@ static __always_inline void postgres_handle_startup(pktbuf_t pkt, struct pg_star
     fake_hdr->message_len = bpf_htonl(bpf_ntohl(header->message_len) - 4);
     pktbuf_advance(pkt, sizeof(struct pg_startup_header));
     pktbuf_safe_load_bytes_from_current_offset(pkt, &t.request_fragment[sizeof(struct pg_message_header)], POSTGRES_BUFFER_SIZE - sizeof(struct pg_message_header));
+    debug_postgres("startup: tcp_seq %u, frag %s", pkt.skb_info->tcp_seq, &t.request_fragment[sizeof(struct pg_message_header)]);
     postgres_batch_enqueue_wrapper(pkt, &t, false);
 }
 
 static __always_inline void postgres_handle_parse(pktbuf_t pkt) {
-    debug_postgres("parse: tcp_seq %u", pkt.skb_info->tcp_seq);
     postgres_transaction_t t = {};
     pktbuf_safe_load_bytes_from_current_offset(pkt, t.request_fragment, POSTGRES_BUFFER_SIZE);
+    debug_postgres("parse: tcp_seq %u, frag %s", pkt.skb_info->tcp_seq, &t.request_fragment[sizeof(struct pg_message_header)]);
     postgres_batch_enqueue_wrapper(pkt, &t, false);
 }
 
@@ -100,7 +100,7 @@ static __always_inline void postgres_store_transaction(pktbuf_t pkt) {
     postgres_transaction_t t = {};
     t.request_started = bpf_ktime_get_ns();
     pktbuf_safe_load_bytes_from_current_offset(pkt, t.request_fragment, POSTGRES_BUFFER_SIZE);
-    debug_postgres("store '%c': tcp_seq %u", t.request_fragment[0], pkt.skb_info->tcp_seq);
+    debug_postgres("store '%c': tcp_seq %u, frag %s", t.request_fragment[0], &t.request_fragment[sizeof(struct pg_message_header)]);
     bpf_map_update_elem(&postgres_in_flight, &conn_tuple, &t, BPF_ANY);
 }
 
@@ -109,13 +109,13 @@ static __always_inline void postgres_send_transaction(pktbuf_t pkt) {
     if (!postgres_read_tuple(pkt, &conn_tuple)) {
         return;
     }
-    postgres_transaction_t *transaction = bpf_map_lookup_elem(&postgres_in_flight, &conn_tuple);
-    if (!transaction) {
+    postgres_transaction_t *t = bpf_map_lookup_elem(&postgres_in_flight, &conn_tuple);
+    if (!t) {
         return;
     }
-    transaction->response_last_seen = bpf_ktime_get_ns();
-    debug_postgres("send '%c': tcp_seq %u", transaction->request_fragment[0], pkt.skb_info->tcp_seq);
-    postgres_batch_enqueue_wrapper(pkt, transaction, true);
+    t->response_last_seen = bpf_ktime_get_ns();
+    debug_postgres("send '%c': tcp_seq %u, frag %s", t->request_fragment[0], pkt.skb_info->tcp_seq, &t->request_fragment[sizeof(struct pg_message_header)]);
+    postgres_batch_enqueue_wrapper(pkt, t, true);
 }
 
 static __always_inline void postgres_handle_c_tag(pktbuf_t pkt, struct pg_message_header *header) {

@@ -50,6 +50,11 @@ func (s *StatKeeper) Process(tx *EventWrapper) {
 		ConnectionKey: tx.ConnTuple(),
 		DatabaseName:  tx.getDatabaseName(),
 	}
+
+	if key.Operation == UnknownOP || key.TableName == UnsupportedString {
+		log.Debugf("[%s] Message '%c' (key:%s,table:%s,database:%s) fragment %s", key.String(), tx.getTag(), key.Operation.String(), key.TableName, key.DatabaseName, tx.getPayload())
+	}
+
 	requestStats, ok := s.stats[key]
 	if !ok {
 		if len(s.stats) >= s.maxEntries {

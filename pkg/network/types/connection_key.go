@@ -30,7 +30,8 @@ type ConnectionKey struct {
 // String returns a string representation of the ConnectionKey
 func (c *ConnectionKey) String() string {
 	return fmt.Sprintf(
-		"[%v:%d ⇄ %v:%d]",
+		"[(%d) %v:%d ⇄ %v:%d]",
+		c.NetNs,
 		util.FromLowHigh(c.SrcIPLow, c.SrcIPHigh),
 		c.SrcPort,
 		util.FromLowHigh(c.DstIPLow, c.DstIPHigh),

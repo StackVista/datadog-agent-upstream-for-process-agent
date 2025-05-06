@@ -34,6 +34,7 @@ const ebpfEmbedFSFolder = "ebpf"
 var (
 	// Enable extended verifier logs increase the time needed to run this program
 	verifierVerbose = flag.Bool("verbose", false, "Enable verbose verifier debug logs")
+	longRunning     = flag.Bool("long-run", false, "Used to debug ebpf programs, if set the program will run for 30 minutes")
 )
 
 func getTracerConfig(ebpfDir string) *tracerConfig.Config {
@@ -213,5 +214,10 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("No verifier errors :)\n")
+
+	if *longRunning {
+		fmt.Printf("Running for 30 minutes...\n")
+		time.Sleep(30 * time.Minute)
+	}
 	os.Exit(0)
 }

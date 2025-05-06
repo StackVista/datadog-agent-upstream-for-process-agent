@@ -36,3 +36,14 @@ invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/
 # If you need to rebuilt the system-probe
 invoke system-probe.build
 ```
+
+## Run nettop binary to debug ebpf connections
+
+```bash
+cd $WORKDIR
+# From the root of the repo
+rsync -au "$SOURCEDIR"/. $WORKDIR && chown -R root:root $WORKDIR
+inv -e system-probe.object-files
+go build -tags linux_bpf,linux ./pkg/network/nettop
+./nettop --dir /opt/datadog-agent/embedded/share/system-probe/ebpf --long-run
+```
