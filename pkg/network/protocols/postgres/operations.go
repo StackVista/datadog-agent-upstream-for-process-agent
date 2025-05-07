@@ -11,7 +11,7 @@ import "strings"
 type Operation uint8
 
 const (
-	UnsupportedString = "<unsupported>"
+	UnobservedString = "<unobserved>"
 )
 
 const (
@@ -59,7 +59,7 @@ func (op Operation) String() string {
 	case ShowOP:
 		return "SHOW"
 	default:
-		return UnsupportedString
+		return UnobservedString
 	}
 }
 

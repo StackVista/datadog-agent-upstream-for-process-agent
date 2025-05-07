@@ -79,7 +79,7 @@ func TestExtractSQLCommandAndTable(t *testing.T) {
 		{
 			name:       "no table name",
 			query:      `DROP TABLE`,
-			tablesName: UnsupportedString,
+			tablesName: UnobservedString,
 			sqlComm:    DropTableOP,
 		},
 		{
@@ -104,7 +104,7 @@ func TestExtractSQLCommandAndTable(t *testing.T) {
 		{
 			name:       "SHOW",
 			query:      `SHOW param1 param2 param3`,
-			tablesName: UnsupportedString,
+			tablesName: UnobservedString,
 			sqlComm:    ShowOP,
 		},
 	}
@@ -160,7 +160,7 @@ func TestExtractDatabaseName(t *testing.T) {
 				'd', 'a', 't', 'a', 'b', 'a', 's', 'e', 0,
 			},
 			// we don't use the user name
-			databaseName: UnsupportedString,
+			databaseName: UnobservedString,
 		},
 		{
 			name: "database key truncated",
@@ -188,7 +188,7 @@ func TestExtractDatabaseName(t *testing.T) {
 				'X', 'X', 'X', 'X',
 			},
 			// the user name is truncated we don't want it
-			databaseName: UnsupportedString,
+			databaseName: UnobservedString,
 		},
 		{
 			name: "no database no user",
@@ -198,14 +198,14 @@ func TestExtractDatabaseName(t *testing.T) {
 				'o', 'p', 't', '2', 0,
 				'X', 'X', 'X', 'y', 0, 0,
 			},
-			databaseName: UnsupportedString,
+			databaseName: UnobservedString,
 		},
 		{
 			name: "truncated user key",
 			startupMes: []byte{
 				'u', 's', 'e',
 			},
-			databaseName: UnsupportedString,
+			databaseName: UnobservedString,
 		},
 	}
 	for _, tt := range tests {
@@ -234,7 +234,7 @@ func TestExtractStatementFromParse(t *testing.T) {
 				// we need a space to detect the SQL command
 				sqlCommand: UnknownOP,
 				// there is no table name in the message
-				tableName: UnsupportedString,
+				tableName: UnobservedString,
 			},
 		},
 		{

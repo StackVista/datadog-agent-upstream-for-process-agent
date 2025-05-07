@@ -69,7 +69,7 @@ type queryInfo struct {
 func newQueryInfo() queryInfo {
 	return queryInfo{
 		sqlCommand: UnknownOP,
-		tableName:  UnsupportedString,
+		tableName:  UnobservedString,
 	}
 }
 
@@ -149,7 +149,7 @@ func extractDatabaseName(payload []byte) string {
 	}
 
 	if userName == "" {
-		userName = UnsupportedString
+		userName = UnobservedString
 	}
 	return userName
 }
@@ -270,7 +270,7 @@ func (e *EventWrapper) getTableName() string {
 func (e *EventWrapper) getDatabaseName() string {
 	name, ok := databaseNamesCache.Get(e.ConnTuple())
 	if !ok {
-		name = UnsupportedString
+		name = UnobservedString
 	}
 	return name
 }

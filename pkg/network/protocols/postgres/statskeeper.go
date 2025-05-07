@@ -51,7 +51,7 @@ func (s *StatKeeper) Process(tx *EventWrapper) {
 		DatabaseName:  tx.getDatabaseName(),
 	}
 
-	if key.Operation == UnknownOP || key.TableName == UnsupportedString {
+	if key.Operation == UnknownOP || key.TableName == UnobservedString {
 		log.Debugf("[%s] Message '%c' (key:%s,table:%s,database:%s) fragment %s", key.String(), tx.getTag(), key.Operation.String(), key.TableName, key.DatabaseName, tx.getPayload())
 	}
 
