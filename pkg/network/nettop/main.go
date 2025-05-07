@@ -7,9 +7,11 @@
 package main
 
 import (
+	"embed"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,15 +21,22 @@ import (
 	tracerConfig "github.com/DataDog/datadog-agent/pkg/network/config"
 	"github.com/DataDog/datadog-agent/pkg/network/tracer"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
+	"github.com/DataDog/datadog-agent/pkg/util/log"
+	"github.com/cihub/seelog"
 )
 
+//go:embed ebpf/*
+var ebpfFS embed.FS
+
+// this is paired with the embed FS tag
+const ebpfEmbedFSFolder = "ebpf"
+
 var (
-	ebpfDir = flag.String("dir", "/ebpf_artifacts", "Directory containing the eBPF programs (.o files)")
 	// Enable extended verifier logs increase the time needed to run this program
 	verifierVerbose = flag.Bool("verbose", false, "Enable verbose verifier debug logs")
 )
 
-func getTracerConfig() *tracerConfig.Config {
+func getTracerConfig(ebpfDir string) *tracerConfig.Config {
 	// Defaults taken from datadog
 	const defaultUDPTimeoutSeconds = 30
 	const defaultUDPStreamTimeoutSeconds = 120
@@ -37,7 +46,7 @@ func getTracerConfig() *tracerConfig.Config {
 	return &tracerConfig.Config{
 		Config: ebpf.Config{
 			BPFDebug:                 false,
-			BPFDir:                   *ebpfDir,
+			BPFDir:                   ebpfDir,
 			ExcludedBPFLinuxVersions: []string{},
 			EnableTracepoints:        false,
 			ProcRoot:                 kernel.ProcFSRoot(),
@@ -149,9 +158,37 @@ func getTracerConfig() *tracerConfig.Config {
 	}
 }
 
+func dumpEBPF() (string, error) {
+	// Create a temp dir, unpack all the .o files there
+	tmp := filepath.Join(os.TempDir(), "nettop-ebpf")
+	if err := os.MkdirAll(tmp, 0755); err != nil {
+		return "", err
+	}
+	entries, err := ebpfFS.ReadDir(ebpfEmbedFSFolder)
+	if err != nil {
+		return "", fmt.Errorf("reading embedded dir %q: %w", ebpfEmbedFSFolder, err)
+	}
+	for _, e := range entries {
+		filePath := filepath.Join(ebpfEmbedFSFolder, e.Name())
+		data, err := ebpfFS.ReadFile(filePath)
+		if err != nil {
+			return "", fmt.Errorf("reading embedded file %q: %w", filePath, err)
+		}
+		if err := os.WriteFile(filepath.Join(tmp, e.Name()), data, 0644); err != nil {
+			return "", err
+		}
+	}
+	return tmp, nil
+}
+
 func main() {
 	// Parse the flags
 	flag.Parse()
+
+	ebpfDir, err := dumpEBPF()
+	if err != nil {
+		panic(err)
+	}
 
 	// If we don't intialize a config datadog will panic
 	// Workaround to use only env var for the config
@@ -166,10 +203,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	c := getTracerConfig()
+	c := getTracerConfig(ebpfDir)
+	log.SetupLogger(seelog.Default, "warn")
 
 	fmt.Printf("Injecting our ebpf instrumentation...\n")
-	_, err := tracer.NewTracer(c, nil)
+	_, err = tracer.NewTracer(c, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)

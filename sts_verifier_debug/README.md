@@ -16,13 +16,25 @@ Inside this folder:
 docker build -f Dockerfile --tag ebpf_debug:latest ./..
 ```
 
-## Run it
+Run it:
 
 ```bash
 docker run --rm -i -t --privileged ebpf_debug:latest
 ```
 
+## Build the nettop binary inside the docker image
+
+```bash
+DOCKER_BUILDKIT=1 docker build  -f Dockerfile --target export-stage --output type=local,dest=./out ./..
+```
+
+Run it:
+
+```bash
+sudo ./nettop 
+```
+
 ## Future improvements
 
+- Build the binary without docker, building only the ebpf artifacts we need.
 - Create a docker image with also the toolchain to rebuild the binary and the ebpf artifacts directly inside the container. Today we can do that keeping the builder image but the final image is ~ 9 GB.
-- Create a tar.gz with the binary and artifacts to support environments where we cannot use docker.
