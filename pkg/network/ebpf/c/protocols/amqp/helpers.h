@@ -17,9 +17,9 @@ static __always_inline bool is_amqp_protocol_header(const char* buf, __u32 buf_s
     return match;
 }
 
-// We could use bpf_probe_read* to do unaligned loads,  but this break on kernel 5.4, most likely due to having trouble proving
-// the bounds of the load, hence the plain data loading.
-// Story: https://stackstate.atlassian.net/browse/STAC-22744
+// We could use bpf_probe_read* to do unaligned loads,  but this function is not available in socket filters prior to kernel 5.8
+// (see comment on the ticket https://stackstate.atlassian.net/browse/STAC-22744)
+// So we do unaligend load ourselves
 static __always_inline __u16 load_unaligned_u16(const char* buf) {
   __u16 lower_byte = buf[0];
   __u16 upper_byte = buf[1];
