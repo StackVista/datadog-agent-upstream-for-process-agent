@@ -17,6 +17,15 @@ static __always_inline bool is_amqp_protocol_header(const char* buf, __u32 buf_s
     return match;
 }
 
+// We could use bpf_probe_read* to do unaligned loads,  but this function is not available in socket filters prior to kernel 5.8
+// (see comment on the ticket https://stackstate.atlassian.net/browse/STAC-22744)
+// So we do unaligend load ourselves
+static __always_inline __u16 load_unaligned_u16(const char* buf) {
+  __u16 lower_byte = buf[0];
+  __u16 upper_byte = buf[1];
+  return lower_byte | (upper_byte << 8);
+}
+
 // The method checks if the given buffer is an AMQP message.
 // Ref: https://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf
 static __always_inline bool is_amqp(const char* buf, __u32 buf_size) {
@@ -47,12 +56,9 @@ static __always_inline bool is_amqp(const char* buf, __u32 buf_size) {
     // Ref https://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf.
     //
     // We want to read 2 bytes (`hdr->class_id`) from `buf+7`, so an adress potentially not multiple of 2.
-    // This could cause misaligned access verifier issues. For this reason we copy the structure to the stack.
-    // Note that `buf` is always kernel memory (stack in case of socket filter, ebpf Map in case of TLS)
-    amqp_header hdr = {};
-    bpf_probe_read_kernel(&hdr, sizeof(amqp_header), buf+7);
-    __u16 class_id = bpf_ntohs(hdr.class_id);
-    __u16 method_id = bpf_ntohs(hdr.method_id);
+    // This could cause misaligned access verifier issues. We use an unaligned load.
+    __u16 class_id = bpf_ntohs(load_unaligned_u16(buf + 7));
+    __u16 method_id = bpf_ntohs(load_unaligned_u16(buf + 9));
 
     switch (class_id) {
     case AMQP_CONNECTION_CLASS:
@@ -84,8 +90,8 @@ static __always_inline bool is_amqp(const char* buf, __u32 buf_size) {
         return false;
     }
 
-    /*  
-    [STS] Custom detection for long lived AMQP connections. 
+    /*
+    [STS] Custom detection for long lived AMQP connections.
     https://gitlab.com/stackvista/agent/datadog-agent-upstream-for-process-agent/-/merge_requests/20
     Check if the DataDog one is enough or we need to fallback to this one.
 
