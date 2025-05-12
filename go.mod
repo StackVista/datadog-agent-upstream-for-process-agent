@@ -282,7 +282,7 @@ require (
 	github.com/vishvananda/netlink v1.3.0
 	github.com/vishvananda/netns v0.0.5
 	github.com/vmihailenco/msgpack/v4 v4.3.13
-	github.com/wI2L/jsondiff v0.6.1
+	github.com/wI2L/jsondiff v0.7.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.etcd.io/bbolt v1.3.11
 	go.etcd.io/etcd/client/v2 v2.306.0-alpha.0
@@ -338,7 +338,6 @@ require (
 	k8s.io/metrics v0.31.2
 	k8s.io/utils v0.0.0-20240821151609-f90d01438635
 	sigs.k8s.io/custom-metrics-apiserver v1.30.1-0.20241105195130-84dc8cfe2555
-
 )
 
 require (
