@@ -29,12 +29,25 @@ func TestExtractSQLCommand(t *testing.T) {
 			sqlCommand: SelectOP,
 		},
 		{
-			name: "SELECT no space",
-			// There is no space between SELECT and the rest of the query so we cannot resolve it.
+			name: "select lowercase",
 			mes: []byte{
-				'S', 'E', 'L', 'E', 'C', 'T',
+				's', 'e', 'l', 'e', 'c', 't',
 			},
-			sqlCommand: UnknownOP,
+			sqlCommand: SelectOP,
+		},
+		{
+			name: "commit",
+			mes: []byte{
+				'C', 'O', 'M', 'M', 'I', 'T', 0,
+			},
+			sqlCommand: CommitOP,
+		},
+		{
+			name: "show",
+			mes: []byte{
+				'S', 'H', 'O', 'W', ' ', 'p', 'a', 'r', 'a', 'm', '1',
+			},
+			sqlCommand: ShowOP,
 		},
 	}
 	for _, tt := range tests {
@@ -79,7 +92,7 @@ func TestExtractSQLCommandAndTable(t *testing.T) {
 		{
 			name:       "no table name",
 			query:      `DROP TABLE`,
-			tablesName: UnobservedString,
+			tablesName: UnsupportedString,
 			sqlComm:    DropTableOP,
 		},
 		{
@@ -98,13 +111,13 @@ func TestExtractSQLCommandAndTable(t *testing.T) {
 			name: "SELECT with a space before",
 			// we cannot recognize a SELECT with a space before
 			query:      ` SELECT * FROM profiles WHERE name='Mary'`,
-			tablesName: "profiles",
-			sqlComm:    UnknownOP,
+			tablesName: EmptyTableName,
+			sqlComm:    UnsupportedOP,
 		},
 		{
 			name:       "SHOW",
 			query:      `SHOW param1 param2 param3`,
-			tablesName: UnobservedString,
+			tablesName: EmptyTableName,
 			sqlComm:    ShowOP,
 		},
 	}
@@ -153,14 +166,14 @@ func TestExtractDatabaseName(t *testing.T) {
 			databaseName: "XXXX",
 		},
 		{
-			name: "database key only (truncated message)",
+			name: "database key only truncated message",
 			startupMes: []byte{
 				'u', 's', 'e', 'r', 0,
 				'X', 'X', 'X', 'X', 0,
 				'd', 'a', 't', 'a', 'b', 'a', 's', 'e', 0,
 			},
 			// we don't use the user name
-			databaseName: UnobservedString,
+			databaseName: UnsupportedString,
 		},
 		{
 			name: "database key truncated",
@@ -188,7 +201,7 @@ func TestExtractDatabaseName(t *testing.T) {
 				'X', 'X', 'X', 'X',
 			},
 			// the user name is truncated we don't want it
-			databaseName: UnobservedString,
+			databaseName: UnsupportedString,
 		},
 		{
 			name: "no database no user",
@@ -198,14 +211,14 @@ func TestExtractDatabaseName(t *testing.T) {
 				'o', 'p', 't', '2', 0,
 				'X', 'X', 'X', 'y', 0, 0,
 			},
-			databaseName: UnobservedString,
+			databaseName: UnsupportedString,
 		},
 		{
 			name: "truncated user key",
 			startupMes: []byte{
 				'u', 's', 'e',
 			},
-			databaseName: UnobservedString,
+			databaseName: UnsupportedString,
 		},
 	}
 	for _, tt := range tests {
@@ -232,9 +245,9 @@ func TestExtractStatementFromParse(t *testing.T) {
 			statementName: "echo77",
 			qinfo: queryInfo{
 				// we need a space to detect the SQL command
-				sqlCommand: UnknownOP,
+				sqlCommand: SelectOP,
 				// there is no table name in the message
-				tableName: UnobservedString,
+				tableName: UnsupportedString,
 			},
 		},
 		{
@@ -244,7 +257,10 @@ func TestExtractStatementFromParse(t *testing.T) {
 				'S', 'E', 'L', 'E', 'C', 'T',
 			},
 			statementName: "",
-			qinfo:         newQueryInfo(),
+			qinfo: queryInfo{
+				sqlCommand: SelectOP,
+				tableName:  UnsupportedString,
+			},
 		},
 		{
 			name: "statement+query",

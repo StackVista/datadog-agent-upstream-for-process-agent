@@ -71,7 +71,30 @@ func (r *RequestStat) CombineWith(newStats *RequestStat) {
 	} else if newStats.Latencies != nil {
 		// Merge the ddsketch latencies
 		if err := r.Latencies.MergeWith(newStats.Latencies); err != nil {
-			log.Debugf("could not add request latency to ddsketch: %v", err)
+			logPostgres(log.DebugLvl, "could not add request latency to ddsketch: %v", err)
 		}
 	}
+}
+
+func newRequestStats(latency float64) (*RequestStat, error) {
+	req := &RequestStat{
+		StaticTags: 0,
+	}
+	if err := req.initSketch(); err != nil {
+		return nil, err
+	}
+	req.addLatency(latency)
+	return req, nil
+}
+
+func (r *RequestStat) addLatency(latency float64) {
+	// we don't increment the count if we fail
+	if err := r.Latencies.Add(latency); err != nil {
+		logPostgres(log.WarnLvl, "could not add request latency to ddsketch: %v", err)
+		return
+	}
+	if r.Count == 0 {
+		r.FirstLatencySample = latency
+	}
+	r.Count++
 }

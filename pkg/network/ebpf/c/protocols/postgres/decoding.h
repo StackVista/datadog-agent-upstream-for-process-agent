@@ -84,12 +84,13 @@ static __always_inline void postgres_handle_parse(pktbuf_t pkt) {
 }
 
 static __always_inline void postgres_handle_termination(pktbuf_t pkt) {
+    conn_tuple_t tuple = {};
+    if (!postgres_read_tuple(pkt, &tuple)) {
+        return;
+    }
+    // the tuple is normalized
     debug_postgres("termination: tcp_seq %u", pkt.skb_info->tcp_seq);
-    postgres_transaction_t t = {};
-    struct pg_message_header *fake_hdr = (struct pg_message_header *)t.request_fragment;
-    fake_hdr->message_tag = POSTGRES_TCP_TERMINATION_FAKE_MAGIC_BYTE;
-    fake_hdr->message_len = bpf_htonl(4);
-    postgres_batch_enqueue_wrapper(pkt, &t, true);
+    bpf_map_delete_elem(&postgres_in_flight, &tuple);
 }
 
 static __always_inline void postgres_store_transaction(pktbuf_t pkt) {

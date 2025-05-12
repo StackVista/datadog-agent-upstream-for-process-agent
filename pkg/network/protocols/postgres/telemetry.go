@@ -8,110 +8,67 @@
 package postgres
 
 import (
-	"github.com/DataDog/datadog-agent/pkg/network/config"
-	"github.com/DataDog/datadog-agent/pkg/network/protocols/postgres/ebpf"
 	libtelemetry "github.com/DataDog/datadog-agent/pkg/network/protocols/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
-
-type counterStateEnum int
-
-const (
-	tableAndOperation counterStateEnum = iota + 1
-	operationNotFound
-	tableNameNotFound
-	tableAndOpNotFound
-)
-
-// extractionFailureCounter stores counter when goal was achieved and counter when target not found.
-type extractionFailureCounter struct {
-	// countTableAndOperationFound counts the number of successfully retrieved table name and operation.
-	countTableAndOperationFound *libtelemetry.Counter
-	// countOperationNotFound counts the number of unsuccessful fetches of the operation.
-	countOperationNotFound *libtelemetry.Counter
-	// countTableNameNotFound counts the number of unsuccessful fetches of the table name.
-	countTableNameNotFound *libtelemetry.Counter
-	// countTableAndOpNotFound counts the number of failed attempts to fetch both the table name and the operation.
-	countTableAndOpNotFound *libtelemetry.Counter
-}
-
-// newExtractionFailureCounter creates and returns a new instance
-func newExtractionFailureCounter(metricGroup *libtelemetry.MetricGroup, metricName string, tags ...string) *extractionFailureCounter {
-	return &extractionFailureCounter{
-		countTableAndOperationFound: metricGroup.NewCounter(metricName, append(tags, "state:table_and_op")...),
-		countOperationNotFound:      metricGroup.NewCounter(metricName, append(tags, "state:no_operation")...),
-		countTableNameNotFound:      metricGroup.NewCounter(metricName, append(tags, "state:no_table_name")...),
-		countTableAndOpNotFound:     metricGroup.NewCounter(metricName, append(tags, "state:no_table_no_op")...),
-	}
-}
-
-// inc increments the appropriate counter based on the provided state.
-func (c *extractionFailureCounter) inc(state counterStateEnum) {
-	switch state {
-	case tableAndOperation:
-		c.countTableAndOperationFound.Add(1)
-	case operationNotFound:
-		c.countOperationNotFound.Add(1)
-	case tableNameNotFound:
-		c.countTableNameNotFound.Add(1)
-	case tableAndOpNotFound:
-		c.countTableAndOpNotFound.Add(1)
-	default:
-		log.Errorf("unable to increment extractionFailureCounter due to undefined state: %v\n", state)
-	}
-}
-
-// get returns the counter value based on the result.
-func (c *extractionFailureCounter) get(state counterStateEnum) int64 {
-	switch state {
-	case tableAndOperation:
-		return c.countTableAndOperationFound.Get()
-	case operationNotFound:
-		return c.countOperationNotFound.Get()
-	case tableNameNotFound:
-		return c.countTableNameNotFound.Get()
-	case tableAndOpNotFound:
-		return c.countTableAndOpNotFound.Get()
-	default:
-		return 0
-	}
-}
 
 // Telemetry is a struct to hold the telemetry for the postgres protocol
 type Telemetry struct {
 	metricGroup *libtelemetry.MetricGroup
 
-	// failedTableNameExtraction holds the counter for the failed table name extraction
-	failedTableNameExtraction *libtelemetry.Counter
-	// failedOperationExtraction holds the counter for the failed operation extraction
-	failedOperationExtraction *libtelemetry.Counter
+	unsupportedSQLOperation        *libtelemetry.Counter
+	unsupportedTableName           *libtelemetry.Counter
+	failedBindStatementExtraction  *libtelemetry.Counter
+	failedParseStatementExtraction *libtelemetry.Counter
+	missingDatabaseName            *libtelemetry.Counter
+	missingStatement               *libtelemetry.Counter
+	failedDatabaseNameExtraction   *libtelemetry.Counter
+}
+
+type TelemetryValues struct {
+	unsupportedSQLOperation        int64
+	unsupportedTableName           int64
+	failedBindStatementExtraction  int64
+	failedParseStatementExtraction int64
+	missingDatabaseName            int64
+	missingStatement               int64
+	failedDatabaseNameExtraction   int64
+}
+
+func (t *Telemetry) getTelemetryValues() TelemetryValues {
+	return TelemetryValues{
+		unsupportedSQLOperation:        t.unsupportedSQLOperation.Get(),
+		unsupportedTableName:           t.unsupportedTableName.Get(),
+		failedBindStatementExtraction:  t.failedBindStatementExtraction.Get(),
+		failedParseStatementExtraction: t.failedParseStatementExtraction.Get(),
+		missingDatabaseName:            t.missingDatabaseName.Get(),
+		missingStatement:               t.missingStatement.Get(),
+		failedDatabaseNameExtraction:   t.failedDatabaseNameExtraction.Get(),
+	}
 }
 
 // NewTelemetry creates a new Telemetry
-func NewTelemetry(cfg *config.Config) *Telemetry {
+func NewTelemetry() *Telemetry {
 	metricGroup := libtelemetry.NewMetricGroup("usm.postgres")
 
 	return &Telemetry{
-		metricGroup:               metricGroup,
-		failedTableNameExtraction: metricGroup.NewCounter("failed_table_name_extraction", libtelemetry.OptStatsd),
-		failedOperationExtraction: metricGroup.NewCounter("failed_operation_extraction", libtelemetry.OptStatsd),
+		metricGroup:                    metricGroup,
+		missingDatabaseName:            metricGroup.NewCounter("missing_database_name", libtelemetry.OptStatsd),
+		missingStatement:               metricGroup.NewCounter("missing_statement", libtelemetry.OptStatsd),
+		unsupportedTableName:           metricGroup.NewCounter("unsupported_table_name", libtelemetry.OptStatsd),
+		unsupportedSQLOperation:        metricGroup.NewCounter("unsupported_sql_operation", libtelemetry.OptStatsd),
+		failedBindStatementExtraction:  metricGroup.NewCounter("failed_bind_statement_extraction", libtelemetry.OptStatsd),
+		failedParseStatementExtraction: metricGroup.NewCounter("failed_parse_statement_extraction", libtelemetry.OptStatsd),
+		failedDatabaseNameExtraction:   metricGroup.NewCounter("failed_database_name_extraction", libtelemetry.OptStatsd),
 	}
 }
 
-// Count increments the telemetry counters based on the event data
-func (t *Telemetry) Count(tx *ebpf.EbpfEvent, eventWrapper *EventWrapper) {
-	state := tableAndOperation
-	if eventWrapper.getSQLCommand() == UnknownOP {
-		t.failedOperationExtraction.Add(1)
-		state = operationNotFound
+func (t *Telemetry) queryInfoTelemetry(qi *queryInfo) {
+	if qi.sqlCommand == UnsupportedOP {
+		t.unsupportedSQLOperation.Add(1)
 	}
-	if eventWrapper.getTableName() == "UNKNOWN" {
-		t.failedTableNameExtraction.Add(1)
-		if state == operationNotFound {
-			state = tableAndOpNotFound
-		} else {
-			state = tableNameNotFound
-		}
+	if qi.tableName == UnsupportedString {
+		t.unsupportedTableName.Add(1)
 	}
 }
 

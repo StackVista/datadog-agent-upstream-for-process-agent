@@ -164,6 +164,7 @@ func (c *Consumer[V]) Start() {
 					return
 				}
 
+				// this waits until we read all the batches.
 				c.batchReader.ReadAll(func(_ int, b *batch) {
 					c.process(b, true)
 				})

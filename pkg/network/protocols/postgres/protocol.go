@@ -29,9 +29,8 @@ import (
 
 const (
 	// InFlightMap is the name of the in-flight map.
-	InFlightMap      = "postgres_in_flight"
-	scratchBufferMap = "postgres_scratch_buffer"
-	// todo!: remove enums associated with deleted progs
+	InFlightMap            = "postgres_in_flight"
+	scratchBufferMap       = "postgres_scratch_buffer"
 	handleTailCall         = "socket__postgres_handle"
 	tlsHandleTailCall      = "uprobe__postgres_tls_handle"
 	tlsTerminationTailCall = "uprobe__postgres_tls_termination"
@@ -41,7 +40,6 @@ const (
 // protocol holds the state of the postgres protocol monitoring.
 type protocol struct {
 	cfg            *config.Config
-	telemetry      *Telemetry
 	eventsConsumer *events.Consumer[postgresebpf.EbpfEvent]
 	mapCleaner     *ddebpf.MapCleaner[netebpf.ConnTuple, postgresebpf.EbpfTx]
 	statskeeper    *StatKeeper
@@ -97,14 +95,13 @@ func newPostgresProtocol(cfg *config.Config) (protocols.Protocol, error) {
 		return nil, nil
 	}
 
-	statk, err := NewStatkeeper(cfg)
+	statk, err := NewStatkeeper(cfg, NewTelemetry())
 	if err != nil {
 		return nil, err
 	}
 
 	return &protocol{
 		cfg:         cfg,
-		telemetry:   NewTelemetry(cfg),
 		statskeeper: statk,
 	}, nil
 }
@@ -176,7 +173,6 @@ func (p *protocol) DumpMaps(w io.Writer, mapName string, currentMap *ebpf.Map) {
 // GetStats returns a map of Postgres stats.
 func (p *protocol) GetStats() *protocols.ProtocolStats {
 	p.eventsConsumer.Sync()
-	p.telemetry.Log()
 
 	return &protocols.ProtocolStats{
 		Type:  protocols.Postgres,
@@ -194,19 +190,18 @@ func (p *protocol) processPostgres(events []postgresebpf.EbpfEvent) {
 		tx := &events[i]
 		eventWrapper := NewEventWrapper(tx)
 		p.statskeeper.Process(eventWrapper)
-		p.telemetry.Count(tx, eventWrapper)
 	}
 }
 
 func (p *protocol) setupMapCleaner(mgr *manager.Manager) {
 	postgresInflight, _, err := mgr.GetMap(InFlightMap)
 	if err != nil {
-		log.Errorf("error getting %s map: %s", InFlightMap, err)
+		logPostgres(log.ErrorLvl, "error getting %s map: %s", InFlightMap, err)
 		return
 	}
 	mapCleaner, err := ddebpf.NewMapCleaner[netebpf.ConnTuple, postgresebpf.EbpfTx](postgresInflight, 1024, InFlightMap, "usm_monitor")
 	if err != nil {
-		log.Errorf("error creating map cleaner: %s", err)
+		logPostgres(log.ErrorLvl, "error creating map cleaner: %s", err)
 		return
 	}
 

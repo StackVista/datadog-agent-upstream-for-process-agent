@@ -10,6 +10,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"fmt"
 	"time"
 
@@ -157,4 +158,38 @@ func runTimedQuery(callback func(context.Context, ...interface{}) (sql.Result, e
 	defer cancel()
 	_, err := callback(ctx)
 	return err
+}
+
+func createMessageTagOnly(tag byte) [160]byte {
+	var frag [160]byte
+	frag[0] = tag
+
+	length := uint32(4)
+	binary.BigEndian.PutUint32(frag[1:5], length)
+	return frag
+}
+
+func createMessageFromString(tag byte, query string) [160]byte {
+	var frag [160]byte
+	frag[0] = tag
+
+	// 4 (int32) + len(query) + 1 (null terminator)
+	length := uint32(4 + len(query) + 1)
+	binary.BigEndian.PutUint32(frag[1:5], length)
+
+	copy(frag[5:], query)
+	frag[5+len(query)] = 0
+	return frag
+}
+
+func createMessageFromBytes(tag byte, query []byte) [160]byte {
+	var frag [160]byte
+	frag[0] = tag
+
+	// 4 (int32) + len(query)
+	length := uint32(4 + len(query))
+	binary.BigEndian.PutUint32(frag[1:5], length)
+
+	copy(frag[5:], query)
+	return frag
 }

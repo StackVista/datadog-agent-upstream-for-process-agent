@@ -22,9 +22,8 @@
 #define POSTGRES_CLOSE_COMPLETE_MAGIC_BYTE '3'
 #define POSTGRES_READY_FOR_QUERY_MAGIC_BYTE 'Z'
 
-// Fake Postgres codes created by us to uniform Startup message and TCP termination to postgres standard format message.
+// Fake Postgres code created by us to uniform Startup message to standard format message.
 #define POSTGRES_STARTUP_FAKE_MAGIC_BYTE '+'
-#define POSTGRES_TCP_TERMINATION_FAKE_MAGIC_BYTE '='
 
 // Regular format of postgres message: | byte tag | int32_t len | string payload |
 // From https://www.postgresql.org/docs/current/protocol-overview.html:

@@ -95,8 +95,6 @@ type postgresParsingTestAttributes struct {
 	postMonitorSetup func(t *testing.T, ctx pgTestContext)
 	// A validation method ensure the test succeeded.
 	validation func(t *testing.T, ctx pgTestContext, tr *Monitor)
-	// Reason to skip the test
-	skipReason string
 }
 
 type postgresProtocolParsingSuite struct {
@@ -294,7 +292,7 @@ func (s *postgresProtocolParsingSuite) TestPostgresPlaintextExtendedQuery() {
 	// We cannot recover the operation and the table name from the ebpf instrumentation because we don't see the initial parse
 	validatePostgres(t, monitor, map[string]map[postgres.Operation]int{
 		postgres.UnobservedString: {
-			postgres.UnknownOP: 3,
+			postgres.UnobservedOP: 3,
 		},
 	}, isTLS)
 }
@@ -320,12 +318,8 @@ func (s *postgresProtocolParsingSuite) TestPostgresDatabaseName() {
 	})
 	require.NoError(t, err)
 
+	// Call simple CREAT and SELECT queries and check if the database name is here.
 	require.NoError(t, pg.RunSimpleQuery(createTableQuery))
-
-	// Call getstats so that we clear all the batches and we should process the startup message with the database name
-	monitor.GetProtocolStats()
-
-	// Call a simple SELECT query and check if the database name is here.
 	require.NoError(t, pg.RunSimpleQuery(selectAllQuery))
 
 	var postgresProtocolStats interface{}
@@ -341,28 +335,23 @@ func (s *postgresProtocolParsingSuite) TestPostgresDatabaseName() {
 	currentStats := postgresProtocolStats.(map[postgres.Key]*postgres.RequestStat)
 	for key := range currentStats {
 		t.Log(key)
-		if key.Operation == postgres.SelectOP {
-			if key.DatabaseName == "testdb" {
-				// In the auth message we could have:
-				// Parameter name: user
-				// Parameter value: admin
-				// Parameter name: database
-				// Parameter value: testdb
-				// or:
-				// Parameter name: database
-				// Parameter value: testdb
-				// Parameter name: user
-				// Parameter value: admin
-				//
-				// we shouldn't have other combinations, so we should be able
-				// to always find the database name.
-				return
-			} else {
-				t.Fatalf("invalid database name %s", key.DatabaseName)
-			}
+		if key.DatabaseName != "testdb" {
+			// In the auth message we could have:
+			// Parameter name: user
+			// Parameter value: admin
+			// Parameter name: database
+			// Parameter value: testdb
+			// or:
+			// Parameter name: database
+			// Parameter value: testdb
+			// Parameter name: user
+			// Parameter value: admin
+			//
+			// we shouldn't have other combinations, so we should be able
+			// to always find the database name.
+			t.Fatalf("invalid database name %s", key.DatabaseName)
 		}
 	}
-	t.Fatal("Select operation not found")
 }
 
 // waitForPostgresServer verifies that the postgres server is up and running.
@@ -526,29 +515,14 @@ func testDecoding(t *testing.T, isTLS bool) {
 				}
 			},
 			validation: func(t *testing.T, _ pgTestContext, monitor *Monitor) {
-
-				// Parse and Bind could arrive in any order. If they arrive out of order
-				// we won't be able to extract the operation and the table name from the Bind. We check for unknown operation or the right operation but we don't know which one we wiil have. The only thing we know is that if we don't have unknown we should have the right operation and table name.
-				require.Eventually(t, func() bool {
-					postgresProtocolStats, exists := monitor.GetProtocolStats()[protocols.Postgres]
-					if !exists {
-						return false
-					}
-					currentStats := postgresProtocolStats.(map[postgres.Key]*postgres.RequestStat)
-
-					for key := range currentStats {
-						// We want just to check that if the operation is not unknown we can recover the right operation and the table name
-						if key.Operation == postgres.UnknownOP {
-							continue
-						}
-
-						if key.Operation != postgres.InsertOP || key.TableName != "dummy" {
-							t.Logf("invalid operation '%v' or table name '%s'", key.Operation, key.TableName)
-							return false
-						}
-					}
-					return true
-				}, time.Second*5, time.Millisecond*100, "cannot find required stats")
+				validatePostgres(t, monitor, map[string]map[postgres.Operation]int{
+					"dummy": {
+						postgres.InsertOP: adjustCount(1),
+					},
+					postgres.UnobservedString: {
+						postgres.UnobservedOP: adjustCount(1),
+					},
+				}, isTLS)
 			},
 		},
 		{
@@ -785,13 +759,12 @@ func testDecoding(t *testing.T, isTLS bool) {
 						postgres.SelectOP: adjustCount(1),
 					},
 					// show doesn't have a table name so we don't extract it
-					postgres.UnobservedString: {
+					postgres.EmptyTableName: {
 						postgres.ShowOP: adjustCount(1),
 					},
 				}, isTLS)
 			},
 		},
-		// This test validates that the sql transaction is not supported.
 		{
 			name: "transaction",
 			preMonitorSetup: func(t *testing.T, ctx pgTestContext) {
@@ -834,15 +807,19 @@ func testDecoding(t *testing.T, isTLS bool) {
 			},
 			validation: func(t *testing.T, _ pgTestContext, monitor *Monitor) {
 				validatePostgres(t, monitor, map[string]map[postgres.Operation]int{
+					// commit doesn't have a table name so we don't extract it
+					postgres.EmptyTableName: {
+						postgres.CommitOP: adjustCount(1),
+					},
+					// we don't see the parse so we the query info are unobserved
 					postgres.UnobservedString: {
-						postgres.UnknownOP: adjustCount(2),
+						postgres.UnobservedOP: adjustCount(1),
 					},
 				}, isTLS)
 			},
 		},
 		{
-			name:       "batched queries",
-			skipReason: "this test is flaky because we don't know the order in which packet will be processed by userspace",
+			name: "batched queries",
 			preMonitorSetup: func(t *testing.T, ctx pgTestContext) {
 				pg, err := postgres.NewPGXClient(postgres.ConnectionOptions{
 					ServerAddress: ctx.serverAddress,
@@ -890,6 +867,10 @@ func testDecoding(t *testing.T, isTLS bool) {
 						postgres.CreateTableOP: adjustCount(1),
 						postgres.InsertOP:      adjustCount(1),
 					},
+					// this because we see a `--ping` message that is correctly not classified
+					postgres.EmptyTableName: {
+						postgres.UnsupportedOP: adjustCount(1),
+					},
 				}, isTLS)
 			},
 		},
@@ -930,10 +911,6 @@ func testDecoding(t *testing.T, isTLS bool) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.skipReason != "" {
-				t.Skip(tt.skipReason)
-			}
-
 			tt.context = pgTestContext{
 				serverPort:    postgresPort,
 				targetAddress: serverAddress,
