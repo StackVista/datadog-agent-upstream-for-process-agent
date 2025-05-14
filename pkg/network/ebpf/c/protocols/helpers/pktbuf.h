@@ -113,6 +113,10 @@ static __always_inline __maybe_unused long pktbuf_load_bytes(pktbuf_t pkt, u32 o
     return 0;
 }
 
+
+
+// `len` should be always less than or equal to the left payload in the packet, otherwise this method will return EFAULT.
+// If you are unsure about the remaining payload size, use the safer version, for postgres the helper is `postgres_pktbuf_safe_load_bytes_from_current_offset`.
 static __always_inline __maybe_unused long pktbuf_load_bytes_from_current_offset(pktbuf_t pkt, void *to, u32 len)
 {
     return pktbuf_load_bytes(pkt, pktbuf_data_offset(pkt), to, len);

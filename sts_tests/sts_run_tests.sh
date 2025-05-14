@@ -60,6 +60,7 @@ if [[ "$1" == "full-suite" ]]; then
 else
     echo "--------------------- Run simple test suite---------------------"
     # Run tests on postgres protocol enrichment
+    invoke test --build-include=linux_bpf,test --targets=./pkg/network/protocols/postgres/.
     invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestPostgres.*"
     # Run tests on protocol enrichment (no postgres) + protocol classification
     invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestUSMSuite/prebuilt/.*" --timeout=300

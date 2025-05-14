@@ -24,7 +24,7 @@ const relativeAccuracy = 0.01
 func (r *RequestStat) initSketch() (err error) {
 	r.Latencies, err = ddsketch.NewDefaultDDSketch(relativeAccuracy)
 	if err != nil {
-		log.Debugf("error recording postgres transaction latency: could not create new ddsketch: %v", err)
+		logPostgres(log.WarnLvl, "error recording postgres transaction latency: could not create new ddsketch: %v", err)
 	}
 	return
 }

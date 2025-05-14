@@ -8,6 +8,7 @@
 package postgres
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -16,30 +17,257 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/postgres/ebpf"
 )
 
-func TestStatKeeperProcess(t *testing.T) {
+var defaultTuple = ebpf.ConnTuple{
+	Saddr_h:  0x01020304,
+	Saddr_l:  0x05060708,
+	Daddr_h:  0x090a0b0c,
+	Daddr_l:  0x0d0e0f10,
+	Sport:    4576,
+	Dport:    5432,
+	Netns:    0,
+	Metadata: 0,
+}
+
+const (
+	databaseName   = "myDB"
+	tableName1     = "table1"
+	tableName2     = "table2"
+	statementName1 = "statement1"
+	statementName2 = "statement2"
+)
+
+func TestSimpleQueries(t *testing.T) {
 	cfg := config.New()
 	cfg.MaxPostgresStatsBuffered = 100
-	s := NewStatkeeper(cfg)
+	s, err := NewStatkeeper(cfg, NewTelemetry())
+	require.NoError(t, err)
+
+	// we process 20 simple queries, we miss the startup so we don't have the database name
 	for i := 0; i < 20; i++ {
-		s.Process(&EventWrapper{
-			EbpfEvent: &ebpf.EbpfEvent{
-				Tx: ebpf.EbpfTx{
-					Request_started:    1,
-					Response_last_seen: 10,
-				},
+		event := NewEventWrapper(&ebpf.EbpfEvent{
+			Tx: ebpf.EbpfTx{
+				Request_fragment:   createMessageFromString(QueryTag, "SELECT * FROM foo"),
+				Request_started:    1,
+				Response_last_seen: 10,
 			},
-			operationSet:  true,
-			operation:     SelectOP,
-			parametersSet: true,
-			parameters:    "dummy",
 		})
+		s.Process(event)
 	}
 
+	// we shouldn't have stats because we didn't see the startup yet
+	require.Equal(t, 0, len(s.stats))
+
+	// we simulate a database startup later
+	databaseName := "myDB"
+	event := NewEventWrapper(&ebpf.EbpfEvent{
+		Tx: ebpf.EbpfTx{
+			Request_fragment: createMessageFromString(StartupTag,
+				fmt.Sprintf("user\x00xx\x00database\x00%s\x00", databaseName)),
+		},
+	})
+	s.Process(event)
 	require.Equal(t, 1, len(s.stats))
 	for k, stat := range s.stats {
-		require.Equal(t, "dummy", k.Parameters)
+		require.Equal(t, "foo", k.TableName)
 		require.Equal(t, SelectOP, k.Operation)
 		require.Equal(t, 20, stat.Count)
 		require.Equal(t, float64(20), stat.Latencies.GetCount())
 	}
+}
+
+func TestMissingDatabase(t *testing.T) {
+	cfg := config.New()
+	cfg.MaxPostgresStatsBuffered = 100
+	s, err := NewStatkeeper(cfg, NewTelemetry())
+	require.NoError(t, err)
+
+	////////////
+	// Simple query
+	////////////
+
+	e := NewEventWrapper(&ebpf.EbpfEvent{
+		Tuple: defaultTuple,
+		Tx: ebpf.EbpfTx{
+			Request_fragment:   createMessageFromString(QueryTag, fmt.Sprintf("CREATE TABLE %s (id int)", tableName1)),
+			Request_started:    1,
+			Response_last_seen: 10,
+		},
+	})
+	s.Process(e)
+	// we are waiting for the startup message
+	// but we will never receive it...
+	require.Equal(t, 0, len(s.stats))
+
+	stats := s.GetAndResetAllStats()
+	require.Equal(t, 1, len(stats))
+	req, ok := stats[Key{
+		Operation:     CreateTableOP,
+		TableName:     tableName1,
+		ConnectionKey: e.ConnTuple(),
+		DatabaseName:  UnobservedString,
+	}]
+	require.True(t, ok)
+	require.Equal(t, req.Count, 1)
+	require.Equal(t, s.telemetry.getTelemetryValues().missingDatabaseName, int64(1))
+}
+
+func TestFullFlow(t *testing.T) {
+	cfg := config.New()
+	cfg.MaxPostgresStatsBuffered = 100
+	s, err := NewStatkeeper(cfg, NewTelemetry())
+	require.NoError(t, err)
+
+	// We want to check all the stages of a full flow
+
+	////////////
+	// Startup
+	////////////
+	e := NewEventWrapper(&ebpf.EbpfEvent{
+		Tuple: defaultTuple,
+		Tx: ebpf.EbpfTx{
+			Request_fragment: createMessageFromString(StartupTag, fmt.Sprintf("user\x00xx\x00database\x00%s\x00", databaseName)),
+		},
+	})
+
+	s.Process(e)
+	require.Equal(t, 0, len(s.stats))
+
+	////////////
+	// Simple query
+	////////////
+
+	e = NewEventWrapper(&ebpf.EbpfEvent{
+		Tuple: defaultTuple,
+		Tx: ebpf.EbpfTx{
+			Request_fragment:   createMessageFromString(QueryTag, fmt.Sprintf("CREATE TABLE %s (id int)", tableName1)),
+			Request_started:    1,
+			Response_last_seen: 10,
+		},
+	})
+	s.Process(e)
+	require.Equal(t, 1, len(s.stats))
+
+	requestStats, ok := s.stats[Key{
+		Operation:     CreateTableOP,
+		TableName:     tableName1,
+		ConnectionKey: e.ConnTuple(),
+		DatabaseName:  databaseName,
+	}]
+	require.True(t, ok)
+	require.Equal(t, requestStats.Count, 1)
+
+	////////////
+	// Parse a first statement
+	////////////
+
+	e = NewEventWrapper(&ebpf.EbpfEvent{
+		Tuple: defaultTuple,
+		Tx: ebpf.EbpfTx{
+			Request_fragment: createMessageFromString(ParseTag, fmt.Sprintf("%s\x00INSERT INTO %s VALUES (1, 2, 3)", statementName1, tableName1)),
+		},
+	})
+	s.Process(e)
+	// no new stats
+	require.Equal(t, 1, len(s.stats))
+
+	qInfo, ok := s.statementsCache.Get(statementConnection{
+		statementName: statementName1,
+		conn:          e.ConnTuple(),
+	})
+	require.True(t, ok)
+	require.Equal(t, queryInfo{tableName: tableName1, sqlCommand: InsertOP}, qInfo)
+
+	////////////
+	// Parse a second statement with the same name
+	////////////
+
+	// we have the same statement name but a different statement value
+	e = NewEventWrapper(&ebpf.EbpfEvent{
+		Tuple: defaultTuple,
+		Tx: ebpf.EbpfTx{
+			Request_fragment: createMessageFromString(ParseTag, fmt.Sprintf("%s\x00SELECT * FROM %s", statementName1, tableName2)),
+		},
+	})
+	s.Process(e)
+
+	qInfo, ok = s.statementsCache.Get(statementConnection{
+		statementName: statementName1,
+		conn:          e.ConnTuple(),
+	})
+	require.True(t, ok)
+	// we check if the overwrite worked
+	require.Equal(t, queryInfo{tableName: tableName2, sqlCommand: SelectOP}, qInfo)
+
+	////////////
+	// Parse a second statement
+	////////////
+
+	e = NewEventWrapper(&ebpf.EbpfEvent{
+		Tuple: defaultTuple,
+		Tx: ebpf.EbpfTx{
+			Request_fragment: createMessageFromString(ParseTag, fmt.Sprintf("%s\x00UPDATE %s SET json_prefs = (json_prefs)s, modified = '2015-08-27 22:10:32.492912' WHERE user_id = (user_id)s AND url = (url)s", statementName2, tableName2)),
+		},
+	})
+	s.Process(e)
+
+	qInfo, ok = s.statementsCache.Get(statementConnection{
+		statementName: statementName2,
+		conn:          e.ConnTuple(),
+	})
+	require.True(t, ok)
+	require.Equal(t, queryInfo{tableName: tableName2, sqlCommand: UpdateOP}, qInfo)
+
+	////////////
+	// Bind against the fist statement
+	////////////
+
+	e = NewEventWrapper(&ebpf.EbpfEvent{
+		Tuple: defaultTuple,
+		Tx: ebpf.EbpfTx{
+			Request_fragment:   createMessageFromString(BindTag, fmt.Sprintf("PORTAL1\x00%s\x002342424242", statementName1)),
+			Request_started:    1,
+			Response_last_seen: 10,
+		},
+	})
+	// we bind against statement one
+	s.Process(e)
+
+	// we have a new key so now we have 2 stats
+	require.Equal(t, 2, len(s.stats))
+
+	requestStats, ok = s.stats[Key{
+		Operation:     SelectOP,
+		TableName:     tableName2,
+		ConnectionKey: e.ConnTuple(),
+		DatabaseName:  databaseName,
+	}]
+	require.True(t, ok)
+	require.Equal(t, requestStats.Count, 1)
+
+	////////////
+	// Bind against the second statement
+	////////////
+
+	e = NewEventWrapper(&ebpf.EbpfEvent{
+		Tuple: defaultTuple,
+		Tx: ebpf.EbpfTx{
+			Request_fragment:   createMessageFromString(BindTag, fmt.Sprintf("PORTAL\x00%s\x002342424242", statementName2)),
+			Request_started:    1,
+			Response_last_seen: 10,
+		},
+	})
+	// we bind against statement one
+	s.Process(e)
+
+	// we have a new key so now we have 2 stats
+	require.Equal(t, 3, len(s.stats))
+
+	requestStats, ok = s.stats[Key{
+		Operation:     UpdateOP,
+		TableName:     tableName2,
+		ConnectionKey: e.ConnTuple(),
+		DatabaseName:  databaseName,
+	}]
+	require.True(t, ok)
+	require.Equal(t, requestStats.Count, 1)
 }

@@ -5,14 +5,24 @@
 
 package postgres
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/DataDog/datadog-agent/pkg/util/log"
+)
 
 // Operation represents a postgres query operation supported by our decoder.
 type Operation uint8
 
 const (
-	// UnknownOP represents an unknown operation.
-	UnknownOP Operation = iota
+	UnobservedString  = "<unobserved>"
+	UnsupportedString = "<unsupported>"
+	EmptyTableName    = ""
+)
+
+const (
+	// UnobservedOP represents an operation we don't receive from ebpf.
+	UnobservedOP Operation = iota
 	// SelectOP represents a SELECT operation.
 	SelectOP
 	// InsertOP represents an INSERT operation.
@@ -31,62 +41,73 @@ const (
 	TruncateTableOP
 	// ShowOP represents a command SHOW
 	ShowOP
-	// UnsupportedOP represents an unsupported operation.
+	// BeginOP represents a command BEGIN
+	BeginOP
+	// CommitOP represents a command COMMIT
+	CommitOP
+	// RollbackOP represents a command ROLLBACK
+	RollbackOP
+	// LockOP represents a command LOCK
+	LockOP
+	// UnsupportedOP represents something we cannot parse correctly
 	UnsupportedOP
+)
+
+var (
+	commands = map[Operation]string{
+		SelectOP:        "SELECT",
+		InsertOP:        "INSERT",
+		UpdateOP:        "UPDATE",
+		CreateTableOP:   "CREATE",
+		DropTableOP:     "DROP",
+		DeleteTableOP:   "DELETE",
+		AlterTableOP:    "ALTER",
+		TruncateTableOP: "TRUNCATE",
+		ShowOP:          "SHOW",
+		BeginOP:         "BEGIN",
+		CommitOP:        "COMMIT",
+		RollbackOP:      "ROLLBACK",
+		LockOP:          "LOCK",
+	}
 )
 
 // String returns the string representation of the operation.
 func (op Operation) String() string {
 	switch op {
-	case SelectOP:
-		return "SELECT"
-	case InsertOP:
-		return "INSERT"
-	case UpdateOP:
-		return "UPDATE"
-	case CreateTableOP:
-		return "CREATE"
-	case DropTableOP:
-		return "DROP"
-	case TruncateTableOP:
-		return "TRUNCATE"
-	case DeleteTableOP:
-		return "DELETE"
-	case AlterTableOP:
-		return "ALTER"
-	case ShowOP:
-		return "SHOW"
+	case UnobservedOP:
+		return UnobservedString
 	case UnsupportedOP:
-		return "UNSUPPORTED"
+		return UnsupportedString
 	default:
-		return "UNKNOWN"
+		if command, ok := commands[op]; ok {
+			return command
+		}
+		panic("unrecognized operation")
 	}
 }
 
-// FromString returns the Operation from a string.
-func FromString(op string) Operation {
-	switch strings.ToUpper(op) {
-	case "SELECT":
-		return SelectOP
-	case "INSERT":
-		return InsertOP
-	case "UPDATE":
-		return UpdateOP
-	case "CREATE":
-		return CreateTableOP
-	case "DROP":
-		return DropTableOP
-	case "TRUNCATE":
-		return TruncateTableOP
-	case "DELETE":
-		return DeleteTableOP
-	case "ALTER":
-		return AlterTableOP
-	case "SHOW":
-		return ShowOP
-	case "UNSUPPORTED":
-		return UnsupportedOP
+func extractSQLCommand(payload []byte) Operation {
+	// some operations have a space after them others have a \0 (e.g. "commit\0", "select ")
+	// so we check for a prefix match
+	payloadStr := strings.ToUpper(string(payload))
+	for op, strOP := range commands {
+		if strings.HasPrefix(payloadStr, strOP) {
+			return op
+		}
+	}
+	logPostgres(log.InfoLvl, "unrecognized SQL command `%s`", string(payload))
+	return UnsupportedOP
+}
+
+func hasTable(op Operation) bool {
+	switch op {
+	case SelectOP, InsertOP, UpdateOP, DeleteTableOP, TruncateTableOP, CreateTableOP, DropTableOP, AlterTableOP, LockOP:
+		return true
+	// UnsupportedOP means that we don't know if it has a table or not, so by default we assume it has none
+	case ShowOP, BeginOP, CommitOP, RollbackOP, UnsupportedOP:
+		return false
+	// UnobservedOP shoule be never called that's the reason why we don't handle it
 	default:
-		return UnknownOP
+		panic("unrecognized operation")
 	}
 }

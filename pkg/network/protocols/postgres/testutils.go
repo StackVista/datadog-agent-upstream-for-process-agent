@@ -10,6 +10,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"fmt"
 	"time"
 
@@ -157,4 +158,43 @@ func runTimedQuery(callback func(context.Context, ...interface{}) (sql.Result, e
 	defer cancel()
 	_, err := callback(ctx)
 	return err
+}
+
+func createMessageTagOnly(tag byte) [160]byte {
+	var frag [160]byte
+	frag[0] = tag
+
+	length := uint32(4)
+	binary.BigEndian.PutUint32(frag[1:5], length)
+	return frag
+}
+
+func createMessageFromString(tag byte, query string) [160]byte {
+	var frag [160]byte
+	frag[0] = tag
+
+	// 4 (int32) + len(query) + 1 (null terminator)
+	// len(query) doesn't return the null terminator.
+	length := uint32(4 + len(query) + 1)
+	binary.BigEndian.PutUint32(frag[1:5], length)
+
+	var start int
+	if tag == StartupTag {
+		// we have 3 bytes of junk after the len.
+		frag[5] = 1
+		frag[6] = 1
+		frag[7] = 1
+		start = 8
+	} else {
+		start = 5
+	}
+
+	// copy doesn't copy the null terminator of the string
+	len := copy(frag[start:], query)
+
+	if start+len < 160 {
+		// put the terminator
+		frag[start+len] = 0
+	}
+	return frag
 }

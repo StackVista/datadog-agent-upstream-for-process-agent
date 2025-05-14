@@ -9,10 +9,6 @@ const (
 	layerEncryptionBit  = 0x8000
 )
 
-const (
-	PostgresMaxTotalMessages = 0xb4
-)
-
 type DispatcherProgramType uint32
 
 const (
@@ -56,19 +52,15 @@ const (
 
 	ProgramPostgres ProgramType = 0x12
 
-	ProgramPostgresHandleResponse ProgramType = 0x13
+	ProgramPostgresTermination ProgramType = 0x13
 
-	ProgramPostgresParseMessage ProgramType = 0x14
+	ProgramRedis ProgramType = 0x14
 
-	ProgramPostgresTermination ProgramType = 0x15
+	ProgramRedisTermination ProgramType = 0x15
 
-	ProgramRedis ProgramType = 0x16
+	ProgramMongo ProgramType = 0x16
 
-	ProgramRedisTermination ProgramType = 0x17
-
-	ProgramMongo ProgramType = 0x18
-
-	ProgramAMQP ProgramType = 0x19
+	ProgramAMQP ProgramType = 0x17
 )
 
 type ebpfProtocolType uint16
