@@ -174,22 +174,27 @@ func createMessageFromString(tag byte, query string) [160]byte {
 	frag[0] = tag
 
 	// 4 (int32) + len(query) + 1 (null terminator)
+	// len(query) doesn't return the null terminator.
 	length := uint32(4 + len(query) + 1)
 	binary.BigEndian.PutUint32(frag[1:5], length)
 
-	copy(frag[5:], query)
-	frag[5+len(query)] = 0
-	return frag
-}
+	var start int
+	if tag == StartupTag {
+		// we have 3 bytes of junk after the len.
+		frag[5] = 1
+		frag[6] = 1
+		frag[7] = 1
+		start = 8
+	} else {
+		start = 5
+	}
 
-func createMessageFromBytes(tag byte, query []byte) [160]byte {
-	var frag [160]byte
-	frag[0] = tag
+	// copy doesn't copy the null terminator of the string
+	len := copy(frag[start:], query)
 
-	// 4 (int32) + len(query)
-	length := uint32(4 + len(query))
-	binary.BigEndian.PutUint32(frag[1:5], length)
-
-	copy(frag[5:], query)
+	if start+len < 160 {
+		// put the terminator
+		frag[start+len] = 0
+	}
 	return frag
 }

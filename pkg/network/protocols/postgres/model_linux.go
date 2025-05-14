@@ -228,17 +228,29 @@ func (e *EventWrapper) getPayload() []byte {
 }
 
 func (e *EventWrapper) setPayload() {
-	l := uint32(binary.BigEndian.Uint32(e.Tx.Request_fragment[1:5]))
-	// This is possible only in 2 cases:
-	// 1. The postgres message has no payload (len==4) (e.g. Sync)
-	// 2. We cannot correctly read the fragment from the kernel at it contains all 0 (so len=0)
-	if l == 4 || l == 0 {
-		return
-	}
+	// We call this method only when we are sure we have a valid postgres messages.
+	// +1 because we want to consider the tag since we will compare it with our fragment len (that contains the tag)
+	l := uint32(binary.BigEndian.Uint32(e.Tx.Request_fragment[1:5])) + 1
 
 	if l > uint32(len(e.Tx.Request_fragment)) {
-		e.payload = e.Tx.Request_fragment[5:len(e.Tx.Request_fragment)]
+		e.payload = e.Tx.Request_fragment[5:]
 	} else {
 		e.payload = e.Tx.Request_fragment[5:l]
+	}
+}
+
+func (e *EventWrapper) setStartupPayload() {
+	// the len is always in the same position of the other messages
+	// this len contains self + payload but not the 3 bytes of junk and the tag.
+	// so we sum 4
+	l := uint32(binary.BigEndian.Uint32(e.Tx.Request_fragment[1:5])) + 4
+	if l > uint32(len(e.Tx.Request_fragment)) {
+		// 1 byte - tag
+		// 4 bytes - len
+		// 3 bytes - junk
+		// payload (we start from 8)
+		e.payload = e.Tx.Request_fragment[8:]
+	} else {
+		e.payload = e.Tx.Request_fragment[8:l]
 	}
 }

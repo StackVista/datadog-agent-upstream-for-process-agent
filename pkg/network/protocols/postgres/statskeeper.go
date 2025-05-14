@@ -74,7 +74,6 @@ func (s *StatKeeper) Process(e *EventWrapper) {
 	s.statsMutex.Lock()
 	defer s.statsMutex.Unlock()
 
-	e.setPayload()
 	switch e.getTag() {
 	case EmptyTag:
 		logPostgres(log.WarnLvl, "Postgres message with empty tag")
@@ -145,6 +144,7 @@ func (s *StatKeeper) resetNoLock() {
 }
 
 func (s *StatKeeper) handleStartup(e *EventWrapper) {
+	e.setStartupPayload()
 	dbName := extractDatabaseName(e.getPayload())
 	if dbName == UnsupportedString {
 		s.telemetry.failedDatabaseNameExtraction.Add(1)
@@ -172,6 +172,7 @@ func (s *StatKeeper) handleStartup(e *EventWrapper) {
 }
 
 func (s *StatKeeper) handleParse(e *EventWrapper) {
+	e.setPayload()
 	statementName, info := extractStatementFromParse(e.normalizer, e.getPayload())
 	if statementName == UnsupportedString {
 		// it means we have no information about the query, there is no reason to add it to the cache
@@ -213,6 +214,7 @@ func (s *StatKeeper) handleParse(e *EventWrapper) {
 }
 
 func (s *StatKeeper) handleBind(e *EventWrapper) {
+	e.setPayload()
 	// we try to extract the statement from the Bind
 	statementName := extractStatementNameFromBind(e.getPayload())
 
@@ -259,6 +261,7 @@ func (s *StatKeeper) handleBind(e *EventWrapper) {
 }
 
 func (s *StatKeeper) handleQuery(e *EventWrapper) {
+	e.setPayload()
 	// We try to extract the SQL command and the table name from the query.
 	// If we don't recognize the SQL command we set it to unsupported.
 	info := extractSQLCommandAndTable(e.normalizer, e.getPayload())

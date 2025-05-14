@@ -13,6 +13,40 @@
 #include "protocols/postgres/usm-events.h"
 #include "protocols/read_into_buffer.h"
 
+// `bpf_skb_load_bytes` and `bpf_probe_read_user` return 0 only when we can read all `len` bytes. 
+// In all other cases they return EFAULT. 
+// So it's very important to check that `len` is not greater than the left payload in the packet otherwise we will face EFAULT.
+// It would be nice to create a unique helper for all protocols that takes a compile-time `len` instead of hardcoding the `POSTGRES_BUFFER_SIZE` value
+// but this seems very hard to achieve on kernel 5.4.293.
+// For some reason the verifier doesn't force the upper bound of R4 even if it is a constant.
+// `R4=inv(id=0,umin_value=2,umax_value=4294967295,var_off=(0x0; 0xffffffff))`
+static __always_inline __maybe_unused long postgres_pktbuf_safe_load_bytes_from_current_offset(pktbuf_t pkt, void *to) {
+    // we truncate the read to the left payload in the packet.
+    // `left_payload = 1` is needed by the verifier to understand the min value is 1.
+    #define LEFT_PAYLOAD(end, start)                   \
+    ({                                             \
+        s64 left_payload = (s64)end - (s64)start;  \
+        if (left_payload > POSTGRES_BUFFER_SIZE) { \
+            left_payload = POSTGRES_BUFFER_SIZE;   \
+        }                                          \
+        if (left_payload < 1) {                    \
+            left_payload = 1;                      \
+        }                                          \
+        asm volatile("" ::: "memory");             \
+        left_payload;                              \
+    })
+
+    switch (pkt.type) {
+    case PKTBUF_SKB:
+        return bpf_skb_load_bytes(pkt.skb, pkt.skb_info->data_off, to, LEFT_PAYLOAD(pkt.skb_info->data_end, pkt.skb_info->data_off));
+    case PKTBUF_TLS:
+        return bpf_probe_read_user(to, LEFT_PAYLOAD(pkt.tls->data_end, pkt.tls->data_off), pkt.tls->buffer_ptr + pkt.tls->data_off);
+    }
+
+    pktbuf_invalid_operation();
+    return 0;
+}
+
 static __always_inline __maybe_unused bool postgres_read_tuple(pktbuf_t pkt, conn_tuple_t *tup) {
     const __u32 zero = 0;
     switch (pkt.type) {
@@ -60,26 +94,29 @@ static __always_inline void postgres_batch_enqueue_wrapper(pktbuf_t pkt, postgre
 }
 
 static __always_inline void postgres_handle_startup(pktbuf_t pkt, struct pg_startup_header *header) {
-    // we now have the parameters.
+    // we read the full packet
+    postgres_transaction_t t = {};
+    postgres_pktbuf_safe_load_bytes_from_current_offset(pkt, &t.request_fragment);
+
+    // Now at the beginning of `t.request_fragment` we have 8 bytes -> `struct pg_startup_header`
+    // we want to overwrite it with a postgres "normal" header so that the userspace can parse it as a normal message.
+    struct pg_message_header *fake_hdr = (struct pg_message_header *)t.request_fragment;
+    fake_hdr->message_tag = POSTGRES_STARTUP_FAKE_MAGIC_BYTE;
+    // we remove `4` because `1` is for the first byte (the tag) and `3` is for the 3 bytes of junk.
+    fake_hdr->message_len = bpf_htonl(bpf_ntohl(header->message_len) - 4);
+    // we overwrite 5 bytes, there are still 3 bytes that contains junk and the userspace should skip them.
+    // after the first 8 bytes (5+3) the userspace will find parameters.
     // https://www.postgresql.org/docs/current/protocol-message-formats.html#PROTOCOL-MESSAGE-FORMATS-STARTUPMESSAGE
     // The parameters are a pairs of key-value. Each string is `\0` terminated.
     // example: user\0postgres\0database\0default\0\0
-    postgres_transaction_t t = {};
-    // we create a fake header so that the userspace doesn't need handle it differently.
-    struct pg_message_header *fake_hdr = (struct pg_message_header *)t.request_fragment;
-    fake_hdr->message_tag = POSTGRES_STARTUP_FAKE_MAGIC_BYTE;
-    // we remove the len of the protocol version from the message length.
-    fake_hdr->message_len = bpf_htonl(bpf_ntohl(header->message_len) - 4);
-    pktbuf_advance(pkt, sizeof(struct pg_startup_header));
-    pktbuf_safe_load_bytes_from_current_offset(pkt, &t.request_fragment[sizeof(struct pg_message_header)], POSTGRES_BUFFER_SIZE - sizeof(struct pg_message_header));
-    debug_postgres("startup: tcp_seq %u, frag %s", pkt.skb_info->tcp_seq, &t.request_fragment[sizeof(struct pg_message_header)]);
+    debug_postgres("startup: tcp_seq %u", pkt.skb_info->tcp_seq);
     postgres_batch_enqueue_wrapper(pkt, &t, false);
 }
 
 static __always_inline void postgres_handle_parse(pktbuf_t pkt) {
     postgres_transaction_t t = {};
-    pktbuf_safe_load_bytes_from_current_offset(pkt, t.request_fragment, POSTGRES_BUFFER_SIZE);
-    debug_postgres("parse: tcp_seq %u, frag %s", pkt.skb_info->tcp_seq, &t.request_fragment[sizeof(struct pg_message_header)]);
+    postgres_pktbuf_safe_load_bytes_from_current_offset(pkt, t.request_fragment);
+    debug_postgres("'P': tcp_seq %u", pkt.skb_info->tcp_seq);
     postgres_batch_enqueue_wrapper(pkt, &t, false);
 }
 
@@ -100,8 +137,8 @@ static __always_inline void postgres_store_transaction(pktbuf_t pkt) {
     }
     postgres_transaction_t t = {};
     t.request_started = bpf_ktime_get_ns();
-    pktbuf_safe_load_bytes_from_current_offset(pkt, t.request_fragment, POSTGRES_BUFFER_SIZE);
-    debug_postgres("store '%c': tcp_seq %u, frag %s", t.request_fragment[0], &t.request_fragment[sizeof(struct pg_message_header)]);
+    postgres_pktbuf_safe_load_bytes_from_current_offset(pkt, t.request_fragment);
+    debug_postgres("store '%c': tcp_seq %u", t.request_fragment[0], pkt.skb_info->tcp_seq);
     bpf_map_update_elem(&postgres_in_flight, &conn_tuple, &t, BPF_ANY);
 }
 
@@ -115,7 +152,7 @@ static __always_inline void postgres_send_transaction(pktbuf_t pkt) {
         return;
     }
     t->response_last_seen = bpf_ktime_get_ns();
-    debug_postgres("send '%c': tcp_seq %u, frag %s", t->request_fragment[0], pkt.skb_info->tcp_seq, &t->request_fragment[sizeof(struct pg_message_header)]);
+    debug_postgres("send '%c': tcp_seq %u", t->request_fragment[0], pkt.skb_info->tcp_seq);
     postgres_batch_enqueue_wrapper(pkt, t, true);
 }
 
@@ -125,7 +162,9 @@ static __always_inline void postgres_handle_c_tag(pktbuf_t pkt, struct pg_messag
     // we want to skip the entire message here and see if we have a parse message
     // +1 to skip the first byte.
     pktbuf_advance(pkt, len + 1);
-    pktbuf_safe_load_bytes_from_current_offset(pkt, header, sizeof(struct pg_message_header));
+    // we try to read the next message header, if there are no bytes to read it is fine the header
+    // will be zeroed and we will skip the following checks.
+    pktbuf_load_bytes_from_current_offset(pkt, header, sizeof(struct pg_message_header));
     if (header->message_tag == POSTGRES_PARSE_MAGIC_BYTE) {
         // We are interested in the close message because usually after a close statement we have
         // a new parse in the same TCP segment. We want to store the parse if it is there.
@@ -159,9 +198,11 @@ static __always_inline void postgres_handle(pktbuf_t pkt) {
     // Startup message detection
     ////////////////////////////
     struct pg_startup_header startup_hdr = { 0 };
-    // We use the safe version because we could have a packet with just 5 bytes (e.g. Sync message).
-    // We will reuse these bytes later so we want to be sure to read them.
-    pktbuf_safe_load_bytes_from_current_offset(pkt, &startup_hdr, sizeof(struct pg_startup_header));
+    // this method could return EFAULT if the are not enough bytes in the packet.
+    // it is fine because it means we are not in a startup message and moreover the helper will
+    // memset to zero the `startup_hdr` struct, so we cannot fall in false positives.
+    // https://github.com/torvalds/linux/blob/a86bf2283d2c9769205407e2b54777c03d012939/net/core/filter.c#L1753
+    pktbuf_load_bytes_from_current_offset(pkt, &startup_hdr, sizeof(struct pg_startup_header));
     // checking the version is enough because we are already sure we are a postgres connection, and the version
     // in big endian cannot collide with other message code.
     // the version is `0x00030000` and there are no codes corresponding to `0x00`
@@ -175,9 +216,10 @@ static __always_inline void postgres_handle(pktbuf_t pkt) {
     ////////////////////////////
 
     // We are not in a startup message, so we can assume we are in a regular message.
-    // Since the normal header is smaller than the startup one we can simply recast.
-    struct pg_message_header *header = (struct pg_message_header *)&startup_hdr;
-    switch (header->message_tag) {
+    struct pg_message_header header = { 0 };
+    // in this case we are sure we have enough bytes in the packet because we are in a regular message postgres message so the header should always be there.
+    pktbuf_load_bytes_from_current_offset(pkt, &header, sizeof(struct pg_message_header));
+    switch (header.message_tag) {
         //////////////////////////
         // Frontend messages
         //////////////////////////
@@ -205,12 +247,12 @@ static __always_inline void postgres_handle(pktbuf_t pkt) {
     // Since `Close` and `Command complete` share the same byte `C`
     // we need to do some extra steps to decide what do to.
     case 'C':
-        postgres_handle_c_tag(pkt, header);
+        postgres_handle_c_tag(pkt, &header);
         break;
 
     default:
         // As a last resort we check for it.
-        postgres_handle_ready_for_query(pkt, header);
+        postgres_handle_ready_for_query(pkt, &header);
         break;
     }
 

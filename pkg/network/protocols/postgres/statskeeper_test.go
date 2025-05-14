@@ -62,7 +62,7 @@ func TestSimpleQueries(t *testing.T) {
 	event := NewEventWrapper(&ebpf.EbpfEvent{
 		Tx: ebpf.EbpfTx{
 			Request_fragment: createMessageFromString(StartupTag,
-				fmt.Sprintf("user\x00xx\x00database\x00%s\x00\x00", databaseName)),
+				fmt.Sprintf("user\x00xx\x00database\x00%s\x00", databaseName)),
 		},
 	})
 	s.Process(event)
@@ -125,8 +125,7 @@ func TestFullFlow(t *testing.T) {
 	e := NewEventWrapper(&ebpf.EbpfEvent{
 		Tuple: defaultTuple,
 		Tx: ebpf.EbpfTx{
-			Request_fragment: createMessageFromString(StartupTag,
-				fmt.Sprintf("user\x00xx\x00database\x00%s\x00\x00", databaseName)),
+			Request_fragment: createMessageFromString(StartupTag, fmt.Sprintf("user\x00xx\x00database\x00%s\x00", databaseName)),
 		},
 	})
 

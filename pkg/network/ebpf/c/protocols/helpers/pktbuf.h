@@ -114,36 +114,9 @@ static __always_inline __maybe_unused long pktbuf_load_bytes(pktbuf_t pkt, u32 o
 }
 
 
-// `bpf_skb_load_bytes` and `bpf_probe_read_user` return 0 only when we can read exactly `len` bytes. 
-// In all other cases they return EFAULT.
-// So it's very important to check that `len` is not greater than the left payload in the packet otherwise we will face EFAULT.
-static __always_inline __maybe_unused long pktbuf_safe_load_bytes_from_current_offset(pktbuf_t pkt, void *to, u32 len) {
-    // we truncate the read to the left payload in the packet.
-    // `left_payload = 1` is needed by the verifier to understand the min value is 1.
-#define LEFT_PAYLOAD(end, start) ({           \
-    s64 left_payload = (s64)end - (s64)start; \
-    if (left_payload > len) {                \
-        left_payload = len;                  \
-    }                                         \
-    if (left_payload < 1) {                   \
-        left_payload = 1;                     \
-    }                                         \
-    left_payload;                             \
-})
-
-    switch (pkt.type) {
-    case PKTBUF_SKB:
-        return bpf_skb_load_bytes(pkt.skb, pkt.skb_info->data_off, to, LEFT_PAYLOAD(pkt.skb_info->data_end, pkt.skb_info->data_off));
-    case PKTBUF_TLS:
-        return bpf_probe_read_user(to, LEFT_PAYLOAD(pkt.tls->data_end, pkt.tls->data_off), pkt.tls->buffer_ptr + pkt.tls->data_off);
-    }
-
-    pktbuf_invalid_operation();
-    return 0;
-}
 
 // `len` should be always less than or equal to the left payload in the packet, otherwise this method will return EFAULT.
-// If you are unsure about the remaining payload size, use `pktbuf_safe_load_bytes_from_current_offset` instead.
+// If you are unsure about the remaining payload size, use the safer version, for postgres the helper is `postgres_pktbuf_safe_load_bytes_from_current_offset`.
 static __always_inline __maybe_unused long pktbuf_load_bytes_from_current_offset(pktbuf_t pkt, void *to, u32 len)
 {
     return pktbuf_load_bytes(pkt, pktbuf_data_offset(pkt), to, len);

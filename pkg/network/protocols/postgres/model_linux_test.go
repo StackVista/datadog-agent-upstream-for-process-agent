@@ -8,10 +8,13 @@
 package postgres
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/DataDog/datadog-agent/pkg/network/protocols/postgres/ebpf"
 	"github.com/DataDog/go-sqllexer"
 )
 
@@ -282,4 +285,40 @@ func TestExtractStatementFromParse(t *testing.T) {
 			require.EqualValues(t, tt.qinfo, q)
 		})
 	}
+}
+
+func TestSetPayload(t *testing.T) {
+	event := NewEventWrapper(&ebpf.EbpfEvent{
+		Tx: ebpf.EbpfTx{
+			Request_fragment: createMessageFromString(StartupTag, fmt.Sprintf("user\x00xx\x00database\x00dbdb\x00")),
+		},
+	})
+	event.setStartupPayload()
+	require.EqualValues(t, 23, len(event.getPayload()))
+
+	event = NewEventWrapper(&ebpf.EbpfEvent{
+		Tx: ebpf.EbpfTx{
+			Request_fragment: createMessageFromString(StartupTag, strings.Repeat("A", 1023)),
+		},
+	})
+	event.setStartupPayload()
+	require.EqualValues(t, 152, len(event.getPayload()))
+
+	event = NewEventWrapper(&ebpf.EbpfEvent{
+		Tx: ebpf.EbpfTx{
+			Request_fragment: createMessageFromString(QueryTag, fmt.Sprintf("SELECT * FROM foo")),
+		},
+	})
+	event.setPayload()
+	// 18 because we have the null terminator
+	require.EqualValues(t, 18, len(event.getPayload()))
+
+	event = NewEventWrapper(&ebpf.EbpfEvent{
+		Tx: ebpf.EbpfTx{
+			Request_fragment: createMessageFromString(QueryTag, strings.Repeat("A", 1023)),
+		},
+	})
+	event.setPayload()
+	require.EqualValues(t, 155, len(event.getPayload()))
+
 }
