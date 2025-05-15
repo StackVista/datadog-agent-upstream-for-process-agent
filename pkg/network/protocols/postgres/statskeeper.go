@@ -67,6 +67,8 @@ func NewStatkeeper(c *config.Config, t *Telemetry) (*StatKeeper, error) {
 }
 
 // Process processes the postgres transaction
+// See the design doc for more details:
+// https://stackstate.atlassian.net/browse/STAC-22668
 func (s *StatKeeper) Process(e *EventWrapper) {
 	// we need a lock for 2 main reasons:
 	// 1 - Multiple threads can be calling this function at the same time. If we call Sync() each CPU calls it.
