@@ -191,6 +191,8 @@ static __always_inline void postgres_handle_ready_for_query(pktbuf_t pkt, struct
 
 // Reads the first message header and decides what to do based on the
 // message tag.
+// See the design doc for more details:
+// https://stackstate.atlassian.net/browse/STAC-22668
 static __always_inline void postgres_handle(pktbuf_t pkt) {
     // we don't know if we are a startup message or a regular message so we need to check it.
 
