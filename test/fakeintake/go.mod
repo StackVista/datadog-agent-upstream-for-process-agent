@@ -9,7 +9,7 @@ replace (
 )
 
 require (
-	github.com/DataDog/agent-payload/v5 v5.0.138
+	github.com/DataDog/agent-payload/v5 v5.0.151
 	github.com/DataDog/datadog-agent/comp/netflow/payload v0.62.2
 	github.com/DataDog/datadog-agent/pkg/proto v0.62.2
 	github.com/DataDog/zstd v1.5.6
