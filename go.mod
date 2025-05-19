@@ -300,7 +300,7 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.56.0 // indirect
 	go.uber.org/atomic v1.11.0
 	go.uber.org/automaxprocs v1.6.0
-	go.uber.org/dig v1.18.0
+	go.uber.org/dig v1.19.0
 	go.uber.org/fx v1.23.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
@@ -338,7 +338,6 @@ require (
 	k8s.io/metrics v0.31.2
 	k8s.io/utils v0.0.0-20240821151609-f90d01438635
 	sigs.k8s.io/custom-metrics-apiserver v1.30.1-0.20241105195130-84dc8cfe2555
-
 )
 
 require (
