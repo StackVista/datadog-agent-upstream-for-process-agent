@@ -9,7 +9,6 @@ package main
 import (
 	"embed"
 	"flag"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +22,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/cihub/seelog"
+	ciliumEbpf "github.com/cilium/ebpf"
 )
 
 //go:embed ebpf/*
@@ -33,8 +33,9 @@ const ebpfEmbedFSFolder = "ebpf"
 
 var (
 	// Enable extended verifier logs increase the time needed to run this program
-	verifierVerbose = flag.Bool("verbose", false, "Enable verbose verifier debug logs")
-	longRunning     = flag.Bool("long-run", false, "Used to debug ebpf programs, if set the program will run for 30 minutes")
+	verifierLogLevel  = flag.Int("ebpf-verbose", int(ciliumEbpf.LogLevelStats), "Verifier log level. 4 -> stats (the least verbose), 2 -> instructions (the most verbose), 1 -> branch.")
+	longRunning       = flag.Bool("long-run", false, "Used to debug ebpf programs, if set the program will run for 30 minutes")
+	userspaceLogLevel = flag.String("verbose", "warn", "Userspace vebosity. Possible values (debug, info, warn, error, critical, off).")
 )
 
 func getTracerConfig(ebpfDir string) *tracerConfig.Config {
@@ -43,6 +44,14 @@ func getTracerConfig(ebpfDir string) *tracerConfig.Config {
 	const defaultUDPStreamTimeoutSeconds = 120
 	const defaultOffsetThreshold = 400
 	const maxTrackedConnections = 1000
+
+	// Validation on the log level.
+	logLevel := ciliumEbpf.LogLevel(*verifierLogLevel & 7)
+	if logLevel == 0 {
+		log.Errorf("Invalid verifier log level %d, must be between 1 and 7", *verifierLogLevel)
+		os.Exit(1)
+	}
+	log.Warnf("Using verifier log level %d", logLevel)
 
 	return &tracerConfig.Config{
 		Config: ebpf.Config{
@@ -113,7 +122,9 @@ func getTracerConfig(ebpfDir string) *tracerConfig.Config {
 		EnableNativeTLSMonitoring:     true,
 		EnableHTTPTracing:             true,
 
-		ProbeDebugLog: *verifierVerbose,
+		// Here we want to manually control the level of logging not using `ProbeDebugLog`
+		EBPFLogLevelUSM: logLevel,
+		ProbeDebugLog:   false,
 
 		EnableConntrack:       true,
 		EnableEbpfConntracker: true,
@@ -167,28 +178,35 @@ func dumpEBPF() (string, error) {
 	}
 	entries, err := ebpfFS.ReadDir(ebpfEmbedFSFolder)
 	if err != nil {
-		return "", fmt.Errorf("reading embedded dir %q: %w", ebpfEmbedFSFolder, err)
+		return "", log.Errorf("reading embedded dir %q: %w", ebpfEmbedFSFolder, err)
 	}
 	for _, e := range entries {
 		filePath := filepath.Join(ebpfEmbedFSFolder, e.Name())
 		data, err := ebpfFS.ReadFile(filePath)
 		if err != nil {
-			return "", fmt.Errorf("reading embedded file %q: %w", filePath, err)
+			return "", log.Errorf("reading embedded file %q: %w", filePath, err)
 		}
 		if err := os.WriteFile(filepath.Join(tmp, e.Name()), data, 0644); err != nil {
+			return "", err
+		}
+		// we need this because because we check the permissions of the files `root:root 0022`
+		if err := os.Chown(filepath.Join(tmp, e.Name()), 0, 0); err != nil {
 			return "", err
 		}
 	}
 	return tmp, nil
 }
 
-func main() {
-	// Parse the flags
-	flag.Parse()
+func run() int {
+	log.SetupLogger(seelog.Default, *userspaceLogLevel)
+	// Critical so that it will be always printed
+	log.Criticalf("Using userspace verbosity level %s\n", *userspaceLogLevel)
+	defer log.Flush()
 
 	ebpfDir, err := dumpEBPF()
 	if err != nil {
-		panic(err)
+		log.Errorf("unable to embedded FS: %v\n", err)
+		return 1
 	}
 
 	// If we don't intialize a config datadog will panic
@@ -200,24 +218,29 @@ func main() {
 	config := model.NewConfig("sts", "DD", strings.NewReplacer(".", "_"))
 	setup.InitConfig(config)
 	if _, err := setup.LoadWithoutSecret(config, nil); err != nil {
-		fmt.Fprintf(os.Stderr, "unable to load datadog config: %v\n", err)
-		os.Exit(1)
+		log.Errorf("unable to load datadog config: %v\n", err)
+		return 1
 	}
 
 	c := getTracerConfig(ebpfDir)
-	log.SetupLogger(seelog.Default, "warn")
 
-	fmt.Printf("Injecting our ebpf instrumentation...\n")
+	log.Warn("Injecting our ebpf instrumentation...\n")
 	_, err = tracer.NewTracer(c, nil)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
+		log.Errorf("%v\n", err)
+		return 1
 	}
-	fmt.Printf("No verifier errors :)\n")
+	log.Warn("No verifier errors :)\n")
 
 	if *longRunning {
-		fmt.Printf("Running for 30 minutes...\n")
+		log.Warn("Running for 30 minutes...\n")
 		time.Sleep(30 * time.Minute)
 	}
-	os.Exit(0)
+	return 0
+}
+
+func main() {
+	// Parse the flags
+	flag.Parse()
+	os.Exit(run())
 }

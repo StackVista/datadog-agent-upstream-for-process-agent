@@ -32,6 +32,9 @@ const (
 type Config struct {
 	ebpf.Config
 
+	// EBPFLogLevelUSM is the log level for the eBPF verifier when loading USM eBPF programs
+	EBPFLogLevelUSM cebpf.LogLevel
+
 	// NPMEnabled is whether the network performance monitoring feature is explicitly enabled or not
 	NPMEnabled bool
 
@@ -322,6 +325,8 @@ func New() *Config {
 	c := &Config{
 		Config: *ebpf.NewConfig(),
 
+		// by default, we set the log level to stats
+		EBPFLogLevelUSM:          cebpf.LogLevelStats,
 		NPMEnabled:               cfg.GetBool(sysconfig.FullKeyPath(netNS, "enabled")),
 		ServiceMonitoringEnabled: cfg.GetBool(sysconfig.FullKeyPath(smNS, "enabled")),
 
