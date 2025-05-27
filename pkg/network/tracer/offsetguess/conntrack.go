@@ -107,7 +107,7 @@ func (c *conntrackOffsetGuesser) checkAndUpdateCurrentOffset(mp *maps.GenericMap
 
 	if State(c.status.State) != StateChecked {
 		if *maxRetries == 0 {
-			return fmt.Errorf("invalid guessing state while guessing %v, got %v expected %v",
+			return fmt.Errorf("invalid guessing state while guessing '%v', got '%v' expected '%v'",
 				whatString[GuessWhat(c.status.What)], stateString[State(c.status.State)], stateString[StateChecked])
 		}
 		*maxRetries--
@@ -296,10 +296,12 @@ func (c *conntrackOffsetGuesser) runOffsetGuessing(cfg *config.Config, ns netns.
 	expected := &fieldValues{}
 	for State(c.status.State) != StateReady {
 		if err := eventGenerator.Generate(GuessWhat(c.status.What), expected); err != nil {
+			log.Debugf("error generating conntrack event for %v: %v", whatString[GuessWhat(c.status.What)], err)
 			return nil, err
 		}
 
 		if err := c.checkAndUpdateCurrentOffset(mp, expected, &maxRetries, threshold); err != nil {
+			log.Debugf("error guessing offset for %v: %v", whatString[GuessWhat(c.status.What)], err)
 			return nil, err
 		}
 

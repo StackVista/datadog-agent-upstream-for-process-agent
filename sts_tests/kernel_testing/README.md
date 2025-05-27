@@ -15,7 +15,7 @@ Example of the config file:
 
 ```yaml
 vng_path: "vng"
-bin_command: "/tmp/nettop"
+bin_command: "iptables -t raw -A PREROUTING -j CT && /tmp/nettop"
 parallel: 1
 out_path: ""
 kernel_versions:
@@ -26,6 +26,8 @@ kernel_versions:
     - v6.6.91
     - v6.12.29
 ```
+
+> __NOTE:__ We need `iptables -t raw -A PREROUTING -j CT` to load the `conntrack` handlers into the netfiler framework. Loading the `conntrack` kernel module is not enough. We need the `conntrack` handlers to be loaded because we hook them in our ebpf instrumentation. kernel `v5.4.293` refuse to attach kprobes to the conntrack method `__nf_conntrack_hash_insert` returning error `-99 (Cannot assign requested address)`, at the moment we accept this since we usually don't modify the 2 ebpf programs related to `conntrack`.
 
 You can now run the `bpfvalidator` tool on your host against the `nettop` binary.
 

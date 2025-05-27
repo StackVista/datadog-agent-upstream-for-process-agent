@@ -35,7 +35,7 @@ var (
 	// Enable extended verifier logs increase the time needed to run this program
 	verifierLogLevel  = flag.Int("ebpf-verbose", int(ciliumEbpf.LogLevelStats), "Verifier log level. 4 -> stats (the least verbose), 2 -> instructions (the most verbose), 1 -> branch.")
 	longRunning       = flag.Bool("long-run", false, "Used to debug ebpf programs, if set the program will run for 30 minutes")
-	userspaceLogLevel = flag.String("verbose", "warn", "Userspace vebosity. Possible values (debug, info, warn, error, critical, off).")
+	userspaceLogLevel = flag.String("verbose", "warn", "Userspace vebosity. Possible values (trace, debug, info, warn, error, critical, off).")
 )
 
 func getTracerConfig(ebpfDir string) *tracerConfig.Config {
