@@ -443,8 +443,10 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 	options.DefaultKprobeAttachMethod = kprobeAttachMethod
 	options.BypassEnabled = e.cfg.BypassEnabled
 	options.VerifierOptions.Programs.LogDisabled = false
-	options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelStats
+	options.VerifierOptions.Programs.LogLevel = e.cfg.EBPFLogLevelUSM
 
+	// today from the process-agent we only allow a true/false configuration we don't allow to specify a level of debug.
+	// todo!: maybe in the future we could allow to specify a level of debug like we do in the nettop binary.
 	if e.cfg.ProbeDebugLog {
 		log.Warn("Running EBPF probe with debug output")
 		options.VerifierOptions.Programs.LogLevel = ebpf.LogLevelInstruction | ebpf.LogLevelStats
@@ -493,14 +495,6 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 	})
 
 	if err != nil {
-		var err2 *ebpf.VerifierError
-		if errors.As(err, &err2) {
-			_ = log.Errorf("Error verifying program: last 500 lines")
-			for _, l := range err2.Log[max(len(err2.Log)-500, 0):] {
-				_ = log.Errorf(l)
-			}
-			err2.Log = []string{}
-		}
 		cleanup()
 		return err
 	} else {

@@ -4,6 +4,7 @@ source ./docker_image.sh
 HOST_SRC_CODE="$(dirname "$(pwd)")"
 
 docker run \
+    --name test-builder \
     --platform linux/amd64 \
     -e "OUTPUT_USER_ID=$(id -u "${USER}")" \
     -e "OUTPUT_GROUP_ID=$(id -g "${USER}")" \
@@ -16,6 +17,8 @@ docker run \
     -e HOST_SYS=/host/sys \
     -v /etc:/host/etc:ro \
     -e HOST_ETC=/host/etc \
+    -v /tmp:/output \
+    -e OUTPUTDIR="/output" \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v /usr/src:/usr/src:ro \
     --network host \
