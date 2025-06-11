@@ -24,6 +24,10 @@ static char http_tracing_header_key_upper[256] = { '\n', 'X', '-', 'R', 'E', 'Q'
 // Full uuid+ newline and a bit.
 #define HTTP_TRACING_ID_SIZE 40
 
+// Status code for successful WebSocket upgrade
+// https://datatracker.ietf.org/doc/html/rfc6455#:~:text=Any%20status%20code%20other%20than%20101
+#define WEBSOCKET_STATUS_CODE 101
+
 #define HTTP_HEADER_READ_BUFFER_SIZE 10 // This number is picked such that we do not loose too much data when the last batch does not exactly match.
 /**
 Why this limit? We would like to have this at 4k (the max header size). However, various other limitations come into play:

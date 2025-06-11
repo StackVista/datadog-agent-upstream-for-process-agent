@@ -173,6 +173,8 @@ static http_transaction_t init_zero;
 
 static __always_inline http_transaction_t *http_fetch_state(conn_tuple_t *tuple, http_packet_t packet_type) {
     if (packet_type == HTTP_PACKET_UNKNOWN) {
+        // We should never recreate a new transaction for an unknown packet type.
+        // if the connection is not there it means we are in a websocket connection or we have already closed the TCP connection
         return bpf_map_lookup_elem(&http_in_flight, tuple);
     }
 
@@ -205,7 +207,8 @@ static __always_inline http_transaction_t *http_fetch_state(conn_tuple_t *tuple,
 //   1. We got a new request (packet_type == HTTP_REQUEST) and previously (in the given transaction) we had either a
 //      request (http->request_started != 0) or a response (http->response_status_code). This is equivalent to flush
 //      a transaction if we have a new request, and the given transaction is not clean.
-//   2. We got a new response (packet_type == HTTP_RESPONSE) and the given transaction already contains a response
+//   2. We got a new response (packet_type == HTTP_RESPONSE) and the given transaction already contains a response.
+//      It means we missed a request.
 static __always_inline bool http_should_flush_previous_state(http_transaction_t *http, http_packet_t packet_type) {
     return (packet_type == HTTP_REQUEST && (http->request_started || http->response_status_code)) ||
         (packet_type == HTTP_RESPONSE && http->response_status_code);
@@ -217,11 +220,20 @@ static __always_inline void http_process(http_classification_t *http_class, skb_
     char *buffer = (char *)http_class->request_fragment;
     // bpf_printk("[http_process]: type=%d, method=%d, trace_id: %s", http_class->packet_type, http_class->method, http_class->tracing_id);
 
+    // We could have several packets here:
+    // 1. HTTP_REQUEST
+    // 2. HTTP_RESPONSE
+    // 3. HTTP_PACKET_UNKNOWN -> TCP packet with FIN or RST flag set
+    // 4. HTTP_PACKET_UNKNOWN -> TCP keep-alive packet
+    // 5. HTTP_PACKET_UNKNOWN -> HTTP payload that is part of a fragmented response (it seems we ignore the case of a fragmented request)
+    // 6. HTTP_PACKET_UNKNOWN -> Websocket frames over HTTP
     http_transaction_t *http = http_fetch_state(&http_class->tuple, http_class->packet_type);
     if (!http || http_seen_before(http, skb_info, http_class->packet_type)) {
         return;
     }
 
+    // We don't want to flush as soon as we see the response because this could be fragmented on different TCP packets.
+    // This is why we wait for the next request/response.
     if (http_should_flush_previous_state(http, http_class->packet_type)) {
         http_batch_enqueue_wrapper(&http_class->tuple, http);
         // Clear the transaction. Data about the transaction is filled in after this.
@@ -240,11 +252,29 @@ static __always_inline void http_process(http_classification_t *http_class, skb_
         http_update_seen_before(http, skb_info);
         bpf_memcpy(&http->response_tracing_id, &http_class->tracing_id, HTTP_TRACING_ID_SIZE);
         http->response_parse_result = http_class->parse_result;
+        // Special handling for websockets
+        // we know that after this packet we will never receive other HTTP traffic on this connection and so 
+        // we flush it and we remove it from the in-flight map.
+        if(http->response_status_code == WEBSOCKET_STATUS_CODE){
+            http->tags |= tags;
+            http->response_last_seen = bpf_ktime_get_ns();
+            http_batch_enqueue_wrapper(&http_class->tuple, http);
+            bpf_map_delete_elem(&http_in_flight, &http_class->tuple);
+            return;
+        }
     }
 
     http->tags |= tags;
 
-    // Only if we have a (L7/application-layer) payload we update the response_last_seen field
+    // The HTTP response could be fragmented across multiple TCP packets so we want to update
+    // the response_last_seen field only in this case.
+    // Here we could have:
+    // 1. HTTP_REQUEST -> we don't update because `http_responding(http)` is false
+    // 2. HTTP_RESPONSE -> we update it
+    // 3. TCP packet with FIN or RST flag set -> we don't update because it has no payload
+    // 4. TCP keep-alive packet -> we don't update because it has no payload
+    // 5. HTTP payload that is part of a fragmented response -> we update it
+    // No websocket traffic should arrive here.
     // This is to prevent things such as keep-alives adding up to the transaction latency
     if (((skb_info && !is_payload_empty(skb_info)) || !skb_info) && http_responding(http)) {
         http->response_last_seen = bpf_ktime_get_ns();
@@ -262,10 +292,9 @@ static __always_inline void http_process(http_classification_t *http_class, skb_
     //         bpf_map_delete_elem(&http_in_flight, &http_class->tuple);
     //     }
     // }
-
     // Instead we use the old version.
     if (http_closed(skb_info)) {
-        // bpf_printk("[push batch]: method type=%d, request trace id=%s, response trace_id: %s", http->request_method, http->request_tracing_id, http->response_tracing_id);
+        // Since we wait the next transaction to flush the data in userspace, the last trasaction should be flushed here.
         http_batch_enqueue_wrapper(&http_class->tuple, http);
         bpf_map_delete_elem(&http_in_flight, &http_class->tuple);
     }

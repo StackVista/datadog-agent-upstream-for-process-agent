@@ -9,20 +9,40 @@ package main
 import (
 	"embed"
 	"flag"
+	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/DataDog/datadog-agent/pkg/config/model"
 	"github.com/DataDog/datadog-agent/pkg/config/setup"
 	"github.com/DataDog/datadog-agent/pkg/ebpf"
+	"github.com/DataDog/datadog-agent/pkg/network"
 	tracerConfig "github.com/DataDog/datadog-agent/pkg/network/config"
+	httpdebugging "github.com/DataDog/datadog-agent/pkg/network/protocols/http/debugging"
+	postgresdebugging "github.com/DataDog/datadog-agent/pkg/network/protocols/postgres/debugging"
 	"github.com/DataDog/datadog-agent/pkg/network/tracer"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/cihub/seelog"
 	ciliumEbpf "github.com/cilium/ebpf"
+)
+
+const (
+	postgresProtocol = "postgres"
+	httpProtocol     = "http"
+	proto            = "proto"
+	connections      = "conns"
+	allProtocols     = "all"
+)
+
+const (
+	postgresCode = 1 << iota
+	httpCode
+	connectionsCode
 )
 
 //go:embed ebpf/*
@@ -33,10 +53,30 @@ const ebpfEmbedFSFolder = "ebpf"
 
 var (
 	// Enable extended verifier logs increase the time needed to run this program
-	verifierLogLevel  = flag.Int("ebpf-verbose", int(ciliumEbpf.LogLevelStats), "Verifier log level. 4 -> stats (the least verbose), 2 -> instructions (the most verbose), 1 -> branch.")
-	longRunning       = flag.Bool("long-run", false, "Used to debug ebpf programs, if set the program will run for 30 minutes")
+	verifierLogLevel = flag.Int("ebpf-verbose", int(ciliumEbpf.LogLevelStats), "Verifier log level. 4 -> stats (the least verbose), 2 -> instructions (the most verbose), 1 -> branch.")
+	longRunning      = flag.Bool("long-run", false, "Used to debug ebpf programs, if set the program will run for 30 minutes")
+	// we use warn as default verbosity level to avoid polluting the logs in case we just want to see a verifer error.
 	userspaceLogLevel = flag.String("verbose", "warn", "Userspace vebosity. Possible values (trace, debug, info, warn, error, critical, off).")
+	printProtocols    = flag.String(
+		"proto",
+		"all", "print active connections or/and protocol metrics. Possible values (all, conns, proto, http, postgres). 'all' means active connections + all supported protocols")
 )
+
+func validatePrintProtocols() uint64 {
+	defer log.Warnf("Print: %s\n", *printProtocols)
+	switch *printProtocols {
+	case connections:
+		return connectionsCode
+	case httpProtocol:
+		return httpCode
+	case postgresProtocol:
+		return postgresCode
+	case proto:
+		return httpCode | postgresCode
+	default:
+		return httpCode | postgresCode | connectionsCode
+	}
+}
 
 func getTracerConfig(ebpfDir string) *tracerConfig.Config {
 	// Defaults taken from datadog
@@ -225,17 +265,79 @@ func run() int {
 	c := getTracerConfig(ebpfDir)
 
 	log.Warn("Injecting our ebpf instrumentation...\n")
-	_, err = tracer.NewTracer(c, nil)
+	tr, err := tracer.NewTracer(c, nil)
 	if err != nil {
 		log.Errorf("%v\n", err)
 		return 1
 	}
 	log.Warn("No verifier errors :)\n")
-
-	if *longRunning {
-		log.Warn("Running for 30 minutes...\n")
-		time.Sleep(30 * time.Minute)
+	// If we are not in long running mode, we just exit
+	if !*longRunning {
+		return 0
 	}
+
+	protocols := validatePrintProtocols()
+
+	log.Warn("Running until CTRL+C...\n")
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+
+	printConns := func(now time.Time) {
+		cs, err := tr.GetActiveConnections(fmt.Sprintf("%d", os.Getpid()))
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Printf("-- %s --\n", now)
+		switch {
+		case protocols&connectionsCode != 0:
+			fmt.Printf("\n\n------ Connection summary\n\n")
+			for _, c := range cs.Conns {
+				fmt.Println(network.ConnectionSummary(&c, cs.DNS))
+			}
+		case protocols&postgresCode != 0:
+			stats := postgresdebugging.Postgres(cs.Postgres)
+			fmt.Printf("\n\n------ Postgres stats (%d)\n\n", len(stats))
+			for _, c := range stats {
+				fmt.Println(c)
+			}
+		case protocols&httpCode != 0:
+			stats := httpdebugging.HTTP(cs.HTTP, cs.DNS)
+			fmt.Printf("\n\n------ HTTP stats (%d)\n\n", len(stats))
+			for _, c := range stats {
+				fmt.Println(c)
+			}
+			fmt.Printf("\n\n------ HTTP observations (%d)\n\n", len(cs.HTTPObservations))
+			for _, obs := range cs.HTTPObservations {
+				fmt.Println(obs)
+			}
+			stats = httpdebugging.HTTP(cs.HTTP2, cs.DNS)
+			fmt.Printf("\n\n------ HTTP2 stats (%d)\n\n", len(stats))
+			for _, c := range stats {
+				fmt.Println(c)
+			}
+		}
+	}
+
+	stopChan := make(chan struct{})
+	go func() {
+		// Print active connections immediately, and then again every 5 seconds
+		tick := time.NewTicker(5 * time.Second)
+		printConns(time.Now())
+		for {
+			select {
+			case now := <-tick.C:
+				printConns(now)
+			case <-stopChan:
+				tick.Stop()
+				return
+			}
+		}
+	}()
+
+	<-sig
+	stopChan <- struct{}{}
+
+	tr.Stop()
 	return 0
 }
 
