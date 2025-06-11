@@ -14,10 +14,17 @@ So it's enough to change the bpfvalidator config to find the nettop binary in th
 Example of the config file:
 
 ```yaml
+# Path to the virtme-ng binary
 vng_path: "vng"
-bin_command: "iptables -t raw -A PREROUTING -j CT && /tmp/nettop"
-parallel: 1
+# Command/script to run inside the VM (path + arguments)
+cmd: "iptables -t raw -A PREROUTING -j CT && /tmp/nettop"
+# Number of parallel VMs to run
+parallel: 2
+# Path to the output file for the report (if empty uses stdout)
 out_path: ""
+# show only the final report and not the individual VM outputs
+report_only: false
+# kernel versions to test
 kernel_versions:
     - v5.4.293
     - v5.10.237
