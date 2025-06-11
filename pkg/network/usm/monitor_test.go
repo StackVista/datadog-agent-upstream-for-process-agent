@@ -9,6 +9,7 @@ package usm
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -27,6 +28,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 
 	manager "github.com/DataDog/ebpf-manager"
 	"github.com/cilium/ebpf"
@@ -41,6 +43,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http/testutil"
 	libtelemetry "github.com/DataDog/datadog-agent/pkg/network/protocols/telemetry"
+	"github.com/DataDog/datadog-agent/pkg/network/types"
 	usmconfig "github.com/DataDog/datadog-agent/pkg/network/usm/config"
 	"github.com/DataDog/datadog-agent/pkg/network/usm/utils"
 	"github.com/DataDog/datadog-agent/pkg/util/kernel"
@@ -198,6 +201,125 @@ func (s *HTTPTestSuite) TestHTTPMonitorLoadWithIncompleteBuffers() {
 	require.True(t, foundFastReq)
 }
 
+func (s *HTTPTestSuite) TestHTTPWebSockets() {
+	t := s.T()
+
+	var upgrader = websocket.Upgrader{
+		// CheckOrigin: in production, validate the Origin header
+		CheckOrigin: func(r *nethttp.Request) bool {
+			// Allow all origins (for example purposes only)
+			return true
+		},
+	}
+
+	handler := func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		// Upgrade the HTTP connection to WebSocket
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Log("Upgrade error:", err)
+			return
+		}
+		defer conn.Close()
+		t.Log("New WebSocket connection from", r.RemoteAddr)
+
+		// We exchange a message on the websocket just to be sure it is ignored by HTTP stats
+		msgType, msg, err := conn.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				t.Log("Unexpected close error:", err)
+			}
+			return
+		}
+		t.Log("Send message back to the client")
+
+		if err := conn.WriteMessage(msgType, []byte(string(msg))); err != nil {
+			t.Log("Write message error:", err)
+			return
+		}
+		t.Log("Message sent back to the client")
+	}
+
+	// We start our monitor
+	monitor := newHTTPMonitorWithCfg(t, utils.NewUSMEmptyConfig())
+
+	// We start Http server
+	addr := ":8080"
+	url := "ws://" + addr + "/ws"
+	srv := &nethttp.Server{
+		Addr:         addr,
+		Handler:      nethttp.HandlerFunc(handler),
+		ReadTimeout:  time.Second,
+		WriteTimeout: time.Second,
+	}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != nethttp.ErrServerClosed {
+			t.Fatal("cannot start the server:", err)
+		}
+	}()
+	defer srv.Shutdown(context.Background())
+
+	var conn types.ConnectionKey
+
+	// new scope to defer the connection close
+	{
+		// We try to contact the server
+		var c *websocket.Conn
+		assert.Eventually(t, func() bool {
+			var err error
+			c, _, err = websocket.DefaultDialer.Dial(url, nil)
+			if err != nil {
+				t.Log("Dial error:", err)
+				return false
+			}
+			return true
+		}, 3*time.Second, time.Millisecond*100, "cannot open connection with the server")
+		defer c.Close()
+
+		// We know have a connection, and our monitor should already have a request in the HTTP stats.
+		// the http transaction should be sent when the server answers with the upgrade.
+		stats := getHTTPLikeProtocolStats(monitor, protocols.HTTP)
+		for k, v := range stats {
+			t.Logf("Stats for %s: %v", k, v)
+			if k.Method == http.MethodGet && strings.HasSuffix(k.Path.Content.Get(), "/ws") {
+				// We expect to have a single request with 101 status code
+				require.Len(t, v.Data, 1)
+				// Please note that we should have 101 as status code but we normalize it here to 100
+				s, ok := v.Data[100]
+				require.True(t, ok, "expected status code 100 but got %v", v.Data)
+				require.Equal(t, 1, s.Count)
+				// we store the connection because we will need it later to assert we have no other stats from this connection
+				// we use also this to understand if we have found the websocket transaction
+				conn = k.ConnectionKey
+				break
+			}
+		}
+
+		// if we didn't find the websocket transaction the src and dst ports will be 0
+		if conn.SrcPort == 0 && conn.DstPort == 0 {
+			t.Fatal("cannot find WebSocket transaction in HTTP stats")
+		}
+
+		// No we send the message from the client and we shouldn't see other HTTP transaction for this connection
+		if err := c.WriteMessage(websocket.TextMessage, []byte("Hello!")); err != nil {
+			t.Fatal("Write message error:", err)
+		}
+		_, _, err := c.ReadMessage()
+		if err != nil {
+			t.Fatal("Read message error:", err)
+		}
+	}
+
+	// We assert again the stats and we should find the connection
+	stats := getHTTPLikeProtocolStats(monitor, protocols.HTTP)
+	for k, v := range stats {
+		t.Logf("Stats for %s: %v", k, v)
+		if k.ConnectionKey == conn {
+			t.Fatal("found WebSocket request in HTTP stats after the connection was closed, this is unexpected")
+		}
+	}
+}
+
 // TestHTTPMonitorInstructionCounts should fail everytime we touch an ebpf program. We want to be aware of the amount of
 // instructions we add to the verifier with our changes to not hit the limit too quickly.
 func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
@@ -221,7 +343,7 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 		"socket__http2_filter":                                     125275,
 		"socket__http2_handle_first_frame":                         1116,
 		"socket__http2_headers_parser":                             779373,
-		"socket__http_filter":                                      78343,
+		"socket__http_filter":                                      77026,
 		"socket__kafka_fetch_response_partition_parser_v0":         7483,
 		"socket__kafka_fetch_response_partition_parser_v12":        4862,
 		"socket__kafka_fetch_response_record_batch_parser_v0":      3754,
@@ -260,8 +382,8 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 		"uprobe__http2_tls_handle_first_frame":                     955,
 		"uprobe__http2_tls_headers_parser":                         800877,
 		"uprobe__http2_tls_termination":                            107,
-		"uprobe__http_process":                                     101546,
-		"uprobe__http_termination":                                 615,
+		"uprobe__http_process":                                     101822,
+		"uprobe__http_termination":                                 612,
 		"uprobe__kafka_tls_fetch_response_partition_parser_v0":     8889,
 		"uprobe__kafka_tls_fetch_response_partition_parser_v12":    5531,
 		"uprobe__kafka_tls_fetch_response_record_batch_parser_v0":  3970,
