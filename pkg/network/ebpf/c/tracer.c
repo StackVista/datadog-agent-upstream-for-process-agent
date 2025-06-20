@@ -115,8 +115,6 @@ int BPF_BYPASSABLE_KRETPROBE(kretprobe__tcp_sendmsg, int sent) {
         return 0;
     }
 
-    handle_tcp_stats(&t, skp, 0);
-
     __u32 packets_in = 0;
     __u32 packets_out = 0;
     get_tcp_segment_counts(skp, &packets_in, &packets_out);
@@ -158,8 +156,6 @@ int BPF_BYPASSABLE_KRETPROBE(kretprobe__tcp_sendpage, int sent) {
     if (!read_conn_tuple(&t, skp, CONN_TYPE_TCP)) {
         return 0;
     }
-
-    handle_tcp_stats(&t, skp, 0);
 
     __u32 packets_in = 0;
     __u32 packets_out = 0;
@@ -986,12 +982,9 @@ int BPF_BYPASSABLE_KPROBE(kprobe__tcp_finish_connect, struct sock *skp) {
     log_debug("kprobe/tcp_finish_connect: kernel thread id: %llu, user mode pid: %llu", GET_KERNEL_THREAD_ID(pid_tgid), GET_USER_MODE_PID(pid_tgid));
 
     struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM2(ctx);
-    tcp_stats_t seq_stats = { };
-    if (!sk_buff_get_tcp_transport(skb, NULL, &(seq_stats.initial_tcp_seq))) {
-        update_tcp_stats(&t, seq_stats);
-    }
-
-    handle_tcp_stats(&t, skp, TCP_ESTABLISHED);
+    tcp_stats_t seq_stats = { .state_transitions = (1 << TCP_ESTABLISHED)};
+    sk_buff_get_tcp_transport(skb, NULL, &(seq_stats.initial_tcp_seq));
+    update_tcp_stats(&t, seq_stats);
     handle_message(&t, 0, 0, CONN_DIRECTION_OUTGOING, 0, 0, PACKET_COUNT_NONE, skp, pid_tgid);
 
     log_debug("kprobe/tcp_finish_connect: netns: %u, sport: %u, dport: %u", t.netns, t.sport, t.dport);
@@ -1053,17 +1046,17 @@ int BPF_BYPASSABLE_KRETPROBE(kretprobe__inet_csk_accept, struct sock *sk) {
     }
     log_debug("kretprobe/inet_csk_accept: netns: %u, sport: %u, dport: %u", t.netns, t.sport, t.dport);
 
+    tcp_stats_t seq_stats = { .state_transitions = (1 << TCP_ESTABLISHED)};
     tcp_seq_t *tcp_seq = bpf_map_lookup_elem(&tcp_accept_seq, &t);
     bpf_map_delete_elem(&tcp_accept_seq, &t);
 
     log_debug("found seq: %p", tcp_seq);
 
     if (tcp_seq) {
-        tcp_stats_t seq_stats = { .initial_tcp_seq = *tcp_seq };
-        update_tcp_stats(&t, seq_stats);
+        seq_stats.initial_tcp_seq = *tcp_seq;
     }
+    update_tcp_stats(&t, seq_stats);
 
-    handle_tcp_stats(&t, sk, TCP_ESTABLISHED);
     handle_message(&t, 0, 0, CONN_DIRECTION_INCOMING, 0, 0, PACKET_COUNT_NONE, sk, pid_tgid);
 
     port_binding_t pb = {};

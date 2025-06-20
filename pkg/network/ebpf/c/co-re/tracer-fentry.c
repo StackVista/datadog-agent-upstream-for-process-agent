@@ -150,8 +150,6 @@ int BPF_PROG(tcp_sendmsg_exit, struct sock *sk, struct msghdr *msg, size_t size,
         return 0;
     }
 
-    handle_tcp_stats(&t, sk, 0);
-
     __u32 packets_in = 0;
     __u32 packets_out = 0;
     get_tcp_segment_counts(sk, &packets_in, &packets_out);
@@ -174,8 +172,6 @@ RETURN_IF_NOT_IN_SYSPROBE_TASK("fexit/tcp_sendpage");
     if (!read_conn_tuple(&t, sk, CONN_TYPE_TCP)) {
         return 0;
     }
-
-    handle_tcp_stats(&t, sk, 0);
 
     __u32 packets_in = 0;
     __u32 packets_out = 0;
