@@ -325,10 +325,11 @@ static __always_inline void handle_tcp_stats(conn_tuple_t* t, struct sock* sk, u
 //    BPF_CORE_READ_INTO(&rtt_var, tcp_sk(sk), mdev_us);
 //#endif
 
-    tcp_stats_t stats = { .rtt = 0, .rtt_var = 0 };
-    if (state > 0) {
-        stats.state_transitions = (1 << state);
+    // we update the stats only if there is a transition in the TCP state
+    if (state <= 0) {
+        return;
     }
+    tcp_stats_t stats = {.state_transitions = (1 << state)};
     update_tcp_stats(t, stats);
 }
 
@@ -364,8 +365,6 @@ static __always_inline int handle_tcp_recv(u64 pid_tgid, struct sock *skp, int r
     if (!read_conn_tuple(&t, skp, CONN_TYPE_TCP)) {
         return 0;
     }
-
-    handle_tcp_stats(&t, skp, 0);
 
     __u32 packets_in = 0;
     __u32 packets_out = 0;
