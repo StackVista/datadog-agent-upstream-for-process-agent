@@ -9,6 +9,8 @@ github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c h1:pxW6RcqyfI9/k
 github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
 github.com/DataDog/agent-payload/v5 v5.0.138 h1:Wg7hmWuoLC/o0X3zZ+uGcfRHPyaytljudgSY9O59zjc=
 github.com/DataDog/agent-payload/v5 v5.0.138/go.mod h1:lxh9lb5xYrBXjblpIWYUi4deJqVbkIfkjwesi5nskDc=
+github.com/DataDog/agent-payload/v5 v5.0.157 h1:d6LuZ/A1DFad1XyQAcf+fDlYsKLg8TQu8AAkFsNEtH4=
+github.com/DataDog/agent-payload/v5 v5.0.157/go.mod h1:lxh9lb5xYrBXjblpIWYUi4deJqVbkIfkjwesi5nskDc=
 github.com/DataDog/datadog-api-client-go v1.16.0 h1:5jOZv1m98criCvYTa3qpW8Hzv301nbZX3K9yJtwGyWY=
 github.com/DataDog/datadog-api-client-go v1.16.0/go.mod h1:PgrP2ABuJWL3Auw2iEkemAJ/r72ghG4DQQmb5sgnKW4=
 github.com/DataDog/datadog-api-client-go/v2 v2.33.0 h1:OI6kDnJeQmkjfGzxmP0XUQUxMD4tp6oAPXnnJ4VpgUM=
