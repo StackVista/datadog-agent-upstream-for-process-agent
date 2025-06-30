@@ -171,7 +171,7 @@ require (
 	github.com/DataDog/watermarkpodautoscaler v0.5.3-0.20241023200123-ab786c1724cf
 	github.com/DataDog/zstd v1.5.6
 	github.com/DataDog/zstd_0 v0.0.0-20210310093942-586c1286621f // indirect
-	github.com/Masterminds/semver/v3 v3.3.1
+	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/Microsoft/hcsshim v0.12.9
 	github.com/acobaugh/osrelease v0.1.0
@@ -338,7 +338,6 @@ require (
 	k8s.io/metrics v0.31.2
 	k8s.io/utils v0.0.0-20240821151609-f90d01438635
 	sigs.k8s.io/custom-metrics-apiserver v1.30.1-0.20241105195130-84dc8cfe2555
-
 )
 
 require (
