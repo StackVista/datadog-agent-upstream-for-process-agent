@@ -338,7 +338,6 @@ require (
 	k8s.io/metrics v0.31.2
 	k8s.io/utils v0.0.0-20240821151609-f90d01438635
 	sigs.k8s.io/custom-metrics-apiserver v1.30.1-0.20241105195130-84dc8cfe2555
-
 )
 
 require (
@@ -714,7 +713,7 @@ require (
 	github.com/elastic/go-seccomp-bpf v1.5.0
 	github.com/fatih/structtag v1.2.0
 	github.com/glaslos/ssdeep v0.4.0
-	github.com/gocomply/scap v0.1.2-0.20230531064509-55a00f73e8d6
+	github.com/gocomply/scap v0.1.3
 	github.com/godror/godror v0.37.0
 	github.com/jackc/pgx/v5 v5.6.0
 	github.com/jmoiron/sqlx v1.4.0
