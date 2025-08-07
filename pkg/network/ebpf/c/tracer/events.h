@@ -91,7 +91,9 @@ static __always_inline int cleanup_conn(void *ctx, conn_tuple_t *tup, struct soc
     // the conn_stats_ts_t object up to now. we re-use this field
     // for the duration since we would overrun stack size limits
     // if we added another field
-    conn.conn_stats.duration = bpf_ktime_get_ns() - conn.conn_stats.duration;
+    //
+    // [STS] For correlating connections we always want to use the creation timestamp.
+    // conn.conn_stats.duration = bpf_ktime_get_ns() - conn.conn_stats.duration;
 
     // Batch TCP closed connections before generating a perf event
     batch_t *batch_ptr = bpf_map_lookup_elem(&conn_close_batch, &cpu);
