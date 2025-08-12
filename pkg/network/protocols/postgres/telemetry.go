@@ -23,6 +23,7 @@ type Telemetry struct {
 	missingDatabaseName            *libtelemetry.Counter
 	missingStatement               *libtelemetry.Counter
 	failedDatabaseNameExtraction   *libtelemetry.Counter
+	invalidMessage                 *libtelemetry.Counter
 }
 
 type TelemetryValues struct {
@@ -33,6 +34,7 @@ type TelemetryValues struct {
 	missingDatabaseName            int64
 	missingStatement               int64
 	failedDatabaseNameExtraction   int64
+	invalidMessage                 int64
 }
 
 func (t *Telemetry) getTelemetryValues() TelemetryValues {
@@ -44,6 +46,7 @@ func (t *Telemetry) getTelemetryValues() TelemetryValues {
 		missingDatabaseName:            t.missingDatabaseName.Get(),
 		missingStatement:               t.missingStatement.Get(),
 		failedDatabaseNameExtraction:   t.failedDatabaseNameExtraction.Get(),
+		invalidMessage:                 t.invalidMessage.Get(),
 	}
 }
 
@@ -60,6 +63,7 @@ func NewTelemetry() *Telemetry {
 		failedBindStatementExtraction:  metricGroup.NewCounter("failed_bind_statement_extraction", libtelemetry.OptStatsd),
 		failedParseStatementExtraction: metricGroup.NewCounter("failed_parse_statement_extraction", libtelemetry.OptStatsd),
 		failedDatabaseNameExtraction:   metricGroup.NewCounter("failed_database_name_extraction", libtelemetry.OptStatsd),
+		invalidMessage:                 metricGroup.NewCounter("invalid_message", libtelemetry.OptStatsd),
 	}
 }
 

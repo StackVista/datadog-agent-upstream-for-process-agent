@@ -76,6 +76,8 @@ func (s *StatKeeper) Process(e *EventWrapper) {
 	s.statsMutex.Lock()
 	defer s.statsMutex.Unlock()
 
+	// Here we could also receive messages that are not real postgres messages, because ebpf misclassified the traffic.
+	// In these cases we will have a correct first tag but the message format will be completely random.
 	switch e.getTag() {
 	case EmptyTag:
 		logPostgres(log.WarnLvl, "Postgres message with empty tag")
@@ -146,7 +148,11 @@ func (s *StatKeeper) resetNoLock() {
 }
 
 func (s *StatKeeper) handleStartup(e *EventWrapper) {
-	e.setStartupPayload()
+	if !e.setStartupPayload() {
+		// if we have misclassified the traffic
+		s.telemetry.invalidMessage.Add(1)
+		return
+	}
 	dbName := extractDatabaseName(e.getPayload())
 	if dbName == UnsupportedString {
 		s.telemetry.failedDatabaseNameExtraction.Add(1)
@@ -174,7 +180,10 @@ func (s *StatKeeper) handleStartup(e *EventWrapper) {
 }
 
 func (s *StatKeeper) handleParse(e *EventWrapper) {
-	e.setPayload()
+	if !e.setPayload() {
+		s.telemetry.invalidMessage.Add(1)
+		return
+	}
 	statementName, info := extractStatementFromParse(e.normalizer, e.getPayload())
 	if statementName == UnsupportedString {
 		// it means we have no information about the query, there is no reason to add it to the cache
@@ -216,7 +225,10 @@ func (s *StatKeeper) handleParse(e *EventWrapper) {
 }
 
 func (s *StatKeeper) handleBind(e *EventWrapper) {
-	e.setPayload()
+	if !e.setPayload() {
+		s.telemetry.invalidMessage.Add(1)
+		return
+	}
 	// we try to extract the statement from the Bind
 	statementName := extractStatementNameFromBind(e.getPayload())
 
@@ -263,7 +275,10 @@ func (s *StatKeeper) handleBind(e *EventWrapper) {
 }
 
 func (s *StatKeeper) handleQuery(e *EventWrapper) {
-	e.setPayload()
+	if !e.setPayload() {
+		s.telemetry.invalidMessage.Add(1)
+		return
+	}
 	// We try to extract the SQL command and the table name from the query.
 	// If we don't recognize the SQL command we set it to unsupported.
 	info := extractSQLCommandAndTable(e.normalizer, e.getPayload())

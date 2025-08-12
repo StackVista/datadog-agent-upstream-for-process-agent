@@ -23,6 +23,9 @@ const (
 	userKey           = "user"
 	databaseKey       = "database"
 	logPostgresPrefix = "[postgres]: "
+	// https://github.com/postgres/postgres/tree/master/src/interfaces/libpq/fe-protocol3.c#L94
+	// we use it to detect misclassified messages
+	maxPostgresPayloadLen = 30000
 )
 
 var (
@@ -155,9 +158,9 @@ func extractSQLCommandAndTable(n *sqllexer.Normalizer, payload []byte) queryInfo
 
 	_, statementMetadata, err := n.Normalize(string(payload), postgresDBMS)
 	if err != nil {
-		logPostgres(log.WarnLvl, "unable to normalize SQL query due to: %s. original query: %s", err, payload)
+		logPostgres(log.WarnLvl, "unable to normalize SQL query due to: %s. original query: '% x'", err, payload)
 	} else if len(statementMetadata.Tables) == 0 || statementMetadata.Tables[0] == "" {
-		logPostgres(log.DebugLvl, "no table name found. original query: %s", payload)
+		logPostgres(log.DebugLvl, "no table name found. original query: '% x'", payload)
 	} else {
 		// Currently, we do not support complex queries with multiple tables. Therefore, we will return only a single table.
 		qinfo.tableName = statementMetadata.Tables[0]
@@ -175,7 +178,7 @@ func extractStatementFromParse(n *sqllexer.Normalizer, payload []byte) (string, 
 	// Search for the first null byte
 	idx := bytes.IndexByte(payload, 0)
 	if idx == -1 {
-		logPostgres(log.DebugLvl, "Parse message: statement name too long: truncated statement: %s", payload)
+		logPostgres(log.DebugLvl, "Parse message: statement name too long: truncated statement: '% x'", payload)
 		return UnsupportedString, unsupportedQueryInfo()
 	}
 	// extract the command and the table from the query
@@ -196,14 +199,14 @@ func extractStatementNameFromBind(payload []byte) string {
 	// Search for the first null byte
 	firstIdx := bytes.IndexByte(payload, 0)
 	if firstIdx == -1 {
-		logPostgres(log.InfoLvl, "Bind message: Portal name too long: %s", payload)
+		logPostgres(log.DebugLvl, "Bind message: Portal name too long: '% x'", payload)
 		// this could be wrong we are returning an empty statement that is a valid one
 		return UnsupportedString
 	}
 
 	idx := bytes.IndexByte(payload[firstIdx+1:], 0)
 	if idx == -1 {
-		logPostgres(log.InfoLvl, "Bind message: statement name too long: truncated statement: %s", payload)
+		logPostgres(log.DebugLvl, "Bind message: statement name too long: truncated statement: '% x'", payload)
 		return UnsupportedString
 	}
 
@@ -227,23 +230,34 @@ func (e *EventWrapper) getPayload() []byte {
 	return e.payload
 }
 
-func (e *EventWrapper) setPayload() {
-	// We call this method only when we are sure we have a valid postgres messages.
+func (e *EventWrapper) setPayload() bool {
 	// +1 because we want to consider the tag since we will compare it with our fragment len (that contains the tag)
 	l := uint32(binary.BigEndian.Uint32(e.Tx.Request_fragment[1:5])) + 1
+	if l < 7 || l > maxPostgresPayloadLen {
+		// we should have at least 7 bytes:
+		// 1 (tag) + 4 (len) + 1 (at least a null terminator)
+		return false
+	}
 
 	if l > uint32(len(e.Tx.Request_fragment)) {
 		e.payload = e.Tx.Request_fragment[5:]
 	} else {
 		e.payload = e.Tx.Request_fragment[5:l]
 	}
+	return true
 }
 
-func (e *EventWrapper) setStartupPayload() {
+func (e *EventWrapper) setStartupPayload() bool {
 	// the len is always in the same position of the other messages
 	// this len contains self + payload but not the 3 bytes of junk and the tag.
 	// so we sum 4
 	l := uint32(binary.BigEndian.Uint32(e.Tx.Request_fragment[1:5])) + 4
+	if l < 14 || l > maxPostgresPayloadLen {
+		// we should have at least 14 bytes:
+		// 1 (tag) + 4 (len) + 3 (junk) + 5 (user key + null terminator)
+		return false
+	}
+
 	if l > uint32(len(e.Tx.Request_fragment)) {
 		// 1 byte - tag
 		// 4 bytes - len
@@ -253,4 +267,5 @@ func (e *EventWrapper) setStartupPayload() {
 	} else {
 		e.payload = e.Tx.Request_fragment[8:l]
 	}
+	return true
 }

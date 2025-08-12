@@ -891,6 +891,7 @@ func testDecoding(t *testing.T, isTLS bool) {
 				ctx.extras["pg"] = pg
 				require.NoError(t, pg.RunSimpleQuery(createTableQuery))
 				// we generate 200 value to have a long SELECT response
+				// the len of this string is `2921`, with the current test the packet is not fragmented.
 				require.NoError(t, pg.RunSimpleQuery(createInsertQuery(generateTestValues(1, 200)...)))
 				// we capture the `Z` at the end of the message so we don't care if the message is long.
 				// The previous implemenation used the `C` message to identify the end of the message, that's why
