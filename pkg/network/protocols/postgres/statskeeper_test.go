@@ -9,12 +9,14 @@ package postgres
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/DataDog/datadog-agent/pkg/network/config"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/postgres/ebpf"
+	libtelemetry "github.com/DataDog/datadog-agent/pkg/network/protocols/telemetry"
 )
 
 var defaultTuple = ebpf.ConnTuple{
@@ -270,4 +272,105 @@ func TestFullFlow(t *testing.T) {
 	}]
 	require.True(t, ok)
 	require.Equal(t, requestStats.Count, 1)
+}
+
+func TestMisclassification(t *testing.T) {
+	cfg := config.New()
+	cfg.MaxPostgresStatsBuffered = 100
+
+	tests := []struct {
+		name            string
+		requestFragment [160]byte
+		payloadLen      int
+	}{
+		{
+			name:            "startup not truncated",
+			requestFragment: createMessageFromString(StartupTag, fmt.Sprintf("user\x00xx\x00database\x00dbdb\x00")),
+			payloadLen:      23,
+		},
+		{
+			name:            "startup truncated",
+			requestFragment: createMessageFromString(StartupTag, strings.Repeat("A", 1023)),
+			payloadLen:      152, // 160-8
+		},
+		{
+			name:            "startup too small",
+			requestFragment: createMessageFromString(StartupTag, "A"),
+			payloadLen:      -1,
+		},
+		{
+			name:            "startup too big",
+			requestFragment: createMessageFromString(StartupTag, strings.Repeat("A", 30000)),
+			payloadLen:      -1,
+		},
+		{
+			name:            "generic not truncated",
+			requestFragment: createMessageFromString(QueryTag, fmt.Sprintf("SELECT * FROM foo")),
+			payloadLen:      18,
+		},
+		{
+			name:            "generic truncated",
+			requestFragment: createMessageFromString(QueryTag, strings.Repeat("A", 1023)),
+			payloadLen:      155, // 160-5
+		},
+		{
+			name:            "generic too small",
+			requestFragment: createMessageFromString(QueryTag, ""),
+			payloadLen:      -1,
+		},
+		{
+			name:            "generic too big",
+			requestFragment: createMessageFromString(QueryTag, strings.Repeat("A", 30000)),
+			payloadLen:      -1,
+		},
+	}
+	for _, tt := range tests {
+		// test set payload
+		t.Run(tt.name+" SetPayload", func(t *testing.T) {
+
+			event := NewEventWrapper(&ebpf.EbpfEvent{
+				Tx: ebpf.EbpfTx{
+					Request_fragment: tt.requestFragment,
+				},
+			})
+
+			if event.getTag() == StartupTag {
+				if tt.payloadLen == -1 {
+					require.False(t, event.setStartupPayload())
+					return
+				}
+				require.True(t, event.setStartupPayload())
+				require.Equal(t, tt.payloadLen, len(event.getPayload()))
+				return
+			}
+
+			// All the other cases
+			if tt.payloadLen == -1 {
+				require.False(t, event.setPayload())
+				return
+			}
+			require.True(t, event.setPayload())
+			require.Equal(t, tt.payloadLen, len(event.getPayload()))
+		})
+
+		// test also the `Process` method in case of invalid payload
+		if tt.payloadLen != -1 {
+			continue
+		}
+
+		t.Run(tt.name+" Process", func(t *testing.T) {
+			// Ensure telemetry counters don't accumulate across subtests since they are global
+			libtelemetry.Clear()
+			s, err := NewStatkeeper(cfg, NewTelemetry())
+			require.NoError(t, err)
+			e := NewEventWrapper(&ebpf.EbpfEvent{
+				Tx: ebpf.EbpfTx{
+					Request_fragment: tt.requestFragment,
+				},
+			})
+			s.Process(e)
+			require.Equal(t, 0, len(s.stats))
+			require.Equal(t, int64(1), s.telemetry.getTelemetryValues().invalidMessage)
+		})
+	}
 }

@@ -95,7 +95,7 @@ func extractSQLCommand(payload []byte) Operation {
 			return op
 		}
 	}
-	logPostgres(log.InfoLvl, "unrecognized SQL command `%s`", string(payload))
+	logPostgres(log.DebugLvl, "unrecognized SQL command '% x'", payload)
 	return UnsupportedOP
 }
 

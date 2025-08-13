@@ -183,7 +183,7 @@ func (s *USMSuite) TestAMQPStats() {
 	cfg.EnableGoTLSSupport = false // this is not supported in prebuilt mode
 	cfg.EnableAMQPMonitoring = true
 	cfg.MaxAMQPStatsBuffered = 1000
-	cfg.BPFDebug = true
+	cfg.BPFDebug = false
 
 	tr := setupTracer(t, cfg)
 
@@ -228,7 +228,7 @@ func (s *USMSuite) TestHTTP2Stats() {
 	cfg.EnableAMQPMonitoring = true
 	cfg.EnableHTTP2Monitoring = true
 	cfg.MaxAMQPStatsBuffered = 1000
-	cfg.BPFDebug = true
+	cfg.BPFDebug = false
 
 	tr := setupTracer(t, cfg)
 
@@ -304,7 +304,7 @@ func (s *USMSuite) TestAMQPStatsOnExistingConnection() {
 	cfg.MaxAMQPStatsBuffered = 1000
 	cfg.ServiceMonitoringEnabled = true
 	cfg.MaxUSMConcurrentRequests = 1000
-	cfg.BPFDebug = true
+	cfg.BPFDebug = false
 	tr := setupTracer(t, cfg)
 
 	// Now generate data on the existing connection

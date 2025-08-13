@@ -8,13 +8,10 @@
 package postgres
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/DataDog/datadog-agent/pkg/network/protocols/postgres/ebpf"
 	"github.com/DataDog/go-sqllexer"
 )
 
@@ -51,6 +48,25 @@ func TestExtractSQLCommand(t *testing.T) {
 				'S', 'H', 'O', 'W', ' ', 'p', 'a', 'r', 'a', 'm', '1',
 			},
 			sqlCommand: ShowOP,
+		},
+		{
+			name: "random",
+			mes: []byte{
+				0x53, 0x58, 0x4f, 0x57, 0x20, 0x70, 0x61, 0x72, 0x61, 0x6d, 0x31,
+			},
+			sqlCommand: UnsupportedOP,
+		},
+		{
+			name: "one byte",
+			mes: []byte{
+				0x53,
+			},
+			sqlCommand: UnsupportedOP,
+		},
+		{
+			name:       "empty",
+			mes:        []byte{},
+			sqlCommand: UnsupportedOP,
 		},
 	}
 	for _, tt := range tests {
@@ -122,6 +138,28 @@ func TestExtractSQLCommandAndTable(t *testing.T) {
 			query:      `SHOW param1 param2 param3`,
 			tablesName: EmptyTableName,
 			sqlComm:    ShowOP,
+		},
+		{
+			name: "random",
+			query: string([]byte{
+				0x53, 0x58, 0x4f, 0x57, 0x20, 0x70, 0x61, 0x72, 0x61, 0x6d, 0x31,
+			}),
+			tablesName: EmptyTableName,
+			sqlComm:    UnsupportedOP,
+		},
+		{
+			name: "one byte",
+			query: string([]byte{
+				0x53,
+			}),
+			tablesName: EmptyTableName,
+			sqlComm:    UnsupportedOP,
+		},
+		{
+			name:       "empty",
+			query:      ``,
+			tablesName: EmptyTableName,
+			sqlComm:    UnsupportedOP,
 		},
 	}
 	n := sqllexer.NewNormalizer(sqllexer.WithCollectTables(true))
@@ -223,6 +261,25 @@ func TestExtractDatabaseName(t *testing.T) {
 			},
 			databaseName: UnsupportedString,
 		},
+		{
+			name: "random",
+			startupMes: []byte{
+				0x78, 0x79, 0x7a,
+			},
+			databaseName: UnsupportedString,
+		},
+		{
+			name: "single byte",
+			startupMes: []byte{
+				0x78,
+			},
+			databaseName: UnsupportedString,
+		},
+		{
+			name:         "empty",
+			startupMes:   []byte{},
+			databaseName: UnsupportedString,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -276,6 +333,26 @@ func TestExtractStatementFromParse(t *testing.T) {
 				tableName:  "db",
 			},
 		},
+		{
+			name: "random",
+			parseMes: []byte{
+				0x78, 0x79, 0x7a,
+			},
+			statementName: UnsupportedString,
+			qinfo: queryInfo{
+				sqlCommand: UnsupportedOP,
+				tableName:  UnsupportedString,
+			},
+		},
+		{
+			name:          "empty",
+			parseMes:      []byte{},
+			statementName: UnsupportedString,
+			qinfo: queryInfo{
+				sqlCommand: UnsupportedOP,
+				tableName:  UnsupportedString,
+			},
+		},
 	}
 	n := sqllexer.NewNormalizer(sqllexer.WithCollectTables(true))
 	for _, tt := range tests {
@@ -285,40 +362,4 @@ func TestExtractStatementFromParse(t *testing.T) {
 			require.EqualValues(t, tt.qinfo, q)
 		})
 	}
-}
-
-func TestSetPayload(t *testing.T) {
-	event := NewEventWrapper(&ebpf.EbpfEvent{
-		Tx: ebpf.EbpfTx{
-			Request_fragment: createMessageFromString(StartupTag, fmt.Sprintf("user\x00xx\x00database\x00dbdb\x00")),
-		},
-	})
-	event.setStartupPayload()
-	require.EqualValues(t, 23, len(event.getPayload()))
-
-	event = NewEventWrapper(&ebpf.EbpfEvent{
-		Tx: ebpf.EbpfTx{
-			Request_fragment: createMessageFromString(StartupTag, strings.Repeat("A", 1023)),
-		},
-	})
-	event.setStartupPayload()
-	require.EqualValues(t, 152, len(event.getPayload()))
-
-	event = NewEventWrapper(&ebpf.EbpfEvent{
-		Tx: ebpf.EbpfTx{
-			Request_fragment: createMessageFromString(QueryTag, fmt.Sprintf("SELECT * FROM foo")),
-		},
-	})
-	event.setPayload()
-	// 18 because we have the null terminator
-	require.EqualValues(t, 18, len(event.getPayload()))
-
-	event = NewEventWrapper(&ebpf.EbpfEvent{
-		Tx: ebpf.EbpfTx{
-			Request_fragment: createMessageFromString(QueryTag, strings.Repeat("A", 1023)),
-		},
-	})
-	event.setPayload()
-	require.EqualValues(t, 155, len(event.getPayload()))
-
 }
