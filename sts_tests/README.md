@@ -19,6 +19,27 @@ cd sts_tests
 $SOURCEDIR/sts_tests/setup_runner.sh
 ```
 
+## Rebuild protobuf files
+
+```bash
+##### Inside build container
+
+python3 -m pip install --user PyGithub semver
+# this will install protoc under ~/.local/bin
+inv install-protoc
+# Move it under /usr/local/bin
+sudo mv ~/.local/bin/protoc /usr/local/bin/
+# this should update the protobuf files inside the build container
+inv generate-protobuf
+# compute the diff
+git diff > /tmp/protobuf.diff
+
+##### Outside build container
+
+# now copy the diff and apply it
+docker cp test-builder:/tmp/protobuf.diff .
+```
+
 ## Tests
 
 Once the initial configuration of the runner is done, you can run the tests inside the runner.
