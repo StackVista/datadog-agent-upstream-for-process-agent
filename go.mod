@@ -338,7 +338,6 @@ require (
 	k8s.io/metrics v0.31.2
 	k8s.io/utils v0.0.0-20240821151609-f90d01438635
 	sigs.k8s.io/custom-metrics-apiserver v1.30.1-0.20241105195130-84dc8cfe2555
-
 )
 
 require (
@@ -566,7 +565,7 @@ require (
 	github.com/DataDog/datadog-agent/pkg/util/defaultpaths v0.62.2
 	github.com/DataDog/datadog-agent/pkg/util/utilizationtracker v0.62.2
 	github.com/DataDog/dd-trace-go/v2 v2.0.0-beta.11
-	github.com/NVIDIA/go-nvml v0.12.4-0
+	github.com/NVIDIA/go-nvml v0.13.0-1
 	github.com/cloudflare/cbpfc v0.0.0-20240920015331-ff978e94500b
 	github.com/containerd/containerd/api v1.8.0
 	github.com/containerd/errdefs v1.0.0
