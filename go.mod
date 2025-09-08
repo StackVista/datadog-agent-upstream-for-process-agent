@@ -257,7 +257,7 @@ require (
 	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/client_model v0.6.1
 	github.com/prometheus/procfs v0.15.1
-	github.com/redis/go-redis/v9 v9.5.1
+	github.com/redis/go-redis/v9 v9.13.0
 	github.com/richardartoul/molecule v1.0.1-0.20240531184615-7ca0df43c0b3 // indirect
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/samber/lo v1.47.0
@@ -338,7 +338,6 @@ require (
 	k8s.io/metrics v0.31.2
 	k8s.io/utils v0.0.0-20240821151609-f90d01438635
 	sigs.k8s.io/custom-metrics-apiserver v1.30.1-0.20241105195130-84dc8cfe2555
-
 )
 
 require (
