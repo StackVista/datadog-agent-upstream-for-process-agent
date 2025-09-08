@@ -21,7 +21,7 @@ require (
 	github.com/prometheus/client_golang v1.20.5
 	github.com/samber/lo v1.47.0
 	github.com/spf13/cobra v1.8.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/tinylib/msgp v1.2.4
 	google.golang.org/protobuf v1.35.2
 	modernc.org/sqlite v1.34.1
