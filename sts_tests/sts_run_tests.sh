@@ -38,4 +38,6 @@ else
     invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestUSMSuite/prebuilt/.*" --timeout=300
     # Run tests on HTTP protocol enrichment
     invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestHTTP/prebuilt/.*"
+    # Run tests on netlink conntrack
+    invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/netlink/. --test-run-name="^TestConntrackExists/.*"
 fi
