@@ -24,6 +24,11 @@ int BPF_BYPASSABLE_KPROBE(kprobe___nf_conntrack_hash_insert, struct nf_conn *ct)
     }
     RETURN_IF_NOT_NAT(&orig, &reply);
 
+    if ((orig.metadata & CONN_TYPE_TCP) != CONN_TYPE_TCP) {
+        // [STS] Today in userspace we don't enable UDP tracing so if we store here the conntrack entries nobody will ever remove them. https://stackstate.atlassian.net/browse/STAC-23359
+        return 0;
+    }
+
     bpf_map_update_with_telemetry(conntrack, &orig, &reply, BPF_ANY);
     bpf_map_update_with_telemetry(conntrack, &reply, &orig, BPF_ANY);
     increment_telemetry_registers_count();
@@ -49,6 +54,11 @@ int BPF_BYPASSABLE_KPROBE(kprobe_ctnetlink_fill_info) {
     }
 
     RETURN_IF_NOT_NAT(&orig, &reply);
+
+    if ((orig.metadata & CONN_TYPE_TCP) != CONN_TYPE_TCP) {
+        // [STS] Today in userspace we don't enable UDP tracing so if we store here the conntrack entries nobody will ever remove them. https://stackstate.atlassian.net/browse/STAC-23359
+        return 0;
+    }
 
     bpf_map_update_with_telemetry(conntrack, &orig, &reply, BPF_ANY);
     bpf_map_update_with_telemetry(conntrack, &reply, &orig, BPF_ANY);
