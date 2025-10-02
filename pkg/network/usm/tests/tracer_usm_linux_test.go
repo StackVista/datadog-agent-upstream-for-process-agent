@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -175,47 +176,151 @@ func (s *USMSuite) TestAMQPTracerSetup() {
 	_ = setupTracer(s.T(), cfg)
 }
 
-func (s *USMSuite) TestAMQPStats() {
-	t := s.T()
-	cfg := tracertestutil.Config()
-	cfg.EnableNativeTLSMonitoring = true
-	cfg.ServiceMonitoringEnabled = true
-	cfg.EnableGoTLSSupport = false // this is not supported in prebuilt mode
+func setupAMQPMonitor(t *testing.T) *usm.Monitor {
+	cfg := utils.NewUSMEmptyConfig()
 	cfg.EnableAMQPMonitoring = true
 	cfg.MaxAMQPStatsBuffered = 1000
-	cfg.BPFDebug = false
+	cfg.MaxTrackedConnections = 1000
+	cfg.EnableGoTLSSupport = false
 
-	tr := setupTracer(t, cfg)
+	monitor, err := usm.NewMonitor(cfg, nil)
+	require.NoError(t, err)
+	require.NoError(t, monitor.Start())
+	t.Cleanup(monitor.Stop)
+	t.Cleanup(utils.ResetDebugger)
+	return monitor
+}
 
-	require.NoError(t, amqp.RunServer(t, "0.0.0.0", "5672", false))
+func (s *USMSuite) TestAMQPStats() {
+	t := s.T()
+	monitor := setupAMQPMonitor(t)
 
-	client, err := amqp.NewClient(amqp.Options{ServerAddress: "localhost:5672"})
+	serverHost := "127.0.0.1"
+	amqpPort := "5672"
+	require.NoError(t, amqp.RunServer(t, serverHost, amqpPort, false))
+
+	// We should recognize the AMQP connection immediately with the client handshake.
+	// than the server answers with the Connection Start method.
+	// Client -> Server (HANDSHAKE)
+	// Server -> Client (Connection.Start)
+	// Client -> Client (Connection.Start-Ok)
+	// ...
+	// ...Something in the middle like Connection.Tune, Connection.Tune-Ok, Connection.Open, Connection.Open-Ok
+	// ...
+	client, err := amqp.NewClient(amqp.Options{ServerAddress: net.JoinHostPort(serverHost, amqpPort)})
 	require.NoError(t, err)
 	defer client.Terminate()
 
+	// Client -> Server (Queue.Declare)
+	// Server -> Client (Queue.Declare-Ok)
+	// Client -> Server (Basic.Publish)
+	// Client -> Server (Basic.Publish)
+	// Server -> Client (Basic.Ack)
+	// Server -> Client (Basic.Ack)
+	queueName := "queue-name"
 	// Make a queue, send some messages, consume them.
 	// It is important to send many messages to properly test the many-frames-in-a-single-packet case.
-	client.DeclareQueue("queue-name", client.PublishChannel)
-	for i := range 500 {
-		client.Publish("queue-name", fmt.Sprintf("message-%d", i))
+	client.DeclareQueue(queueName, client.PublishChannel)
+	for i := range 2 {
+		client.Publish(queueName, fmt.Sprintf("message-%d", i))
 	}
 
 	// Make sure we will consume all the messages batched.
+	// Client -> Server (Basic.Consume)
+	// Server -> Client (Basic.Consume-Ok)
 	time.Sleep(1 * time.Second)
-	client.Consume("queue-name", 500)
+	client.Consume(queueName, 2)
 
+	currentStats := map[amqp.Key]*amqp.RequestStat{}
+	expectedStatsNumber := 6 // 2 (publish + deliver) * 3 (net interfaces)
 	require.Eventually(t, func() bool {
-		payload, err := tr.GetActiveConnections("amqp-testing-client")
-		if err != nil {
-			t.Fatal(err)
+		amqpStats, exists := monitor.GetProtocolStats()[protocols.AMQP]
+		if !exists {
+			return false
 		}
+		// we should see 3 transactions from ebpf:
+		// - 2 publish, each one with `msg_published: 1`.
+		// - 1 deliver (from server to client, since they are consumed). Acutally we should have 2 delivers since we are delivering 2 different messages but they are in the same packet so the ebpf side collapses them as one with `msg_delivered: 2`.
+		//
+		// As always everything is multiplied by 3 because we see the same connection on 3 different network interfaces.
+		//
+		// In userspace we aggregate these transactions by key. Since the 2 publish transactions have the same key they are aggregated together. So in userspace we end up with 2 stats, one for publish and one for deliver, each one with `msg_published: 2` and `msg_delivered: 2` respectively.
+		currentStats = amqpStats.(map[amqp.Key]*amqp.RequestStat)
+		return len(currentStats) == expectedStatsNumber
+	}, time.Second*10, time.Millisecond*100, "Expected to find %d AMQP stats, instead captured %d", expectedStatsNumber, len(currentStats))
 
-		for tup, metrics := range payload.AMQP {
-			log.Errorf("AMQP metrics %v:%v", tup, metrics)
+	for key, v := range currentStats {
+		// For debugging when running with `--verbose`
+		t.Logf("Found AMQP key. Tuple: '%v', QueueName: '%v', published: '%d', delivered: '%d'", key.ConnectionKey.String(), key.QueueName, v.MessagesPublished, v.MessagesDelivered)
+		require.Equal(t, queueName, key.QueueName)
+		if v.MessagesPublished == 0 {
+			require.Equal(t, uint64(2), v.MessagesDelivered)
+		} else {
+			require.Equal(t, uint64(2), v.MessagesPublished)
 		}
+	}
+}
 
-		return len(payload.AMQP) > 0
-	}, time.Second*30, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
+func (s *USMSuite) TestAMQPStatsOnExistingConnection() {
+	t := s.T()
+
+	queueName := "dummy"
+	serverHost := "127.0.0.1"
+	amqpPort := "5672"
+	require.NoError(t, amqp.RunServer(t, serverHost, amqpPort, false))
+	client, err := amqp.NewClient(amqp.Options{ServerAddress: net.JoinHostPort(serverHost, amqpPort)})
+	require.NoError(t, err)
+	defer client.Terminate()
+
+	// Here we start 2 different TCP connections:
+	// 1. the publisher to the AMQP server
+	// 2. the consumer to the AMQP server
+	// for both we miss the first message published/delivered.
+	client.DeclareQueue(queueName, client.PublishChannel)
+
+	// Detach the consumer in a separate goroutine
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		client.Consume(queueName, 21)
+		wg.Done()
+	}()
+	client.Publish(queueName, "my-first-message")
+
+	// Only now start USM monitor
+	monitor := setupAMQPMonitor(t)
+
+	// Now generate data on the existing connection
+	// We will not see exactly 500 messages in the stats, because we need to collect evidence of the connection first.
+	for i := 0; i < 20; i++ {
+		client.Publish(queueName, fmt.Sprintf("message-%d", i))
+	}
+
+	// Wait for the consumer to finish
+	wg.Wait()
+
+	currentStats := map[amqp.Key]*amqp.RequestStat{}
+	require.Eventually(t, func() bool {
+		amqpStats, exists := monitor.GetProtocolStats()[protocols.AMQP]
+		if !exists {
+			return false
+		}
+		currentStats = amqpStats.(map[amqp.Key]*amqp.RequestStat)
+		// We should have 2 connections seen on 3 different network interfaces.
+		return len(currentStats) == 6
+	}, time.Second*10, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
+
+	for key, v := range currentStats {
+		// For debugging when running with `--verbose`
+		t.Logf("Found AMQP key. Tuple: '%v', QueueName: '%v', published: '%d', delivered: '%d'", key.ConnectionKey.String(), key.QueueName, v.MessagesPublished, v.MessagesDelivered)
+		require.Equal(t, queueName, key.QueueName)
+		if v.MessagesPublished == 0 {
+			require.Equal(t, uint64(20), v.MessagesDelivered)
+		} else {
+			require.Equal(t, uint64(20), v.MessagesPublished)
+		}
+	}
+
 }
 
 // [STS] test HTTP2 metrics with a simple server
@@ -281,46 +386,6 @@ func (s *USMSuite) TestHTTP2Stats() {
 
 		return len(payload.HTTP2) > 0
 	}, time.Second*3, time.Millisecond*500, "Expected to find HTTP2 stats, instead captured none")
-}
-
-func (s *USMSuite) TestAMQPStatsOnExistingConnection() {
-	t := s.T()
-	require.NoError(t, amqp.RunServer(t, "0.0.0.0", "5672", false))
-
-	client, err := amqp.NewClient(amqp.Options{ServerAddress: "localhost:5672"})
-	require.NoError(t, err)
-	defer client.Terminate()
-
-	// Start consuming and send one message to make sure the connection is established.
-	client.DeclareQueue("queue-name", client.PublishChannel)
-	go client.Consume("queue-name", 501)
-	client.Publish("queue-name", "my-first-message")
-
-	// Only now start the tracer
-	cfg := tracertestutil.Config()
-	cfg.EnableNativeTLSMonitoring = true
-	cfg.EnableGoTLSSupport = false
-	cfg.EnableAMQPMonitoring = true
-	cfg.MaxAMQPStatsBuffered = 1000
-	cfg.ServiceMonitoringEnabled = true
-	cfg.MaxUSMConcurrentRequests = 1000
-	cfg.BPFDebug = false
-	tr := setupTracer(t, cfg)
-
-	// Now generate data on the existing connection
-	// We will not see exactly 500 messages in the stats, because we need to collect evidence of the connection first.
-	for i := 0; i < 500; i++ {
-		client.Publish("queue-name", fmt.Sprintf("message-%d", i))
-	}
-
-	require.Eventually(t, func() bool {
-		payload, err := tr.GetActiveConnections("amqp-testing-client")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		return len(payload.AMQP) > 0
-	}, time.Second*30, time.Millisecond*100, "Expected to find AMQP stats, instead captured none")
 }
 
 func (s *USMSuite) TestMongoOverTLSTracerSetup() {

@@ -140,7 +140,7 @@ static __always_inline bool __enqueue_event(batch_data_t *batch, void *event, si
 }
 
 #define LOG_postgres(message, ...)  debug_postgres(message, ##__VA_ARGS__);
-#define LOG_amqp(message, ...)  log_debug("amqp " message, ##__VA_ARGS__);
+#define LOG_amqp(message, ...)  debug_amqp(message, ##__VA_ARGS__);
 #define LOG_http(message, ...)  log_debug("http " message, ##__VA_ARGS__);
 #define LOG_http2(message, ...)  log_debug("http2 " message, ##__VA_ARGS__);
 #define LOG_terminated_http2(message, ...)  log_debug("terminated_http2 " message, ##__VA_ARGS__);

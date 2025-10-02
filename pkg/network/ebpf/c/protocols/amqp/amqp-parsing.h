@@ -30,9 +30,12 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
     amqp_heap_helper_t *heap = bpf_map_lookup_elem(&amqp_heap, &zero);
 
     if (!heap) {
-        log_debug("process_amqp: failed to lookup amqp_frame_header_heap\n");
+        debug_amqp("process_amqp: failed to lookup amqp_frame_header_heap\n");
         return 0;
     }
+
+    // before normalizing the tuple, log the original direction
+    debug_amqp("New message. sport: %d, dport: %d, ns: %u", tup->sport, tup->dport, tup->netns);
 
     // Normalize the connection tuple so that the direction is always from client to server.
     normalize_tuple(tup);
@@ -40,8 +43,8 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
     heap->transaction.reply_code = 0;
     heap->transaction.messages_delivered = 0;
     heap->transaction.messages_published = 0;
-    bpf_memset(heap->transaction.exchange_or_queue, 0, 256);
-    bpf_memset(heap->string.data, 0, 256);
+    bpf_memset(heap->transaction.exchange_or_queue, 0, AMQP_STRING_LEN);
+    bpf_memset(heap->string.data, 0, AMQP_STRING_LEN);
 
     // We need to limit ourselves here as the eBPF verifier will otherwise go crazy.
     __u16 number_of_frames_processed = 0;
@@ -59,12 +62,18 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
         __u8 end_of_frame = 0;
         
         if (bpf_load_data(buf, current_offset + frame_length, &end_of_frame, 1) != 0) {
-            log_debug("process_amqp: unable to load 1 byte from end of frame\n");
+            // we hit this for sure when the client sends the protocol header, which is 8 bytes:
+            // +---+---+---+---+---+---+---+---+
+            // |'A'|'M'|'Q'|'P'| 0 | 0 | 9 | 1 |
+            // +---+---+---+---+---+---+---+---+
+            // `frame_length` means nothing here, that's the reason why we hit the error.
+            // the output will be: `type: 41, channel: 514d` (i.e 'AMQ' in hex `41 4D 51`)
+            debug_amqp("process_amqp: unable to load 1 byte from end of frame (probably handshake), type: %x, channel: %x", heap->header.frame_type, heap->header.channel);
             break;
         }
 
         if (end_of_frame != 0xce) {
-            log_debug("process_amqp: No 0xce marker after frame\n");
+            debug_amqp("process_amqp: No 0xce marker after frame\n");
             break;
         }
 
@@ -79,7 +88,7 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
 
         // Load more data to get class and method
         if (bpf_load_data(buf, current_offset, &heap->method, sizeof(amqp_method_identifier_t)) != 0) {
-            log_debug("process_amqp: unable to load method identifier\n");
+            debug_amqp("process_amqp: unable to load method identifier\n");
             current_frame_offset += frame_length;
             continue;
         }
@@ -89,6 +98,7 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
         __u16 method = bpf_ntohs(heap->method.method);
         __u8 new_messages_delivered = 0;
         __u8 new_messages_published = 0;
+        debug_amqp("class %d, method %d, frames n %d", class, method, number_of_frames_processed);
 
         if (class == AMQP_BASIC_CLASS && method == AMQP_METHOD_DELIVER) { 
             // The basic.deliver method, which is used to send messages to consumers.
@@ -125,30 +135,32 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
 
         // We are interested in this message, load the exchange name and routing key.
         // The offset is now at the exchange name.
-        bpf_memset(heap->string.data, 0, 256);
+        bpf_memset(heap->string.data, 0, AMQP_STRING_LEN);
         bpf_load_data(buf, current_offset, &heap->string, 1);
 
         // If we have an exchange name, use that to identify the metrics.
-        // If not, use the routing_key, which will then be a queue name.
+        // If the exchange name is "", it means it is the default exchange so the routing key is a queue name.
         bool is_exchange = 0;
         if (heap->string.length != 0) {
             is_exchange = 1;
             bpf_load_data(buf, current_offset, &heap->string, heap->string.length + 1);
+            debug_amqp("exchange: %s", heap->string.data);
         } else {
             is_exchange = 0;
             current_offset += 1 + heap->string.length; // Jump over the exchange name
             bpf_load_data(buf, current_offset, &heap->string, 1);
-            bpf_memset(heap->string.data, 0, 256);
+            bpf_memset(heap->string.data, 0, AMQP_STRING_LEN);
             bpf_load_data(buf, current_offset, &heap->string, heap->string.length + 1);
+            debug_amqp("queue name: %s", heap->string.data);
         }
 
         if (heap->transaction.exchange_or_queue[0] == 0) {
             // No exchange or queue name yet, set it, and we are done.
-            bpf_memcpy(heap->transaction.exchange_or_queue, heap->string.data, 256);
+            bpf_memcpy(heap->transaction.exchange_or_queue, heap->string.data, AMQP_STRING_LEN);
             heap->transaction.is_exchange = is_exchange;
             heap->transaction.messages_delivered += new_messages_delivered;
             heap->transaction.messages_published += new_messages_published;
-        } else if (bpf_memcmp(heap->transaction.exchange_or_queue, heap->string.data, 256) == 0) {
+        } else if (bpf_memcmp(heap->transaction.exchange_or_queue, heap->string.data, AMQP_STRING_LEN) == 0) {
             // The exchange/queue name matches the previously seen one, keep tallying the messages.
             heap->transaction.messages_delivered += new_messages_delivered;
             heap->transaction.messages_published += new_messages_published;
@@ -156,7 +168,8 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
             // The exchange/queue name does not match the previously seen one, but there is already a name set.
             // Send off the previous transaction and set the new name, reset the counters.
             amqp_batch_enqueue(&heap->transaction);
-            bpf_memcpy(heap->transaction.exchange_or_queue, heap->string.data, 256);
+            debug_amqp("Overlap. Sending transaction. queue:%s, msg_delivered: %d, msg_published: %d", heap->transaction.exchange_or_queue, heap->transaction.messages_delivered, heap->transaction.messages_published);
+            bpf_memcpy(heap->transaction.exchange_or_queue, heap->string.data, AMQP_STRING_LEN);
             heap->transaction.is_exchange = is_exchange;
             heap->transaction.messages_delivered = new_messages_delivered;
             heap->transaction.messages_published = new_messages_published;
@@ -167,6 +180,7 @@ static __always_inline int amqp_process(conn_tuple_t *tup, const bpf_buffer_desc
       
     if (heap->transaction.exchange_or_queue[0] != 0) {
         amqp_batch_enqueue(&heap->transaction);
+        debug_amqp("Sending transaction. queue:%s, msg_delivered: %d, msg_published: %d", heap->transaction.exchange_or_queue, heap->transaction.messages_delivered, heap->transaction.messages_published);
     }
 
     return 0;
@@ -182,7 +196,7 @@ int uprobe__amqp_process(struct pt_regs *ctx) {
     tls_dispatcher_arguments_t *args = bpf_map_lookup_elem(&tls_dispatcher_arguments, &zero);
 
     if (args == NULL) {
-        log_debug("uprobe__amqp_process failed to fetch arguments for tail call\n");
+        debug_amqp("uprobe__amqp_process failed to fetch arguments for tail call\n");
         return 0;
     }
 
@@ -206,7 +220,7 @@ int socket__amqp_process(struct __sk_buff* skb) {
     skb_info_t skb_info;
 
     if (!fetch_dispatching_arguments(&tup, &skb_info)) {
-        log_debug("process_amqp failed to fetch arguments for tail call\n");
+        debug_amqp("process_amqp failed to fetch arguments for tail call\n");
         return 0;
     }
 

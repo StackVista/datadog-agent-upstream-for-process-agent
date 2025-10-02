@@ -33,6 +33,7 @@ import (
 
 const (
 	postgresProtocol = "postgres"
+	amqpProtocol     = "amqp"
 	httpProtocol     = "http"
 	proto            = "proto"
 	connections      = "conns"
@@ -43,6 +44,7 @@ const (
 	postgresCode = 1 << iota
 	httpCode
 	connectionsCode
+	amqpCode
 )
 
 //go:embed ebpf/*
@@ -59,7 +61,7 @@ var (
 	userspaceLogLevel = flag.String("verbose", "warn", "Userspace vebosity. Possible values (trace, debug, info, warn, error, critical, off).")
 	printProtocols    = flag.String(
 		"proto",
-		"all", "print active connections or/and protocol metrics. Possible values (all, conns, proto, http, postgres). 'all' means active connections + all supported protocols")
+		"all", "print active connections or/and protocol metrics. Possible values (all, conns, proto, http, postgres, amqp). 'all' means active connections + all supported protocols")
 )
 
 func validatePrintProtocols() uint64 {
@@ -71,10 +73,12 @@ func validatePrintProtocols() uint64 {
 		return httpCode
 	case postgresProtocol:
 		return postgresCode
+	case amqpProtocol:
+		return amqpCode
 	case proto:
-		return httpCode | postgresCode
+		return httpCode | postgresCode | amqpCode
 	default:
-		return httpCode | postgresCode | connectionsCode
+		return httpCode | postgresCode | connectionsCode | amqpCode
 	}
 }
 
@@ -299,6 +303,11 @@ func run() int {
 			fmt.Printf("\n\n------ Postgres stats (%d)\n\n", len(stats))
 			for _, c := range stats {
 				fmt.Println(c)
+			}
+		case protocols&amqpCode != 0:
+			fmt.Printf("\n\n------ AMQP stats (%d)\n\n", len(cs.AMQP))
+			for key, v := range cs.AMQP {
+				fmt.Printf("tuple: '%v', queue: '%v', exchange: '%v', published: '%d', delivered: '%d'\n", key.ConnectionKey.String(), key.QueueName, key.ExchangeName, v.MessagesPublished, v.MessagesDelivered)
 			}
 		case protocols&httpCode != 0:
 			stats := httpdebugging.HTTP(cs.HTTP, cs.DNS)
