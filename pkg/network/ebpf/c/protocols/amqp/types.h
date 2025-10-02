@@ -1,11 +1,14 @@
 #ifndef __AMQP_TYPES_H
 #define __AMQP_TYPES_H
 
+// This is the len of AMQP short strings in AMQP 0-9-1
+#define AMQP_STRING_LEN 256
+
 #pragma pack(push, 1)
 
 typedef struct {
   __u8 length; // Length of following string
-  char data[256]; // String data
+  char data[AMQP_STRING_LEN]; // String data
 } amqp_short_string_t;
 
 typedef struct {
@@ -19,21 +22,7 @@ typedef struct {
   __u16 method;
 } amqp_method_identifier_t;
 
-typedef struct {
-    conn_tuple_t tup;
-    __u32 messages_delivered; // Messages delivered to the client on this connection. This is the count of messages traveling from the server to the client.
-    __u32 messages_published; // Messages published on this connection. This is the count of messages traveling from the client to the server.
-    __u8 reply_code; // AMQP reply code. Only transmitted when a connection is closed, 0 otherwise.
-    __u8 exchange_or_queue[256]; // Name of the exchange or queue
-    __u8 is_exchange; // 1 if the name above is for an exchange, 0 if it is for a queue
-} amqp_transaction_batch_entry_t;
-
-typedef struct {
-  amqp_frame_header_t header;
-  amqp_method_identifier_t method;
-  amqp_short_string_t string;
-  amqp_transaction_batch_entry_t transaction;
-} amqp_heap_helper_t; // This is a helper struct to be used in the BPF program to load the string from the packet.
+#pragma pack(pop)
 
 typedef struct {
     __u8 preamble[4]; // "AMQP"
@@ -43,6 +32,20 @@ typedef struct {
     __u8 revision;
 } amqp_protocol_identifier;
 
-#pragma pack(pop)
+typedef struct {
+    conn_tuple_t tup;
+    __u8 exchange_or_queue[AMQP_STRING_LEN]; // Name of the exchange or queue
+    __u32 messages_delivered; // Messages delivered to the client on this connection. This is the count of messages traveling from the server to the client.
+    __u32 messages_published; // Messages published on this connection. This is the count of messages traveling from the client to the server.
+    __u8 reply_code; // AMQP reply code. Only transmitted when a connection is closed, 0 otherwise.
+    __u8 is_exchange; // 1 if the name above is for an exchange, 0 if it is for a queue
+} amqp_transaction_batch_entry_t;
+
+typedef struct {
+  amqp_frame_header_t header;
+  amqp_method_identifier_t method;
+  amqp_short_string_t string;
+  amqp_transaction_batch_entry_t transaction;
+} amqp_heap_helper_t; // This is a helper struct to be used in the BPF program to load the string from the packet.
 
 #endif

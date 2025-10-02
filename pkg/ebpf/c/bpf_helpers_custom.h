@@ -35,6 +35,13 @@ extern void __format_check(const char *fmt, ...) __attribute__ ((format(printf, 
 #define debug_postgres(fmt, ...)
 #endif
 
+#define DEBUG_AMQP 0
+#if DEBUG_AMQP
+#define debug_amqp(fmt, ...) bpf_printk("[AMQP]: " fmt, ##__VA_ARGS__)
+#else
+#define debug_amqp(fmt, ...)
+#endif
+
 /* llvm builtin functions that eBPF C program may use to
  * emit BPF_LD_ABS and BPF_LD_IND instructions
  */
