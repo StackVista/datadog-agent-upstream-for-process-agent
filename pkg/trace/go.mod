@@ -1,6 +1,6 @@
 module github.com/DataDog/datadog-agent/pkg/trace
 
-go 1.22.0
+go 1.23
 
 // NOTE: Prefer using simple `require` directives instead of using `replace` if possible.
 // See https://github.com/DataDog/datadog-agent/blob/main/docs/dev/gomodreplace.md
@@ -28,7 +28,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.4
-	github.com/google/go-cmp v0.6.0
+	github.com/google/go-cmp v0.7.0
 	github.com/google/gofuzz v1.2.0
 	github.com/google/uuid v1.6.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/processor/probabilisticsamplerprocessor v0.115.0
@@ -46,7 +46,7 @@ require (
 	golang.org/x/sys v0.28.0
 	golang.org/x/time v0.8.0
 	google.golang.org/grpc v1.67.1
-	google.golang.org/protobuf v1.35.2
+	google.golang.org/protobuf v1.36.10
 	gopkg.in/ini.v1 v1.67.0
 	k8s.io/apimachinery v0.31.2
 )
