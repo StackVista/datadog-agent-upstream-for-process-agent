@@ -102,7 +102,7 @@ func newHTTPProtocol(cfg *config.Config) (protocols.Protocol, error) {
 	}
 
 	if kversion < usmconfig.MinimumKernelVersion {
-		return nil, fmt.Errorf("http feature not available on pre %s kernels", usmconfig.MinimumKernelVersion.String())
+		return nil, fmt.Errorf("http feature not available on pre %s kernels. You can disable this protocol through the helm chart config `processAgent.disabledProtocols`.", usmconfig.MinimumKernelVersion.String())
 	}
 
 	telemetry := NewTelemetry("http")

@@ -210,7 +210,7 @@ func newHTTP2Protocol(cfg *config.Config) (protocols.Protocol, error) {
 	}
 
 	if !Supported() {
-		return nil, fmt.Errorf("http2 feature not available on pre %s kernels", MinimumKernelVersion.String())
+		return nil, fmt.Errorf("http2 feature not available on pre %s kernels. You can disable this protocol through the helm chart config `processAgent.disabledProtocols`.", MinimumKernelVersion.String())
 	}
 
 	telemetry := http.NewTelemetry("http2")
