@@ -338,7 +338,6 @@ require (
 	k8s.io/metrics v0.31.2
 	k8s.io/utils v0.0.0-20240821151609-f90d01438635
 	sigs.k8s.io/custom-metrics-apiserver v1.30.1-0.20241105195130-84dc8cfe2555
-
 )
 
 require (
@@ -608,7 +607,7 @@ require (
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/DataDog/agent-payload/v5 v5.0.138
+	github.com/DataDog/agent-payload/v5 v5.0.168
 	github.com/DataDog/datadog-agent/comp/api/api/def v0.62.2
 	github.com/DataDog/datadog-agent/comp/core/config v0.62.2
 	github.com/DataDog/datadog-agent/comp/core/flare/types v0.62.2
