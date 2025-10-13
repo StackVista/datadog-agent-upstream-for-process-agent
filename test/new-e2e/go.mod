@@ -282,7 +282,7 @@ require (
 require (
 	github.com/DataDog/datadog-agent/comp/core/tagger/types v0.62.2
 	github.com/DataDog/datadog-agent/pkg/trace v0.62.2
-	github.com/DataDog/datadog-go/v5 v5.6.0
+	github.com/DataDog/datadog-go/v5 v5.8.1
 	github.com/aws/aws-sdk-go v1.55.5
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.71.1
 	github.com/aws/session-manager-plugin v0.0.0-20241119210807-82dc72922492
