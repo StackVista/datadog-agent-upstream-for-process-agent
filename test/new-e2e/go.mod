@@ -1,6 +1,6 @@
 module github.com/DataDog/datadog-agent/test/new-e2e
 
-go 1.23.0
+go 1.24.0
 
 // Do not upgrade Pulumi plugins to versions different from `test-infra-definitions`.
 // The plugin versions NEED to be aligned.
@@ -43,7 +43,7 @@ replace (
 )
 
 require (
-	github.com/DataDog/agent-payload/v5 v5.0.138
+	github.com/DataDog/agent-payload/v5 v5.0.174
 	github.com/DataDog/datadog-agent/comp/otelcol/ddflareextension/def v0.62.2
 	github.com/DataDog/datadog-agent/pkg/util/optional v0.62.2
 	github.com/DataDog/datadog-agent/pkg/util/pointer v0.62.2
