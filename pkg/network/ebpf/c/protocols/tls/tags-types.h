@@ -10,6 +10,7 @@ enum static_tags {
     CONN_TLS = (1<<3),
     ISTIO = (1<<4),
     NODEJS = (1<<5),
+    WATCH_API = (1<<6)
 };
 
 #endif

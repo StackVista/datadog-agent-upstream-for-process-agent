@@ -74,6 +74,8 @@ const (
 	ProgramMongo ProgramType = C.PROG_MONGO
 	// ProgramAMQP is the Golang representation of the C.PROG_AMQP enum
 	ProgramAMQP ProgramType = C.PROG_AMQP
+	// ProgramHTTPWatchAPIMangement is the Golang representation of the C.PROG_HTTP_WATCH_API_MANAGEMENT enum
+	ProgramHTTPWatchAPIMangement ProgramType = C.PROG_HTTP_WATCH_API_MANAGEMENT
 )
 
 type ebpfProtocolType C.protocol_t

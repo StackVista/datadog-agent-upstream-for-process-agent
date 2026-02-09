@@ -211,7 +211,10 @@ func (h *StatKeeper) add(tx Transaction) {
 	}
 
 	traceID := parseTraceId(tx)
-	if traceID.Type == TraceIdNone || !h.enableTracing {
+	// if we have the watch API tag for now we always want stats and not observations.
+	if traceID.Type == TraceIdNone ||
+		!h.enableTracing ||
+		tx.StaticTags()&uint64(WatchAPI) != 0 {
 		stats, ok := h.stats[key]
 		if !ok {
 			if len(h.stats) >= h.maxEntries {

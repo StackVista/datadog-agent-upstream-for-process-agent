@@ -159,6 +159,7 @@ typedef enum {
     PROG_REDIS_TERMINATION,
     PROG_MONGO,
     PROG_AMQP,
+    PROG_HTTP_WATCH_API_MANAGEMENT,
     // Add before this value.
     PROG_MAX,
 } protocol_prog_t;

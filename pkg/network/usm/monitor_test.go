@@ -149,6 +149,102 @@ func (s *HTTPTestSuite) TestHTTPStats() {
 	}, 3*time.Second, 100*time.Millisecond, "couldn't find http connection matching: %s", serverAddr)
 }
 
+func (s *HTTPTestSuite) TestHTTPWatchAPIDetection() {
+	t := s.T()
+
+	// Start an HTTP server on localhost:8080
+	serverAddr := "127.0.0.1:8080"
+	srvDoneFn := testutil.HTTPServer(t, serverAddr, testutil.Options{
+		AcceptAll: true,
+	})
+	t.Cleanup(srvDoneFn)
+
+	findStaticTag := func(stat *http.RequestStats) bool {
+		s, ok := stat.Data[200]
+		if !ok {
+			return false
+		}
+		return s.IsWatchAPI()
+	}
+
+	commonPrefix := "/api"
+	monitor := newHTTPMonitorWithCfg(t, utils.NewUSMEmptyConfig())
+	tests := []struct {
+		name     string
+		path     string
+		watchAPI bool
+	}{
+		{
+			name: "watch middle batch",
+			// considering we first have `GET ` in the path we see in ebpf,
+			// this `watch=true` should start in the middle of a batch and complete in another batch.
+			path:     commonPrefix + strings.Repeat("A", 300) + "watch=true",
+			watchAPI: true,
+		},
+		{
+			name: "watch beginning batch",
+			// adding 2 bytes so that `watch=true` should start at the beginning of the batch.
+			path:     commonPrefix + strings.Repeat("A", 302) + "watch=true" + strings.Repeat("A", 100),
+			watchAPI: true,
+		},
+		{
+			name: "watch near the end",
+			// adding 2 bytes so that `watch=true` should start at the beginning of the batch.
+			path:     commonPrefix + strings.Repeat("A", 1300) + "watch=true",
+			watchAPI: true,
+		},
+		{
+			name:     "no watch",
+			path:     "/" + strings.Repeat("A", 104),
+			watchAPI: false,
+		},
+		{
+			name:     "no prefix",
+			path:     "/" + strings.Repeat("A", 100) + "watch=true",
+			watchAPI: false,
+		},
+		{
+			name: "too long",
+			// we reach at most 1350 bytes of HTTP payload, if it there are multiple fragments of the packet we don't find `watch=true`
+			path:     commonPrefix + strings.Repeat("A", 1400) + "watch=true",
+			watchAPI: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Send the request
+			resp, err := nethttp.Get(fmt.Sprintf("http://%s%s", serverAddr, tt.path))
+			require.NoError(t, err)
+			_ = resp.Body.Close()
+
+			if !tt.watchAPI {
+				// We shouldn't find it...we try 10 attempts
+				for i := 0; i < 10; i++ {
+					stats := getHTTPLikeProtocolStats(monitor, protocols.HTTP)
+					for _, stat := range stats {
+						if findStaticTag(stat) {
+							t.Fatalf("found watch API tag but it shouldn't be there for: %s", tt.path)
+						}
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+			} else {
+				// We should find it...
+				require.Eventuallyf(t, func() bool {
+					stats := getHTTPLikeProtocolStats(monitor, protocols.HTTP)
+					for key, stat := range stats {
+						t.Logf("Method: %s, path: %s, tuple: %v", key.Method, key.Path.Content.Get(), key.ConnectionKey.String())
+						// in our case the server should answer with 200 ok
+						return findStaticTag(stat)
+					}
+					return false
+				}, 10*time.Second, 100*time.Millisecond, "couldn't find watch API for: %s", tt.path)
+			}
+		})
+	}
+	srvDoneFn()
+}
+
 // TestHTTPMonitorLoadWithIncompleteBuffers sends thousands of requests without getting responses for them, in parallel
 // we send another request. We expect to capture the another request but not the incomplete requests.
 func (s *HTTPTestSuite) TestHTTPMonitorLoadWithIncompleteBuffers() {
@@ -343,7 +439,8 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 		"socket__http2_filter":                                     125274,
 		"socket__http2_handle_first_frame":                         1157,
 		"socket__http2_headers_parser":                             778883,
-		"socket__http_filter":                                      84365,
+		"socket__http_filter":                                      81490,
+		"socket__http_watch_api_management":                        48782,
 		"socket__kafka_fetch_response_partition_parser_v0":         7533,
 		"socket__kafka_fetch_response_partition_parser_v12":        4884,
 		"socket__kafka_fetch_response_record_batch_parser_v0":      4583,
@@ -382,8 +479,9 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 		"uprobe__http2_tls_handle_first_frame":                     988,
 		"uprobe__http2_tls_headers_parser":                         802483,
 		"uprobe__http2_tls_termination":                            105,
-		"uprobe__http_process":                                     99620,
+		"uprobe__http_process":                                     99707,
 		"uprobe__http_termination":                                 608,
+		"uprobe__http_watch_api_management":                        47410,
 		"uprobe__kafka_tls_fetch_response_partition_parser_v0":     8883,
 		"uprobe__kafka_tls_fetch_response_partition_parser_v12":    5526,
 		"uprobe__kafka_tls_fetch_response_record_batch_parser_v0":  4288,

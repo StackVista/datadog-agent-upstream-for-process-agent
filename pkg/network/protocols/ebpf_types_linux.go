@@ -61,6 +61,8 @@ const (
 	ProgramMongo ProgramType = 0x16
 
 	ProgramAMQP ProgramType = 0x17
+
+	ProgramHTTPWatchAPIMangement ProgramType = 0x18
 )
 
 type ebpfProtocolType uint16

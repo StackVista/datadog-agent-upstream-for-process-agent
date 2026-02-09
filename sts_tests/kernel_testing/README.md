@@ -27,12 +27,12 @@ report_only: false
 # kernel versions to test
 kernel_versions:
     - v5.4.293
-    - v5.10.244
-    - v5.15.193
-    - v6.1.154
-    - v6.6.108
-    - v6.12.49
-    - v6.16.9
+    - v5.10.248
+    - v5.15.197
+    - v6.1.160
+    - v6.6.121
+    - v6.12.67
+    - v6.18.7
 ```
 
 > __NOTE:__ We need `iptables -t raw -A PREROUTING -j CT` to load the `conntrack` handlers into the netfiler framework. Loading the `conntrack` kernel module is not enough. We need the `conntrack` handlers to be loaded because we hook them in our ebpf instrumentation. kernel `v5.4.293` refuse to attach kprobes to the conntrack method `__nf_conntrack_hash_insert` returning error `-99 (Cannot assign requested address)`, at the moment we accept this since we usually don't modify the 2 ebpf programs related to `conntrack`.
