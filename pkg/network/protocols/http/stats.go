@@ -128,6 +128,10 @@ type RequestStat struct {
 	DynamicTags []string
 }
 
+func (r *RequestStat) IsWatchAPI() bool {
+	return r.StaticTags&uint64(WatchAPI) != 0
+}
+
 func (r *RequestStat) initSketch() (err error) {
 	r.Latencies, err = ddsketch.NewDefaultDDSketch(RelativeAccuracy)
 	if err != nil {

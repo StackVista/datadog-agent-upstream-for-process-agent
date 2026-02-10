@@ -149,6 +149,150 @@ func (s *HTTPTestSuite) TestHTTPStats() {
 	}, 3*time.Second, 100*time.Millisecond, "couldn't find http connection matching: %s", serverAddr)
 }
 
+func (s *HTTPTestSuite) TestHTTPWatchAPIDetection() {
+	t := s.T()
+
+	requestTraceID := "request1-noke-4206-8da1-d8c11c80585c"
+	// Start an HTTP server on localhost:8080
+	serverAddr := "127.0.0.1:8080"
+	srvDoneFn := testutil.HTTPServer(t, serverAddr, testutil.Options{
+		AcceptAll: true,
+	})
+	t.Cleanup(srvDoneFn)
+
+	findStaticTag := func(stat *http.RequestStats) bool {
+		s, ok := stat.Data[200]
+		if !ok {
+			return false
+		}
+		return s.IsWatchAPI()
+	}
+
+	// Create the client
+	client := new(nethttp.Client)
+	// Disabling http2
+	tr := nethttp.DefaultTransport.(*nethttp.Transport).Clone()
+	tr.ForceAttemptHTTP2 = false
+	tr.TLSNextProto = make(map[string]func(authority string, c *tls.Conn) nethttp.RoundTripper)
+	client.Transport = tr
+
+	commonPrefix := "/api"
+	cfg := utils.NewUSMEmptyConfig()
+	// enable tracing since we want to see observations.
+	cfg.EnableHTTPTracing = true
+	monitor := newHTTPMonitorWithCfg(t, cfg)
+	tests := []struct {
+		name     string
+		path     string
+		watchAPI bool
+	}{
+		{
+			name: "watch middle batch",
+			// considering we first have `GET ` in the path we see in ebpf,
+			// this `watch=true` should start in the middle of a batch and complete in another batch.
+			path:     commonPrefix + strings.Repeat("A", 300) + "watch=true",
+			watchAPI: true,
+		},
+		{
+			name: "watch beginning batch",
+			// adding 2 bytes so that `watch=true` should start at the beginning of the batch.
+			path:     commonPrefix + strings.Repeat("A", 302) + "watch=true" + strings.Repeat("A", 100),
+			watchAPI: true,
+		},
+		{
+			name: "watch near the end",
+			// adding 2 bytes so that `watch=true` should start at the beginning of the batch.
+			path:     commonPrefix + strings.Repeat("A", 1300) + "watch=true",
+			watchAPI: true,
+		},
+		{
+			name:     "no watch",
+			path:     commonPrefix + strings.Repeat("A", 104),
+			watchAPI: false,
+		},
+		{
+			name:     "no prefix",
+			path:     "/" + strings.Repeat("A", 100) + "watch=true",
+			watchAPI: false,
+		},
+		{
+			name: "too long",
+			// we reach at most 1350 bytes of HTTP payload, if it there are multiple fragments of the packet we don't find `watch=true`
+			path:     commonPrefix + strings.Repeat("A", 1400) + "watch=true",
+			watchAPI: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Send the request
+			url := fmt.Sprintf("http://%s%s", serverAddr, tt.path)
+			req, err := nethttp.NewRequest(nethttp.MethodGet, url, bytes.NewReader(emptyBody))
+			require.NoError(t, err)
+			// we always set an header to see the behavior of the watch api together with the trace-id.
+			req.Header.Set("x-request-id", requestTraceID)
+
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			_ = resp.Body.Close()
+
+			if !tt.watchAPI {
+				require.Eventuallyf(t, func() bool {
+					stats, observations := getHTTPLikeProtocolStatsObservations(monitor, protocols.HTTP)
+
+					// We shouldn't find stats associated with our HTTP path or with the watch tag
+					// there is just one exception, see below.
+					for key, stat := range stats {
+						t.Logf("[Stat] Method: %s, path: %s, tuple: %v", key.Method, key.Path.Content.Get(), key.ConnectionKey.String())
+
+						if findStaticTag(stat) {
+							return false
+						}
+
+						// we should also check the stat path is not the one we are generating
+						if strings.HasPrefix(tt.path, key.Path.Content.Get()) {
+							// there is one exception. If the path is really long there is no enough space for our tracing header and so we will just have a stat and not an observation
+							if len(tt.path) >= 1400 {
+								return true
+							}
+							return false
+						}
+					}
+
+					for _, obs := range observations {
+						t.Logf("[Obs] Method: %s, path: %s, tuple: %v, trace: %v", obs.Key.Method, obs.Key.Path.Content.Get(), obs.Key.ConnectionKey.String(), obs.TraceId)
+
+						if obs.TraceId.Id == requestTraceID &&
+							obs.TraceId.Type == http.TraceIdRequest &&
+							strings.HasPrefix(tt.path, obs.Key.Path.Content.Get()) {
+							return true
+						}
+					}
+					return false
+				}, 5*time.Second, 100*time.Millisecond, "couldn't find observation for path: %s", tt.path)
+			} else {
+				require.Eventuallyf(t, func() bool {
+					stats, observations := getHTTPLikeProtocolStatsObservations(monitor, protocols.HTTP)
+					// We should not find observations associated with our path
+					// but a stat with the watch API tag.
+					for _, obs := range observations {
+						t.Logf("[Obs] Method: %s, path: %s, tuple: %v, trace: %v", obs.Key.Method, obs.Key.Path.Content.Get(), obs.Key.ConnectionKey.String(), obs.TraceId)
+						if strings.HasPrefix(tt.path, obs.Key.Path.Content.Get()) {
+							return false
+						}
+					}
+
+					for key, stat := range stats {
+						t.Logf("Method: %s, path: %s, tuple: %v", key.Method, key.Path.Content.Get(), key.ConnectionKey.String())
+						return findStaticTag(stat) && strings.HasPrefix(tt.path, key.Path.Content.Get())
+					}
+					return false
+				}, 10*time.Second, 100*time.Millisecond, "couldn't find watch API for: %s", tt.path)
+			}
+		})
+	}
+	srvDoneFn()
+}
+
 // TestHTTPMonitorLoadWithIncompleteBuffers sends thousands of requests without getting responses for them, in parallel
 // we send another request. We expect to capture the another request but not the incomplete requests.
 func (s *HTTPTestSuite) TestHTTPMonitorLoadWithIncompleteBuffers() {
@@ -337,13 +481,14 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 		"nodejs_uretprobe__SSL_read_ex":                            4832,
 		"nodejs_uretprobe__SSL_write":                              4836,
 		"nodejs_uretprobe__SSL_write_ex":                           4807,
-		"socket__amqp_process":                                     291876,
+		"socket__amqp_process":                                     347687,
 		"socket__http2_dynamic_table_cleaner":                      3971,
 		"socket__http2_eos_parser":                                 128959,
 		"socket__http2_filter":                                     125274,
 		"socket__http2_handle_first_frame":                         1157,
 		"socket__http2_headers_parser":                             778883,
-		"socket__http_filter":                                      84365,
+		"socket__http_filter":                                      81528,
+		"socket__http_watch_api_management":                        49664,
 		"socket__kafka_fetch_response_partition_parser_v0":         7533,
 		"socket__kafka_fetch_response_partition_parser_v12":        4884,
 		"socket__kafka_fetch_response_record_batch_parser_v0":      4583,
@@ -367,7 +512,7 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 		"uprobe__SSL_shutdown":                                     354,
 		"uprobe__SSL_write":                                        16,
 		"uprobe__SSL_write_ex":                                     18,
-		"uprobe__amqp_process":                                     295495,
+		"uprobe__amqp_process":                                     372455,
 		"uprobe__gnutls_bye":                                       354,
 		"uprobe__gnutls_deinit":                                    354,
 		"uprobe__gnutls_handshake":                                 14,
@@ -382,8 +527,9 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 		"uprobe__http2_tls_handle_first_frame":                     988,
 		"uprobe__http2_tls_headers_parser":                         802483,
 		"uprobe__http2_tls_termination":                            105,
-		"uprobe__http_process":                                     99620,
+		"uprobe__http_process":                                     99745,
 		"uprobe__http_termination":                                 608,
+		"uprobe__http_watch_api_management":                        47960,
 		"uprobe__kafka_tls_fetch_response_partition_parser_v0":     8883,
 		"uprobe__kafka_tls_fetch_response_partition_parser_v12":    5526,
 		"uprobe__kafka_tls_fetch_response_record_batch_parser_v0":  4288,

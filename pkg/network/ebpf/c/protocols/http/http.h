@@ -300,6 +300,24 @@ static __always_inline void http_process(http_classification_t *http_class, skb_
     }
 }
 
+static __always_inline bool is_watch_api_candidate(http_classification_t *http_class) {
+    // K8s watch API detection:
+    //
+    // We try to detect the typical k8s query path
+    // - /api/v (for core resources, e.g. pod)
+    // - /apis/ (for other resources, e.g. deployments)
+    // As a common prefix we search `/api`
+    // GET /api
+    // 01234567
+    // So we need to start from index 4
+    return http_class->packet_type == HTTP_REQUEST &&
+            http_class->method == HTTP_GET &&
+            http_class->request_fragment[4] == '/' &&
+            http_class->request_fragment[5] == 'a' &&
+            http_class->request_fragment[6] == 'p' &&
+            http_class->request_fragment[7] == 'i';
+}
+
 SEC("socket/http_filter")
 int socket__http_filter(struct __sk_buff* skb) {
     skb_info_t skb_info;
@@ -314,10 +332,60 @@ int socket__http_filter(struct __sk_buff* skb) {
 
     http_classify_skb(&http_class, &skb_info, skb);
 
+    if (is_watch_api_candidate(&http_class)) {
+        __u32 zero = 0;
+        // we need to store the tracing ID so that we can reuse that if we don't find `watch=true`
+        http_store_tracing_id_t *store = bpf_map_lookup_elem(&http_store_tracing_id, &zero);
+        if (store) {
+            bpf_memcpy(store->tracing_id, http_class.tracing_id, HTTP_TRACING_ID_SIZE);
+            store->parse_result = http_class.parse_result;
+        }
+        bpf_tail_call_compat(skb, &protocols_progs, PROG_HTTP_WATCH_API_MANAGEMENT);
+        return 0;
+    }
+
     // STS: Putting normalize after classify, because any branching in front of trace parsing may double the instruction count
     normalize_tuple(&http_class.tuple);
 
     http_process(&http_class, &skb_info, NO_TAGS);
+    return 0;
+}
+
+SEC("socket/http_watch_api_management")
+int socket__http_watch_api_management(struct __sk_buff* skb) {
+    skb_info_t skb_info;
+    http_classification_t http_class;
+    bpf_memset(&http_class, 0, sizeof(http_classification_t));
+
+    if (!fetch_dispatching_arguments(&http_class.tuple, &skb_info)) {
+        log_debug("http_watch_api_management failed to fetch arguments for tail call");
+        return 0;
+    }
+
+    __u64 tags = NO_TAGS;
+    bool watch_found = http_find_watch_true_skb(skb, &skb_info);
+    if (watch_found) {
+        // no need to recover the tracing ID from the per-CPU map since we won't use that in userspace
+        // with the watch tag.
+        tags = WATCH_API;
+    } else {
+        // we need to recover the tracing ID from the per-CPU map
+        __u32 zero = 0;
+        http_store_tracing_id_t *store = bpf_map_lookup_elem(&http_store_tracing_id, &zero);
+        if (store) {
+            bpf_memcpy(http_class.tracing_id, store->tracing_id, HTTP_TRACING_ID_SIZE);
+            http_class.parse_result = store->parse_result;
+        }
+    }
+    read_into_buffer_skb((char *)http_class.request_fragment, skb, skb_info.data_off);
+    http_class.method = HTTP_GET;
+    http_class.packet_type = HTTP_REQUEST;
+
+    // bpf_my_printk("tag %llu, type: %d, path: %s", tags, http_class.packet_type, http_class.request_fragment);
+
+    normalize_tuple(&http_class.tuple);
+
+    http_process(&http_class, &skb_info, tags);
     return 0;
 }
 
@@ -334,6 +402,51 @@ int uprobe__http_process(struct pt_regs *ctx) {
     bpf_memcpy(&http_class.tuple, &args->tup, sizeof(conn_tuple_t));
 
     http_classify_user(&http_class, args->buffer_ptr, args->data_end);
+
+    if (is_watch_api_candidate(&http_class)) {
+        __u32 zero = 0;
+        http_store_tracing_id_t *store = bpf_map_lookup_elem(&http_store_tracing_id, &zero);
+        if (store) {
+            bpf_memcpy(store->tracing_id, http_class.tracing_id, HTTP_TRACING_ID_SIZE);
+            store->parse_result = http_class.parse_result;
+        }
+        bpf_tail_call_compat(ctx, &tls_process_progs, PROG_HTTP_WATCH_API_MANAGEMENT);
+        return 0;
+    }
+
+    http_process(&http_class, NULL, args->tags);
+    http_batch_flush(ctx);
+
+    return 0;
+}
+
+SEC("uprobe/http_watch_api_management")
+int uprobe__http_watch_api_management(struct pt_regs *ctx) {
+    const __u32 zero = 0;
+    tls_dispatcher_arguments_t *args = bpf_map_lookup_elem(&tls_dispatcher_arguments, &zero);
+    if (args == NULL) {
+        return 0;
+    }
+
+    http_classification_t http_class;
+    bpf_memset(&http_class, 0, sizeof(http_classification_t));
+    bpf_memcpy(&http_class.tuple, &args->tup, sizeof(conn_tuple_t));
+
+    bool watch_found = http_find_watch_true_user(args->buffer_ptr, args->data_end);
+    if (watch_found) {
+        args->tags |= WATCH_API;
+    } else {
+        __u32 zero = 0;
+        http_store_tracing_id_t *store = bpf_map_lookup_elem(&http_store_tracing_id, &zero);
+        if (store) {
+            bpf_memcpy(http_class.tracing_id, store->tracing_id, HTTP_TRACING_ID_SIZE);
+            http_class.parse_result = store->parse_result;
+        }
+    }
+    read_into_user_buffer_http((char *)http_class.request_fragment, args->buffer_ptr);
+    http_class.method = HTTP_GET;
+    http_class.packet_type = HTTP_REQUEST;
+
     http_process(&http_class, NULL, args->tags);
     http_batch_flush(ctx);
 

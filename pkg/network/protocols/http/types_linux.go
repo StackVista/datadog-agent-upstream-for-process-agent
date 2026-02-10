@@ -51,21 +51,23 @@ const (
 type ConnTag = uint64
 
 const (
-	GnuTLS  ConnTag = 0x1
-	OpenSSL ConnTag = 0x2
-	Go      ConnTag = 0x4
-	TLS     ConnTag = 0x8
-	Istio   ConnTag = 0x10
-	NodeJS  ConnTag = 0x20
+	GnuTLS   ConnTag = 0x1
+	OpenSSL  ConnTag = 0x2
+	Go       ConnTag = 0x4
+	TLS      ConnTag = 0x8
+	Istio    ConnTag = 0x10
+	NodeJS   ConnTag = 0x20
+	WatchAPI ConnTag = 0x40
 )
 
 var (
 	StaticTags = map[ConnTag]string{
-		GnuTLS:  "tls.library:gnutls",
-		OpenSSL: "tls.library:openssl",
-		Go:      "tls.library:go",
-		TLS:     "tls.connection:encrypted",
-		Istio:   "tls.library:istio",
-		NodeJS:  "tls.library:nodejs",
+		GnuTLS:   "tls.library:gnutls",
+		OpenSSL:  "tls.library:openssl",
+		Go:       "tls.library:go",
+		TLS:      "tls.connection:encrypted",
+		Istio:    "tls.library:istio",
+		NodeJS:   "tls.library:nodejs",
+		WatchAPI: "http.watch_api:true",
 	}
 )

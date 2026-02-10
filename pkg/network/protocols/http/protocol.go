@@ -40,8 +40,10 @@ type protocol struct {
 const (
 	inFlightMap            = "http_in_flight"
 	filterTailCall         = "socket__http_filter"
+	watchAPITailCall       = "socket__http_watch_api_management"
 	tlsProcessTailCall     = "uprobe__http_process"
 	tlsTerminationTailCall = "uprobe__http_termination"
+	tlsWatchAPITailCall    = "uprobe__http_watch_api_management"
 	eventStream            = "http"
 )
 
@@ -74,10 +76,24 @@ var Spec = &protocols.ProtocolSpec{
 			},
 		},
 		{
+			ProgArrayName: protocols.ProtocolDispatcherProgramsMap,
+			Key:           uint32(protocols.ProgramHTTPWatchAPIMangement),
+			ProbeIdentificationPair: manager.ProbeIdentificationPair{
+				EBPFFuncName: watchAPITailCall,
+			},
+		},
+		{
 			ProgArrayName: protocols.TLSDispatcherProgramsMap,
 			Key:           uint32(protocols.ProgramHTTP),
 			ProbeIdentificationPair: manager.ProbeIdentificationPair{
 				EBPFFuncName: tlsProcessTailCall,
+			},
+		},
+		{
+			ProgArrayName: protocols.TLSDispatcherProgramsMap,
+			Key:           uint32(protocols.ProgramHTTPWatchAPIMangement),
+			ProbeIdentificationPair: manager.ProbeIdentificationPair{
+				EBPFFuncName: tlsWatchAPITailCall,
 			},
 		},
 		{

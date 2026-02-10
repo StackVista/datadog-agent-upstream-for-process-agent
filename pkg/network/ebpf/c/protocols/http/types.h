@@ -21,6 +21,11 @@
 static char http_tracing_header_key_lower[256] = { '\n', 'x', '-', 'r', 'e', 'q', 'u', 'e', 's', 't', '-', 'i', 'd', ':' };
 static char http_tracing_header_key_upper[256] = { '\n', 'X', '-', 'R', 'E', 'Q', 'U', 'E', 'S', 'T', '-', 'I', 'D', ':' };
 
+// Literal substring we want to detect anywhere in the request headers/payload.
+// NOTE: kept as a fixed-size array (256) to make verifier bounds happy when indexing.
+#define HTTP_WATCH_TRUE_KEY_SIZE 10
+static char http_watch_true_key[256] = { 'w', 'a', 't', 'c', 'h', '=', 't', 'r', 'u', 'e' };
+
 // Full uuid+ newline and a bit.
 #define HTTP_TRACING_ID_SIZE 40
 
@@ -92,6 +97,11 @@ typedef struct {
     __u8 request_parse_result;
     __u8 response_parse_result;
 } http_transaction_t;
+
+typedef struct {
+    char tracing_id[HTTP_TRACING_ID_SIZE] __attribute__ ((aligned (8)));
+    header_parse_result_t parse_result;
+} http_store_tracing_id_t;
 
 typedef struct {
     conn_tuple_t tuple;

@@ -38,6 +38,7 @@ type Options struct {
 	ReadTimeout         time.Duration
 	WriteTimeout        time.Duration
 	SlowResponse        time.Duration
+	AcceptAll           bool
 }
 
 func isNetIPV4TCPTimestampEnabled(t *testing.T) bool {
@@ -82,6 +83,12 @@ func SetupNetIPV4TCPTimestamp(t *testing.T, enable bool) {
 // nolint
 func HTTPServer(t *testing.T, addr string, options Options) func() {
 	handler := func(w http.ResponseWriter, req *http.Request) {
+		// in this mode the server will accept all requests
+		if options.AcceptAll {
+			w.WriteHeader(int(200))
+			return
+		}
+
 		if options.SlowResponse != 0 {
 			time.Sleep(options.SlowResponse)
 		}

@@ -64,6 +64,8 @@ rsync -au "$SOURCEDIR"/. $WORKDIR && chown -R root:root $WORKDIR && cd $WORKDIR
 # If you changed the ebpf part you need to rebuilt the system-probe before running the tests
 invoke system-probe.build
 invoke test --build-include=linux_bpf,test --cpus=1 --targets=./pkg/network/usm/. --test-run-name="^TestUSMSuite/prebuilt/.*Mongo.*"
+invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestHTTP/prebuilt/TestHTTPWatchAPIDetection$"
+invoke test --build-include=linux_bpf,test --targets=./pkg/network/usm/. --test-run-name="^TestHTTP/prebuilt/TestHTTPMonitorInstructionCounts$"
 ```
 
 ## Nettop binary
