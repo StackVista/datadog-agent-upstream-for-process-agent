@@ -99,6 +99,11 @@ typedef struct {
 } http_transaction_t;
 
 typedef struct {
+    char tracing_id[HTTP_TRACING_ID_SIZE] __attribute__ ((aligned (8)));
+    header_parse_result_t parse_result;
+} http_store_tracing_id_t;
+
+typedef struct {
     conn_tuple_t tuple;
     http_transaction_t http;
 } http_event_t;

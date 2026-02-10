@@ -152,6 +152,7 @@ func (s *HTTPTestSuite) TestHTTPStats() {
 func (s *HTTPTestSuite) TestHTTPWatchAPIDetection() {
 	t := s.T()
 
+	requestTraceID := "request1-noke-4206-8da1-d8c11c80585c"
 	// Start an HTTP server on localhost:8080
 	serverAddr := "127.0.0.1:8080"
 	srvDoneFn := testutil.HTTPServer(t, serverAddr, testutil.Options{
@@ -167,8 +168,19 @@ func (s *HTTPTestSuite) TestHTTPWatchAPIDetection() {
 		return s.IsWatchAPI()
 	}
 
+	// Create the client
+	client := new(nethttp.Client)
+	// Disabling http2
+	tr := nethttp.DefaultTransport.(*nethttp.Transport).Clone()
+	tr.ForceAttemptHTTP2 = false
+	tr.TLSNextProto = make(map[string]func(authority string, c *tls.Conn) nethttp.RoundTripper)
+	client.Transport = tr
+
 	commonPrefix := "/api"
-	monitor := newHTTPMonitorWithCfg(t, utils.NewUSMEmptyConfig())
+	cfg := utils.NewUSMEmptyConfig()
+	// enable tracing since we want to see observations.
+	cfg.EnableHTTPTracing = true
+	monitor := newHTTPMonitorWithCfg(t, cfg)
 	tests := []struct {
 		name     string
 		path     string
@@ -195,7 +207,7 @@ func (s *HTTPTestSuite) TestHTTPWatchAPIDetection() {
 		},
 		{
 			name:     "no watch",
-			path:     "/" + strings.Repeat("A", 104),
+			path:     commonPrefix + strings.Repeat("A", 104),
 			watchAPI: false,
 		},
 		{
@@ -213,29 +225,65 @@ func (s *HTTPTestSuite) TestHTTPWatchAPIDetection() {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Send the request
-			resp, err := nethttp.Get(fmt.Sprintf("http://%s%s", serverAddr, tt.path))
+			url := fmt.Sprintf("http://%s%s", serverAddr, tt.path)
+			req, err := nethttp.NewRequest(nethttp.MethodGet, url, bytes.NewReader(emptyBody))
+			require.NoError(t, err)
+			// we always set an header to see the behavior of the watch api together with the trace-id.
+			req.Header.Set("x-request-id", requestTraceID)
+
+			resp, err := client.Do(req)
 			require.NoError(t, err)
 			_ = resp.Body.Close()
 
 			if !tt.watchAPI {
-				// We shouldn't find it...we try 10 attempts
-				for i := 0; i < 10; i++ {
-					stats := getHTTPLikeProtocolStats(monitor, protocols.HTTP)
-					for _, stat := range stats {
+				require.Eventuallyf(t, func() bool {
+					stats, observations := getHTTPLikeProtocolStatsObservations(monitor, protocols.HTTP)
+
+					// We shouldn't find stats associated with our HTTP path or with the watch tag
+					// there is just one exception, see below.
+					for key, stat := range stats {
+						t.Logf("[Stat] Method: %s, path: %s, tuple: %v", key.Method, key.Path.Content.Get(), key.ConnectionKey.String())
+
 						if findStaticTag(stat) {
-							t.Fatalf("found watch API tag but it shouldn't be there for: %s", tt.path)
+							return false
+						}
+
+						// we should also check the stat path is not the one we are generating
+						if strings.HasPrefix(tt.path, key.Path.Content.Get()) {
+							// there is one exception. If the path is really long there is no enough space for our tracing header and so we will just have a stat and not an observation
+							if len(tt.path) >= 1400 {
+								return true
+							}
+							return false
 						}
 					}
-					time.Sleep(10 * time.Millisecond)
-				}
+
+					for _, obs := range observations {
+						t.Logf("[Obs] Method: %s, path: %s, tuple: %v, trace: %v", obs.Key.Method, obs.Key.Path.Content.Get(), obs.Key.ConnectionKey.String(), obs.TraceId)
+
+						if obs.TraceId.Id == requestTraceID &&
+							obs.TraceId.Type == http.TraceIdRequest &&
+							strings.HasPrefix(tt.path, obs.Key.Path.Content.Get()) {
+							return true
+						}
+					}
+					return false
+				}, 5*time.Second, 100*time.Millisecond, "couldn't find observation for path: %s", tt.path)
 			} else {
-				// We should find it...
 				require.Eventuallyf(t, func() bool {
-					stats := getHTTPLikeProtocolStats(monitor, protocols.HTTP)
+					stats, observations := getHTTPLikeProtocolStatsObservations(monitor, protocols.HTTP)
+					// We should not find observations associated with our path
+					// but a stat with the watch API tag.
+					for _, obs := range observations {
+						t.Logf("[Obs] Method: %s, path: %s, tuple: %v, trace: %v", obs.Key.Method, obs.Key.Path.Content.Get(), obs.Key.ConnectionKey.String(), obs.TraceId)
+						if strings.HasPrefix(tt.path, obs.Key.Path.Content.Get()) {
+							return false
+						}
+					}
+
 					for key, stat := range stats {
 						t.Logf("Method: %s, path: %s, tuple: %v", key.Method, key.Path.Content.Get(), key.ConnectionKey.String())
-						// in our case the server should answer with 200 ok
-						return findStaticTag(stat)
+						return findStaticTag(stat) && strings.HasPrefix(tt.path, key.Path.Content.Get())
 					}
 					return false
 				}, 10*time.Second, 100*time.Millisecond, "couldn't find watch API for: %s", tt.path)
@@ -439,8 +487,8 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 		"socket__http2_filter":                                     125274,
 		"socket__http2_handle_first_frame":                         1157,
 		"socket__http2_headers_parser":                             778883,
-		"socket__http_filter":                                      81490,
-		"socket__http_watch_api_management":                        48782,
+		"socket__http_filter":                                      81528,
+		"socket__http_watch_api_management":                        49664,
 		"socket__kafka_fetch_response_partition_parser_v0":         7533,
 		"socket__kafka_fetch_response_partition_parser_v12":        4884,
 		"socket__kafka_fetch_response_record_batch_parser_v0":      4583,
@@ -479,9 +527,9 @@ func (s *HTTPTestSuite) TestHTTPMonitorInstructionCounts() {
 		"uprobe__http2_tls_handle_first_frame":                     988,
 		"uprobe__http2_tls_headers_parser":                         802483,
 		"uprobe__http2_tls_termination":                            105,
-		"uprobe__http_process":                                     99707,
+		"uprobe__http_process":                                     99745,
 		"uprobe__http_termination":                                 608,
-		"uprobe__http_watch_api_management":                        47410,
+		"uprobe__http_watch_api_management":                        47960,
 		"uprobe__kafka_tls_fetch_response_partition_parser_v0":     8883,
 		"uprobe__kafka_tls_fetch_response_partition_parser_v12":    5526,
 		"uprobe__kafka_tls_fetch_response_record_batch_parser_v0":  4288,
