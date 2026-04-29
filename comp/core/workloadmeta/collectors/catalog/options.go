@@ -15,9 +15,6 @@ import (
 	cfvm "github.com/DataDog/datadog-agent/comp/core/workloadmeta/collectors/internal/cloudfoundry/vm"
 	"github.com/DataDog/datadog-agent/comp/core/workloadmeta/collectors/internal/containerd"
 	"github.com/DataDog/datadog-agent/comp/core/workloadmeta/collectors/internal/crio"
-	"github.com/DataDog/datadog-agent/comp/core/workloadmeta/collectors/internal/docker"
-	"github.com/DataDog/datadog-agent/comp/core/workloadmeta/collectors/internal/ecs"
-	"github.com/DataDog/datadog-agent/comp/core/workloadmeta/collectors/internal/ecsfargate"
 	"github.com/DataDog/datadog-agent/comp/core/workloadmeta/collectors/internal/kubeapiserver"
 	"github.com/DataDog/datadog-agent/comp/core/workloadmeta/collectors/internal/kubelet"
 	"github.com/DataDog/datadog-agent/comp/core/workloadmeta/collectors/internal/kubemetadata"
@@ -33,9 +30,6 @@ func getCollectorOptions() []fx.Option {
 		cfvm.GetFxOptions(),
 		containerd.GetFxOptions(),
 		crio.GetFxOptions(),
-		docker.GetFxOptions(),
-		ecs.GetFxOptions(),
-		ecsfargate.GetFxOptions(),
 		kubeapiserver.GetFxOptions(),
 		kubelet.GetFxOptions(),
 		kubemetadata.GetFxOptions(),
@@ -48,16 +42,14 @@ func getCollectorOptions() []fx.Option {
 
 // [STS] Our own function to get the collectors we use in the ProcessAgent
 func GetCollectors() []workloadmeta.Collector {
-	// These are the only ones that have the `workloadmeta.ProcessAgent` flag
 	providers := []func() (workloadmeta.CollectorProvider, error){
 		containerd.NewCollector,
-		docker.NewCollector,
 		kubelet.NewCollector,
 		kubemetadata.NewCollector,
 		// todo!: actually we are not compiling these packages in the process agent, if we look at the logs before the sync we don't have them
 		// crio.NewCollector,
 		// podman.NewCollector,
-
+		// docker.NewCollector,
 		// It seems we don't use these ones.
 		// ecs.NewCollector,
 		// cfcontainer.NewCollector,
