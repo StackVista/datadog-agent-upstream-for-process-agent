@@ -30,7 +30,7 @@ COPY --from=builder /source/nettop nettop
 # ---------------------------
 FROM debian:bookworm-slim
 
-COPY --from=builder /source/sts_verifier_debug/entrypoint.sh /entrypoint.sh
+COPY --from=builder /source/sts_tests/kernel_testing/entrypoint.sh /entrypoint.sh
 COPY --from=builder /source/nettop /usr/bin/nettop
 
 RUN chmod +x /entrypoint.sh

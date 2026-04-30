@@ -61,7 +61,7 @@ You can now modiy the `bpfvalidator` config to point to the `nettop` binary and 
 If you want to generate a docker image with the `nettop` binary to test it for example on a k8s node you can use the `Dockerfile` in this folder.
 
 ```bash
-docker build -f Dockerfile --tag ebpf_debug:latest ./..
+docker build -f Dockerfile --tag ebpf_debug:latest ./../..
 ```
 
 Run it:
