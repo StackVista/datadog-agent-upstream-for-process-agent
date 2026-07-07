@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ebpf-debug
+spec:
+  hostNetwork: true
+  hostPID: true
+  containers:
+    - image: andreater/nettop:v0.1.0
+      name: nettop
+      volumeMounts:
+        - mountPath: /sys/kernel/debug
+          name: sys-kernel-debug
+        - mountPath: /sys/kernel/tracing
+          name: sys-kernel-tracing
+      securityContext:
+        privileged: true
+        allowPrivilegeEscalation: true
+      command: [ "sleep", "10d" ]
+  volumes:
+    - name: sys-kernel-debug
+      hostPath:
+        path: /sys/kernel/debug
+        type: DirectoryOrCreate
+    - name: sys-kernel-tracing
+      hostPath:
+        path: /sys/kernel/tracing
+        type: DirectoryOrCreate
