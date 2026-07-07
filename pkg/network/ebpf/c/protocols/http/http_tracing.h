@@ -113,10 +113,6 @@ done:
     /* did we get a complete match of the tracing id? Lets copy the content of the data. This misses a couple of validations:
      - Is the field value actually 36 bytes long? Is it a UUID? these are all things that will be figured out in go.
     */
-    __u64 load_size = skb->len - skb_offset;
-    if (load_size > HTTP_TRACING_ID_SIZE) {
-      load_size = HTTP_TRACING_ID_SIZE;
-    }
     bpf_skb_load_bytes(skb, skb_offset, output_buffer, HTTP_TRACING_ID_SIZE);
     output_buffer[HTTP_TRACING_ID_SIZE - 1] = '\0';
 
@@ -181,63 +177,6 @@ static __always_inline bool http_find_watch_true_skb(struct __sk_buff* skb, skb_
       __u64 restart_mask = __bpf_no_branch_true_mask(restart_equal_boolean);
       match_position |= (restart_mask & 1);
       skb_offset++;
-    }
-  }
-
-done:
-  if (match_position >= HTTP_WATCH_TRUE_KEY_SIZE) {
-    // We found the "watch=true" key
-    return true;
-  }
-  return false;
-}
-
-/*
-Scan a user-space payload for a literal substring `watch=true`.
-Boolean-only match: when found, it returns true.
-
-This is the uprobe/user-memory "mirror" of http_find_watch_true_skb().
-*/
-static __always_inline bool http_find_watch_true_user(char* data, __u64 length) {
-  char read_buffer[HTTP_HEADER_READ_BUFFER_SIZE];
-  bpf_memset((char*)read_buffer, 0, HTTP_HEADER_READ_BUFFER_SIZE);
-
-  const __u64 batch_count = length / HTTP_HEADER_READ_BUFFER_SIZE;
-
-  // Sliding match state inside the current candidate substring.
-  __u8 match_position = 0;
-
-#pragma unroll HTTP_BATCH_COUNT
-  for (__u64 batch = 0; batch < HTTP_BATCH_COUNT; batch++)
-  {
-    bpf_probe_read_user(&read_buffer[0], HTTP_HEADER_READ_BUFFER_SIZE, &data[batch * HTTP_HEADER_READ_BUFFER_SIZE]);
-
-    // It is ok to check the batch count after the load, because the failure will be silent.
-    __u8 offset_done_unequal_boolean = __bpf_no_branch_cmp_unequal(batch, batch_count);
-
-#pragma unroll HTTP_HEADER_READ_BUFFER_SIZE
-    for (__u64 offset = 0; offset < HTTP_HEADER_READ_BUFFER_SIZE; offset++) {
-      __u8 match_done_unequal_boolean = __bpf_no_branch_cmp_unequal(match_position, HTTP_WATCH_TRUE_KEY_SIZE);
-      // Stop when we already matched the full key OR we reached the available payload.
-      __u8 match_and_offset_unequal_boolean = match_done_unequal_boolean & offset_done_unequal_boolean;
-      if (__bpf_no_branch_neg(match_and_offset_unequal_boolean)) {
-        goto done;
-      }
-
-      __u8 not_equal_boolean = __bpf_no_branch_cmp_unequal(read_buffer[offset], http_watch_true_key[match_position]);
-      __u8 equal_boolean = __bpf_no_branch_neg(not_equal_boolean);
-
-      // Increase the position when we have a match
-      match_position += equal_boolean;
-
-      // Clear the position when we have a mismatch
-      __u64 clear_mask = __bpf_no_branch_true_mask(equal_boolean);
-      match_position &= clear_mask;
-
-      // Restart matching at 1 if current char could be a new start ('w'), while still keeping it branchless.
-      __u8 restart_equal_boolean = __bpf_no_branch_neg(__bpf_no_branch_cmp_unequal(read_buffer[offset], http_watch_true_key[0]));
-      __u64 restart_mask = __bpf_no_branch_true_mask(restart_equal_boolean);
-      match_position |= (restart_mask & 1);
     }
   }
 
@@ -340,11 +279,6 @@ done:
     /* did we get a complete match of the tracing id? Lets copy the content of the data. This misses a couple of validations:
      - Is the field value actually 36 bytes long? Is it a UUID? these are all things that will be figured out in go.
     */
-    __u64 load_size = length - skb_offset;
-    if (load_size > HTTP_TRACING_ID_SIZE) {
-      load_size = HTTP_TRACING_ID_SIZE;
-    }
-
     bpf_probe_read_user(output_buffer, HTTP_TRACING_ID_SIZE, &data[skb_offset]);
 
     output_buffer[HTTP_TRACING_ID_SIZE - 1] = '\0';

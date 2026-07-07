@@ -62,6 +62,8 @@ var (
 	printProtocols    = flag.String(
 		"proto",
 		"all", "print active connections or/and protocol metrics. Possible values (all, conns, proto, http, postgres, amqp). 'all' means active connections + all supported protocols")
+	enableHTTP = flag.Bool("enable-http", true, "Enable HTTP and HTTP2 monitoring (sets EnableHTTPMonitoring and EnableHTTP2Monitoring to true).")
+	testUprobe = flag.Bool("test-uprobe", false, "Test if uprobes are supported on the system by trying to access the uprobe_events tracefs file.")
 )
 
 func validatePrintProtocols() uint64 {
@@ -157,8 +159,8 @@ func getTracerConfig(ebpfDir string) *tracerConfig.Config {
 
 		// Enable everything related to eBPF loading, so that if we have a failure we face it immediately
 		ProtocolClassificationEnabled: true,
-		EnableHTTPMonitoring:          true,
-		EnableHTTP2Monitoring:         true,
+		EnableHTTPMonitoring:          *enableHTTP,
+		EnableHTTP2Monitoring:         *enableHTTP,
 		EnableKafkaMonitoring:         true,
 		EnableMongoMonitoring:         true,
 		EnableAMQPMonitoring:          true,
@@ -214,6 +216,59 @@ func getTracerConfig(ebpfDir string) *tracerConfig.Config {
 	}
 }
 
+// runUprobeTest checks whether uprobes are supported on the current system by
+// attempting to open and write to the kernel's uprobe_events tracefs file, then
+// immediately removing the test entry.  This does not require an eBPF program.
+func runUprobeTest() error {
+	const testEventName = "nettop_uprobe_test"
+
+	// uprobe_events may live under debugfs or directly under tracefs.
+	tracefsPaths := []string{
+		"/sys/kernel/debug/tracing",
+		"/sys/kernel/tracing",
+	}
+
+	var uprobeEventsPath string
+	for _, base := range tracefsPaths {
+		p := base + "/uprobe_events"
+		if _, err := os.Stat(p); err == nil {
+			uprobeEventsPath = p
+			break
+		}
+	}
+	if uprobeEventsPath == "" {
+		return fmt.Errorf("uprobe_events file not found; tracefs may not be mounted or uprobes are not supported")
+	}
+	log.Warnf("uprobe probe path found: %s\n", uprobeEventsPath)
+
+	// Resolve the path of the current executable to attach the test probe to.
+	self, err := os.Readlink("/proc/self/exe")
+	if err != nil {
+		return fmt.Errorf("cannot resolve /proc/self/exe: %w", err)
+	}
+
+	f, err := os.OpenFile(uprobeEventsPath, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return fmt.Errorf("cannot open %s (are you root?): %w", uprobeEventsPath, err)
+	}
+	defer f.Close()
+
+	// Add a test uprobe at offset 0x0 of the current binary.
+	addEntry := fmt.Sprintf("p:uprobes/%s %s:0x0\n", testEventName, self)
+	if _, err := fmt.Fprint(f, addEntry); err != nil {
+		return fmt.Errorf("cannot register test uprobe: %w", err)
+	}
+
+	// Remove the test uprobe immediately.
+	removeEntry := fmt.Sprintf("-:uprobes/%s\n", testEventName)
+	if _, err := fmt.Fprint(f, removeEntry); err != nil {
+		// Non-fatal: we registered it but couldn't clean it up.
+		log.Warnf("test-uprobe: could not remove test uprobe entry: %v", err)
+	}
+
+	return nil
+}
+
 func dumpEBPF() (string, error) {
 	// Create a temp dir, unpack all the .o files there
 	tmp := filepath.Join(os.TempDir(), "nettop-ebpf")
@@ -246,6 +301,14 @@ func run() int {
 	// Critical so that it will be always printed
 	log.Criticalf("Using userspace verbosity level %s\n", *userspaceLogLevel)
 	defer log.Flush()
+
+	if *testUprobe {
+		if err := runUprobeTest(); err != nil {
+			log.Warnf("test-uprobe: FAILED – uprobes do not appear to be supported: %v\n", err)
+			return 1
+		}
+		log.Warnf("test-uprobe: OK – uprobes are supported on this system\n")
+	}
 
 	ebpfDir, err := dumpEBPF()
 	if err != nil {
