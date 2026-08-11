@@ -1,6 +1,6 @@
 module github.com/DataDog/datadog-agent
 
-go 1.23.0
+go 1.24.0
 
 // v0.8.0 was tagged long ago, and appared on pkg.go.dev.  We do not want any tagged version
 // to appear there.  The trick to accomplish this is to make a new version (in this case v0.9.0)
@@ -338,7 +338,6 @@ require (
 	k8s.io/metrics v0.31.2
 	k8s.io/utils v0.0.0-20240821151609-f90d01438635
 	sigs.k8s.io/custom-metrics-apiserver v1.30.1-0.20241105195130-84dc8cfe2555
-
 )
 
 require (
@@ -436,7 +435,7 @@ require (
 	github.com/karrick/godirwalk v1.17.0 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/kjk/lzma v0.0.0-20161016003348-3fd93898850d // indirect
-	github.com/klauspost/compress v1.17.11 // indirect
+	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/knqyf263/go-deb-version v0.0.0-20230223133812-3ed183d23422 // indirect
 	github.com/knqyf263/go-rpm-version v0.0.0-20220614171824-631e686d1075 // indirect
@@ -609,7 +608,7 @@ require (
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/DataDog/agent-payload/v5 v5.0.138
+	github.com/DataDog/agent-payload/v5 v5.0.171
 	github.com/DataDog/datadog-agent/comp/api/api/def v0.62.2
 	github.com/DataDog/datadog-agent/comp/core/config v0.62.2
 	github.com/DataDog/datadog-agent/comp/core/flare/types v0.62.2
