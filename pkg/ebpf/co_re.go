@@ -16,6 +16,7 @@ import (
 	manager "github.com/DataDog/ebpf-manager"
 	bpflib "github.com/cilium/ebpf"
 
+	ddbtf "github.com/DataDog/datadog-agent/pkg/ebpf/btf"
 	"github.com/DataDog/datadog-agent/pkg/ebpf/bytecode"
 	ebpftelemetry "github.com/DataDog/datadog-agent/pkg/ebpf/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/telemetry"
@@ -77,11 +78,11 @@ func (c *coreAssetLoader) loadCOREAsset(filename string, startFn func(bytecode.A
 	defer buf.Close()
 
 	opts := manager.Options{
-		KernelModuleBTFLoadFunc: ret.moduleLoadFunc,
 		VerifierOptions: bpflib.CollectionOptions{
 			Programs: bpflib.ProgramOptions{
 				KernelTypes: ret.vmlinux,
 			},
+			Cache: ddbtf.Cache(),
 		},
 	}
 
