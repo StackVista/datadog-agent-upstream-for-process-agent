@@ -21,6 +21,7 @@ import (
 
 	"github.com/cilium/ebpf/btf"
 
+	ddbtf "github.com/DataDog/datadog-agent/pkg/ebpf/btf"
 	ebpftelemetry "github.com/DataDog/datadog-agent/pkg/ebpf/telemetry"
 	"github.com/DataDog/datadog-agent/pkg/util/archive"
 	"github.com/DataDog/datadog-agent/pkg/util/funcs"
@@ -83,15 +84,12 @@ func FlushBTF() {
 	if loader != nil {
 		loader.btfLoader.Flush()
 	} else {
-		loadKernelSpec.Flush()
+		ddbtf.Flush()
 	}
 }
 
-type kernelModuleBTFLoadFunc func(string) (*btf.Spec, error)
-
 type returnBTF struct {
-	vmlinux        *btf.Spec
-	moduleLoadFunc kernelModuleBTFLoadFunc
+	vmlinux *btf.Spec
 }
 
 type BTFResultMetadata struct { //nolint:revive // TODO
@@ -132,7 +130,7 @@ func initBTFLoader(cfg *Config) *orderedBTFLoader {
 		embeddedDir: filepath.Join(cfg.BPFDir, "co-re", "btf"),
 		result:      ebpftelemetry.BtfNotFound,
 	}
-	btfLoader.loadFunc = funcs.CacheWithCallback[returnBTF](btfLoader.get, loadKernelSpec.Flush)
+	btfLoader.loadFunc = funcs.CacheWithCallback[returnBTF](btfLoader.get, ddbtf.Flush)
 	btfLoader.delayedFlusher = time.AfterFunc(btfFlushDelay, btfLoader.Flush)
 	return btfLoader
 }
@@ -190,14 +188,13 @@ func (b *orderedBTFLoader) get() (*returnBTF, error) {
 }
 
 func (b *orderedBTFLoader) loadKernel() (*returnBTF, error) {
-	spec, err := GetKernelSpec()
+	spec, err := ddbtf.GetKernelSpec()
 	if err != nil {
 		return nil, err
 	}
 	b.resultMetadata.filepathUsed = "<unknown, internal to cilium ebpf>"
 	return &returnBTF{
-		vmlinux:        spec,
-		moduleLoadFunc: nil,
+		vmlinux: spec,
 	}, nil
 }
 
@@ -211,8 +208,7 @@ func (b *orderedBTFLoader) loadUser() (*returnBTF, error) {
 	}
 	b.resultMetadata.filepathUsed = b.userBTFPath
 	return &returnBTF{
-		vmlinux:        spec,
-		moduleLoadFunc: nil,
+		vmlinux: spec,
 	}, nil
 }
 
@@ -227,19 +223,13 @@ func (b *orderedBTFLoader) checkForMinimizedBTF(extractDir string) (*returnBTF, 
 		}
 		b.resultMetadata.filepathUsed = extractedBtfPath
 		return &returnBTF{
-			vmlinux:        spec,
-			moduleLoadFunc: nil,
+			vmlinux: spec,
 		}, nil
 	}
 	return nil, nil
 }
 
 func (b *orderedBTFLoader) checkForUnminimizedBTF(extractDir string) (*returnBTF, error) {
-	absExtractDir := filepath.Join(b.embeddedDir, extractDir)
-	modLoadFunc := func(mod string) (*btf.Spec, error) {
-		b.delayedFlusher.Reset(btfFlushDelay)
-		return loadBTFFrom(filepath.Join(absExtractDir, mod))
-	}
 	btfRelativePath := filepath.Join(extractDir, "vmlinux")
 	extractedBtfPath := filepath.Join(b.embeddedDir, btfRelativePath)
 	if _, err := os.Stat(extractedBtfPath); err == nil {
@@ -249,8 +239,7 @@ func (b *orderedBTFLoader) checkForUnminimizedBTF(extractDir string) (*returnBTF
 		}
 		b.resultMetadata.filepathUsed = extractedBtfPath
 		return &returnBTF{
-			vmlinux:        spec,
-			moduleLoadFunc: modLoadFunc,
+			vmlinux: spec,
 		}, nil
 	}
 	return nil, nil
@@ -457,12 +446,4 @@ func loadBTFFrom(path string) (*btf.Spec, error) {
 	defer data.Close()
 
 	return btf.LoadSpecFromReader(data)
-}
-
-var loadKernelSpec = funcs.CacheWithCallback[btf.Spec](btf.LoadKernelSpec, btf.FlushKernelSpec)
-
-// GetKernelSpec returns a possibly cached version of the running kernel BTF spec
-// it's very important that the caller of this function does not modify the returned value
-func GetKernelSpec() (*btf.Spec, error) {
-	return loadKernelSpec.Do()
 }

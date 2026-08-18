@@ -134,6 +134,7 @@ func generateLoadFunction(file string, opts *StatsOptions, results *StatsResult,
 
 		collOpts := ebpf.CollectionOptions{
 			Programs: progOpts,
+			Cache:    managerOptions.VerifierOptions.Cache,
 		}
 
 		var sourceMap map[string]map[int]*SourceLine
