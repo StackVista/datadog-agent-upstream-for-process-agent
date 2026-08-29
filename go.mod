@@ -191,7 +191,7 @@ require (
 	github.com/cilium/ebpf v0.22.0
 	github.com/clbanning/mxj v1.8.4
 	github.com/containerd/containerd v1.7.23
-	github.com/containernetworking/cni v1.2.3
+	github.com/containernetworking/cni v1.3.0
 	github.com/coreos/go-semver v0.3.1
 	github.com/coreos/go-systemd v22.5.0+incompatible
 	github.com/cri-o/ocicni v0.4.3
