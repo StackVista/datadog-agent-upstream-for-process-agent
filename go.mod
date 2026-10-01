@@ -218,7 +218,7 @@ require (
 	github.com/google/go-containerregistry v0.20.6
 	github.com/google/gofuzz v1.2.0
 	github.com/google/gopacket v1.1.19
-	github.com/google/pprof v0.0.0-20240827171923-fa2c70bbbfe5 // indirect
+	github.com/google/pprof v0.0.0-20241029153458-d1b30febd7db // indirect
 	github.com/gorilla/mux v1.8.1
 	github.com/gosnmp/gosnmp v1.38.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
@@ -324,21 +324,21 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gopkg.in/zorkian/go-datadog-api.v2 v2.30.0
-	k8s.io/api v0.31.4
+	k8s.io/api v0.32.13
 	k8s.io/apiextensions-apiserver v0.31.2
-	k8s.io/apimachinery v0.31.4
+	k8s.io/apimachinery v0.32.13
 	k8s.io/apiserver v0.31.2 // indirect
 	k8s.io/autoscaler/vertical-pod-autoscaler v0.13.0
-	k8s.io/client-go v0.31.3
+	k8s.io/client-go v0.32.13
 	k8s.io/cri-api v0.31.2
 	k8s.io/klog v1.0.1-0.20200310124935-4ad0115ba9e4 // Min version that includes fix for Windows Nano
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kube-aggregator v0.31.2
-	k8s.io/kube-openapi v0.0.0-20240430033511-f0e62f92d13f // indirect
+	k8s.io/kube-openapi v0.0.0-20250627150254-e9823e99808e // indirect
 	k8s.io/kube-state-metrics/v2 v2.13.1-0.20241025121156-110f03d7331f
 	k8s.io/kubelet v0.31.2
 	k8s.io/metrics v0.31.2
-	k8s.io/utils v0.0.0-20240821151609-f90d01438635
+	k8s.io/utils v0.0.0-20241104100929-3ea5e8cea738
 	sigs.k8s.io/custom-metrics-apiserver v1.30.1-0.20241105195130-84dc8cfe2555
 )
 
@@ -406,7 +406,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
-	github.com/go-openapi/swag v0.23.0 // indirect
+	github.com/go-openapi/swag v0.25.1 // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/golang/glog v1.2.2 // indirect
@@ -542,7 +542,7 @@ require (
 	gopkg.in/Knetic/govaluate.v3 v3.0.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
-	k8s.io/component-base v0.31.2
+	k8s.io/component-base v0.32.13
 	mellium.im/sasl v0.3.2 // indirect
 	modernc.org/libc v1.55.3 // indirect
 	modernc.org/mathutil v1.6.0
@@ -550,8 +550,8 @@ require (
 	modernc.org/sqlite v1.34.1
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.30.3 // indirect
 	sigs.k8s.io/controller-runtime v0.19.0 // indirect
-	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
-	sigs.k8s.io/structured-merge-diff/v4 v4.4.3 // indirect
+	sigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect
+	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -840,6 +840,17 @@ require (
 	github.com/go-openapi/runtime v0.28.0 // indirect
 	github.com/go-openapi/spec v0.21.0 // indirect
 	github.com/go-openapi/strfmt v0.23.0 // indirect
+	github.com/go-openapi/swag/cmdutils v0.25.1 // indirect
+	github.com/go-openapi/swag/conv v0.25.1 // indirect
+	github.com/go-openapi/swag/fileutils v0.25.1 // indirect
+	github.com/go-openapi/swag/jsonname v0.25.1 // indirect
+	github.com/go-openapi/swag/jsonutils v0.25.1 // indirect
+	github.com/go-openapi/swag/loading v0.25.1 // indirect
+	github.com/go-openapi/swag/mangling v0.25.1 // indirect
+	github.com/go-openapi/swag/netutils v0.25.1 // indirect
+	github.com/go-openapi/swag/stringutils v0.25.1 // indirect
+	github.com/go-openapi/swag/typeutils v0.25.1 // indirect
+	github.com/go-openapi/swag/yamlutils v0.25.1 // indirect
 	github.com/go-openapi/validate v0.24.0 // indirect
 	github.com/go-resty/resty/v2 v2.13.1 // indirect
 	github.com/go-zookeeper/zk v1.0.3 // indirect
@@ -851,7 +862,7 @@ require (
 	github.com/google/cel-go v0.20.1 // indirect
 	github.com/google/certificate-transparency-go v1.1.8 // indirect
 	github.com/google/flatbuffers v24.3.25+incompatible // indirect
-	github.com/google/gnostic-models v0.6.9-0.20230804172637-c7be7c783f49 // indirect
+	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-github/v62 v62.0.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/s2a-go v0.1.8 // indirect
@@ -903,7 +914,7 @@ require (
 	github.com/moby/buildkit v0.16.0 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/patternmatcher v0.6.1 // indirect
-	github.com/moby/spdystream v0.4.0 // indirect
+	github.com/moby/spdystream v0.5.0 // indirect
 	github.com/moby/sys/sequential v0.7.0 // indirect
 	github.com/moby/sys/user v0.4.1 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
@@ -1072,6 +1083,7 @@ require (
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
 	rsc.io/binaryregexp v0.2.0 // indirect
+	sigs.k8s.io/randfill v1.0.0 // indirect
 )
 
 replace github.com/pahanini/go-grpc-bidirectional-streaming-example v0.0.0-20211027164128-cc6111af44be => github.com/DataDog/go-grpc-bidirectional-streaming-example v0.0.0-20221024060302-b9cf785c02fe

@@ -15,6 +15,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestReadHCLConfig(t *testing.T) {
+	config := NewConfig("test", "DD", strings.NewReplacer(".", "_")) // nolint: forbidigo
+	config.SetConfigType("hcl")
+	err := config.ReadConfig(strings.NewReader(`value = "preserved"`))
+	assert.NoError(t, err)
+	assert.Equal(t, "preserved", config.GetString("value"))
+}
+
 func TestConcurrencySetGet(t *testing.T) {
 	config := NewConfig("test", "DD", strings.NewReplacer(".", "_")) // nolint: forbidigo
 

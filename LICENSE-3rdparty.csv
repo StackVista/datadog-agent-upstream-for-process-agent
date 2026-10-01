@@ -1084,6 +1084,17 @@ core,github.com/go-openapi/runtime/yamlpc,Apache-2.0,Copyright 2015 go-swagger m
 core,github.com/go-openapi/spec,Apache-2.0,Copyright 2015 go-swagger maintainers
 core,github.com/go-openapi/strfmt,Apache-2.0,Copyright 2015 go-swagger maintainers
 core,github.com/go-openapi/swag,Apache-2.0,Copyright 2015 go-swagger maintainers
+core,github.com/go-openapi/swag/cmdutils,Apache-2.0,Copyright 2015 go-swagger maintainers
+core,github.com/go-openapi/swag/conv,Apache-2.0,Copyright 2015 go-swagger maintainers
+core,github.com/go-openapi/swag/fileutils,Apache-2.0,Copyright 2015 go-swagger maintainers
+core,github.com/go-openapi/swag/jsonname,Apache-2.0,Copyright 2015 go-swagger maintainers
+core,github.com/go-openapi/swag/jsonutils,Apache-2.0,Copyright 2015 go-swagger maintainers
+core,github.com/go-openapi/swag/loading,Apache-2.0,Copyright 2015 go-swagger maintainers
+core,github.com/go-openapi/swag/mangling,Apache-2.0,Copyright 2015 go-swagger maintainers
+core,github.com/go-openapi/swag/netutils,Apache-2.0,Copyright 2015 go-swagger maintainers
+core,github.com/go-openapi/swag/stringutils,Apache-2.0,Copyright 2015 go-swagger maintainers
+core,github.com/go-openapi/swag/typeutils,Apache-2.0,Copyright 2015 go-swagger maintainers
+core,github.com/go-openapi/swag/yamlutils,Apache-2.0,Copyright 2015 go-swagger maintainers
 core,github.com/go-openapi/validate,Apache-2.0,Copyright 2015 go-swagger maintainers
 core,github.com/go-redis/redis/v8,BSD-2-Clause,Copyright (c) 2013 The github.com/go-redis/redis Authors
 core,github.com/go-redis/redis/v8/internal,BSD-2-Clause,Copyright (c) 2013 The github.com/go-redis/redis Authors

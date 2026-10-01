@@ -1,0 +1,25 @@
+{
+  "packages": 2006,
+  "legacy_importers": [
+    {
+      "package": "github.com/DataDog/viper",
+      "imports": [
+        "gopkg.in/yaml.v2"
+      ]
+    }
+  ],
+  "parsers": [
+    {
+      "path": "go.yaml.in/yaml/v3",
+      "version": "v3.0.5"
+    },
+    {
+      "path": "gopkg.in/yaml.v2",
+      "version": "v2.4.0"
+    },
+    {
+      "path": "go.yaml.in/yaml/v2",
+      "version": "v2.4.4"
+    }
+  ]
+}
