@@ -115,3 +115,5 @@ replace github.com/DataDog/datadog-agent/pkg/config/mock => ../mock
 replace github.com/DataDog/datadog-agent/pkg/config/structure => ../structure
 
 replace github.com/DataDog/datadog-agent/pkg/version => ../../version
+
+replace github.com/DataDog/viper => ../../../third_party/viper

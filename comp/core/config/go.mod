@@ -114,3 +114,5 @@ require (
 replace github.com/DataDog/datadog-agent/pkg/config/structure => ../../../pkg/config/structure
 
 replace github.com/DataDog/datadog-agent/pkg/version => ../../../pkg/version
+
+replace github.com/DataDog/viper => ../../../third_party/viper

@@ -2,6 +2,7 @@ go 1.25.7
 
 use (
 	.
+	./third_party/viper
 	comp/api/api/def
 	comp/api/authtoken
 	comp/core/config

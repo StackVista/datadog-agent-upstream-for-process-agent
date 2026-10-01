@@ -49,7 +49,6 @@ require (
 	go.opentelemetry.io/collector/confmap/provider/httpsprovider v1.21.0
 	go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.21.0
 	go.uber.org/zap v1.27.0
-
 )
 
 require (
@@ -122,3 +121,5 @@ require (
 )
 
 replace github.com/DataDog/datadog-agent/pkg/config/structure => ../../../../pkg/config/structure
+
+replace github.com/DataDog/viper => ../../../../third_party/viper

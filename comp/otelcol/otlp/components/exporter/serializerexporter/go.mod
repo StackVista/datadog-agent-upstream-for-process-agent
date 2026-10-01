@@ -60,7 +60,6 @@ replace (
 	github.com/DataDog/datadog-agent/pkg/util/testutil => ../../../../../../pkg/util/testutil/
 	github.com/DataDog/datadog-agent/pkg/util/winutil => ../../../../../../pkg/util/winutil/
 	github.com/DataDog/datadog-agent/pkg/version => ../../../../../../pkg/version
-
 )
 
 require (
@@ -256,3 +255,5 @@ require (
 	go.opentelemetry.io/collector/receiver/receivertest v0.115.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.56.0 // indirect
 )
+
+replace github.com/DataDog/viper => ../../../../../../third_party/viper
