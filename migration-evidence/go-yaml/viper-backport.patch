@@ -21,52 +21,26 @@ diff --git a/go.mod b/go.mod
 index f839cd6..bf8ba83 100644
 --- a/go.mod
 +++ b/go.mod
-@@ -1,6 +1,6 @@
- module github.com/DataDog/viper
- 
+@@ -3 +3 @@ module github.com/DataDog/viper
 -go 1.14
 +go 1.15
- 
- require (
- 	github.com/armon/consul-api v0.0.0-20180202201655-eb2c6b5be1b6 // indirect
-@@ -29,10 +29,10 @@ require (
- 	github.com/ugorji/go/codec v1.1.7 // indirect
- 	github.com/xordataexchange/crypt v0.0.3-0.20170626215501-b2862e3d0a77
- 	go.uber.org/zap v1.14.0 // indirect
+@@ -31,0 +32 @@ require (
 +	go.yaml.in/yaml/v2 v2.4.4
- 	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b // indirect
- 	golang.org/x/sys v0.0.0-20220829200755-d48e67d00261 // indirect
- 	golang.org/x/text v0.3.0 // indirect
- 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
- 	google.golang.org/grpc v1.27.1 // indirect
+@@ -37 +37,0 @@ require (
 -	gopkg.in/yaml.v2 v2.2.5
- )
 diff --git a/go.sum b/go.sum
 index 5d088c9..7e37497 100644
 --- a/go.sum
 +++ b/go.sum
-@@ -210,6 +210,8 @@ go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee/go.mod h1:vJERXedbb3MVM5f9E
- go.uber.org/zap v1.10.0/go.mod h1:vwi/ZaCAaUcBkycHslxD9B2zi4UTXhF60s6SWpuDF0Q=
- go.uber.org/zap v1.14.0 h1:/pduUoebOeeJzTDFuoMgC6nRkiasr1sBCIEorly7m4o=
- go.uber.org/zap v1.14.0/go.mod h1:zwrFLgMcdUuIBviXEYEH1YKNaOBnKXsx2IPda5bBwHM=
+@@ -212,0 +213,2 @@ go.uber.org/zap v1.14.0/go.mod h1:zwrFLgMcdUuIBviXEYEH1YKNaOBnKXsx2IPda5bBwHM=
 +go.yaml.in/yaml/v2 v2.4.4 h1:tuyd0P+2Ont/d6e2rl3be67goVK4R6deVxCUX5vyPaQ=
 +go.yaml.in/yaml/v2 v2.4.4/go.mod h1:gMZqIpDtDqOfM0uNfy0SkpRhvUryYH0Z6wdMYcacYXQ=
- golang.org/x/crypto v0.0.0-20180904163835-0709b304e793/go.mod h1:6SG95UA2DQfeDnfUPMdvaQW0Q7yPrPDi9nlGo2tz2b4=
- golang.org/x/crypto v0.0.0-20181203042331-505ab145d0a9 h1:mKdxBk7AujPs8kU4m80U72y/zjbZ3UcXC7dClwKbUI0=
- golang.org/x/crypto v0.0.0-20181203042331-505ab145d0a9/go.mod h1:6SG95UA2DQfeDnfUPMdvaQW0Q7yPrPDi9nlGo2tz2b4=
 diff --git a/viper.go b/viper.go
 index abc77e3..96dbbd3 100644
 --- a/viper.go
 +++ b/viper.go
-@@ -32,7 +32,7 @@ import (
- 	"strings"
- 	"time"
- 
+@@ -35 +35 @@ import (
 -	yaml "gopkg.in/yaml.v2"
 +	yaml "go.yaml.in/yaml/v2"
- 
- 	"github.com/fsnotify/fsnotify"
- 	"github.com/hashicorp/hcl"
 -- 
 2.51.0
-

@@ -45,3 +45,10 @@ module identities have no duplicates and no YAML replacement directives.
 Process/tracer package graph has 2006 packages; only Viper imports old v2.
 At this early checkpoint the larger builds, nested suites and checksum/tidy
 rechecks are running; later results must be read separately, not inferred.
+
+Recovered final checks completed: root tidy diff is clean and all modules
+verify. Kubernetes apiserver tests and KSM compilation pass; E2E parameters,
+OTel flare tests and collector-contrib compilation pass. Nested tests added
+necessary json-patch and randfill metadata, retained in the follow-up commit.
+Process-agent binary builds. Native tracer build still needs generated
+runtime.Tracer/runtime.RuntimeSecurity assets, as recorded at baseline.

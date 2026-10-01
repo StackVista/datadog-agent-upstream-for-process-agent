@@ -180,6 +180,8 @@ require (
 	go.opentelemetry.io/collector/receiver/receivertest v0.115.0 // indirect
 	go.opentelemetry.io/contrib/bridges/otelzap v0.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
+	sigs.k8s.io/randfill v1.0.0 // indirect
 )
 
 require (
