@@ -16,7 +16,7 @@ import (
 
 	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/fx"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v2"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

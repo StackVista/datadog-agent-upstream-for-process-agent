@@ -3,8 +3,9 @@ module github.com/DataDog/datadog-agent/pkg/util/testutil
 go 1.22.0
 
 require (
-	github.com/stretchr/testify v1.10.0
-	gopkg.in/yaml.v3 v3.0.1
+	github.com/stretchr/testify v1.12.1
+	go.yaml.in/yaml/v3 v3.0.5
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 require (

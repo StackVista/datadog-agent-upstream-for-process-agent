@@ -26,7 +26,7 @@ import (
 	"time"
 	"unsafe"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 
 	spconfig "github.com/DataDog/datadog-agent/cmd/system-probe/config"
 

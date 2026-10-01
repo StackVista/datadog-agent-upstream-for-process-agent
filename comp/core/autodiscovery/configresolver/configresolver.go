@@ -26,7 +26,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/containers"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 
-	yaml "gopkg.in/yaml.v2"
+	yaml "go.yaml.in/yaml/v2"
 )
 
 type variableGetter func(ctx context.Context, key string, svc listeners.Service) (string, error)

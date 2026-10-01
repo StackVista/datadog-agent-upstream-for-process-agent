@@ -51,3 +51,34 @@ wordpress:
 	require.True(t, ok)
 	require.Equal(t, val, "ERROR")
 }
+
+func TestNewYamlSourceScalarValues(t *testing.T) {
+	source, err := newYamlSource(strings.NewReader(`spring:
+  application:
+    name: "off"
+enabled: false
+workers: 10
+empty: null
+description: |
+  first line
+  second line
+ignored:
+  - item
+`))
+	require.NoError(t, err)
+
+	for key, expected := range map[string]string{
+		"spring.application.name": "off",
+		"enabled":                 "false",
+		"workers":                 "10",
+		"empty":                   "null",
+		"description":             "first line\nsecond line\n",
+	} {
+		value, ok := source.Get(key)
+		require.True(t, ok, key)
+		require.Equal(t, expected, value, key)
+	}
+
+	_, ok := source.Get("ignored")
+	require.False(t, ok)
+}

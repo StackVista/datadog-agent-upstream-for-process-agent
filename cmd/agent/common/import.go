@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	yaml "gopkg.in/yaml.v2"
+	yaml "go.yaml.in/yaml/v2"
 
 	"github.com/DataDog/datadog-agent/pkg/config/legacy"
 	pkgconfigsetup "github.com/DataDog/datadog-agent/pkg/config/setup"

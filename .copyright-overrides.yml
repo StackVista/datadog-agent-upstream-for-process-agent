@@ -59,6 +59,7 @@ golang/go: Copyright (c) 2009 The Go Authors. All rights reserved.
 
 # This has old and new code licensed to two different names, with some awkward
 # line wrapping
+go.yaml.in/yaml/v3: ["Copyright (c) 2006-2010 Kirill Simonov", "Copyright 2011-2016 Canonical Ltd"]
 gopkg.in/yaml.v3: ["Copyright (c) 2006-2010 Kirill Simonov", "Copyright 2011-2016 Canonical Ltd"]
 
 # This has awkward line wrapping.

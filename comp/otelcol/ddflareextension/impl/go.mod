@@ -120,7 +120,7 @@ require (
 	github.com/open-telemetry/opentelemetry-collector-contrib/extension/pprofextension v0.115.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor v0.115.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver v0.115.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/collector/component v0.115.0
 	go.opentelemetry.io/collector/component/componentstatus v0.115.0
 	go.opentelemetry.io/collector/component/componenttest v0.115.0
@@ -145,8 +145,8 @@ require (
 	go.opentelemetry.io/collector/receiver/nopreceiver v0.115.0
 	go.opentelemetry.io/collector/receiver/otlpreceiver v0.115.0
 	go.uber.org/zap v1.27.0
-	gopkg.in/yaml.v2 v2.4.0
-
+	go.yaml.in/yaml/v2 v2.4.4
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
 require go.opentelemetry.io/collector/extension/extensiontest v0.115.0 // indirect
@@ -168,6 +168,7 @@ require (
 	go.opentelemetry.io/collector/processor/processortest v0.115.0 // indirect
 	go.opentelemetry.io/collector/receiver/receivertest v0.115.0 // indirect
 	go.opentelemetry.io/contrib/bridges/otelzap v0.6.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 )
 
 require (
@@ -435,7 +436,7 @@ require (
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stormcat24/protodep v0.1.8 // indirect
-	github.com/stretchr/objx v0.5.2 // indirect
+	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tinylib/msgp v1.2.4 // indirect

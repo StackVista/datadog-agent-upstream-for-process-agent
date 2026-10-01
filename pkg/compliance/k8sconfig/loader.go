@@ -26,7 +26,7 @@ import (
 
 	"github.com/DataDog/datadog-agent/pkg/compliance/utils"
 	"github.com/shirou/gopsutil/v4/process"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 const version = "202403"

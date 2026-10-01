@@ -31,12 +31,12 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/fxutil"
 	agentLog "github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/DataDog/datadog-agent/pkg/util/optional"
-	yy "github.com/ghodss/yaml"
 	"github.com/swaggest/jsonschema-go"
 	"github.com/xeipuuv/gojsonschema"
 	"go.uber.org/fx"
+	"go.yaml.in/yaml/v2"
 	"golang.org/x/sys/windows/registry"
-	"gopkg.in/yaml.v2"
+	yy "sigs.k8s.io/yaml"
 )
 
 const (
