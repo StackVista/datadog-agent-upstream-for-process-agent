@@ -1092,6 +1092,7 @@ core,github.com/go-openapi/swag/jsonutils,Apache-2.0,Copyright 2015 go-swagger m
 core,github.com/go-openapi/swag/loading,Apache-2.0,Copyright 2015 go-swagger maintainers
 core,github.com/go-openapi/swag/mangling,Apache-2.0,Copyright 2015 go-swagger maintainers
 core,github.com/go-openapi/swag/netutils,Apache-2.0,Copyright 2015 go-swagger maintainers
+core,github.com/go-openapi/swag/pools,Apache-2.0,Copyright 2015 go-swagger maintainers
 core,github.com/go-openapi/swag/stringutils,Apache-2.0,Copyright 2015 go-swagger maintainers
 core,github.com/go-openapi/swag/typeutils,Apache-2.0,Copyright 2015 go-swagger maintainers
 core,github.com/go-openapi/swag/yamlutils,Apache-2.0,Copyright 2015 go-swagger maintainers

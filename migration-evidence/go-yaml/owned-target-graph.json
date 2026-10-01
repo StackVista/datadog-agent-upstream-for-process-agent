@@ -1,0 +1,48 @@
+{
+  "package_count": 2006,
+  "legacy_importers": [],
+  "parser_modules": [
+    {
+      "path": "go.yaml.in/yaml/v3",
+      "module": {
+        "Path": "go.yaml.in/yaml/v3",
+        "Version": "v3.0.5",
+        "Time": "2026-07-26T14:51:55Z",
+        "Dir": "/home/omnigent/go/pkg/mod/go.yaml.in/yaml/v3@v3.0.5",
+        "GoMod": "/home/omnigent/go/pkg/mod/cache/download/go.yaml.in/yaml/v3/@v/v3.0.5.mod",
+        "GoVersion": "1.16",
+        "Sum": "h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=",
+        "GoModSum": "h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg="
+      }
+    },
+    {
+      "path": "go.yaml.in/yaml/v2",
+      "module": {
+        "Path": "go.yaml.in/yaml/v2",
+        "Version": "v2.4.4",
+        "Time": "2026-03-06T22:01:45Z",
+        "Dir": "/home/omnigent/go/pkg/mod/go.yaml.in/yaml/v2@v2.4.4",
+        "GoMod": "/home/omnigent/go/pkg/mod/cache/download/go.yaml.in/yaml/v2/@v/v2.4.4.mod",
+        "GoVersion": "1.15",
+        "Sum": "h1:tuyd0P+2Ont/d6e2rl3be67goVK4R6deVxCUX5vyPaQ=",
+        "GoModSum": "h1:gMZqIpDtDqOfM0uNfy0SkpRhvUryYH0Z6wdMYcacYXQ="
+      }
+    },
+    {
+      "path": "github.com/DataDog/viper",
+      "module": {
+        "Path": "github.com/DataDog/viper",
+        "Version": "v1.14.0",
+        "Replace": {
+          "Path": "./third_party/viper",
+          "Dir": "/home/omnigent/workspace/datadog-agent-upstream-for-process-agent/third_party/viper",
+          "GoMod": "/home/omnigent/workspace/datadog-agent-upstream-for-process-agent/third_party/viper/go.mod",
+          "GoVersion": "1.15"
+        },
+        "Dir": "/home/omnigent/workspace/datadog-agent-upstream-for-process-agent/third_party/viper",
+        "GoMod": "/home/omnigent/workspace/datadog-agent-upstream-for-process-agent/third_party/viper/go.mod",
+        "GoVersion": "1.15"
+      }
+    }
+  ]
+}
