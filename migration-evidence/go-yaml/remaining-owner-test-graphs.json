@@ -1,0 +1,26 @@
+{
+  "goflow2": {
+    "packages": 371,
+    "legacy_importers": [],
+    "errors": "",
+    "returncode": 0
+  },
+  "collector-confmap": {
+    "packages": 250,
+    "legacy_importers": [],
+    "errors": "",
+    "returncode": 0
+  },
+  "grpc-gateway": {
+    "packages": 0,
+    "legacy_importers": [],
+    "errors": "go: downloading github.com/antihax/optional v1.0.0\ngo: downloading golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d\ngo: downloading google.golang.org/grpc v1.33.1\ngo: downloading github.com/rogpeppe/fastuuid v1.2.0\ngo: downloading golang.org/x/net v0.0.0-20200822124328-c89045814202\ngo: downloading golang.org/x/sys v0.0.0-20200323222414-85ca7c5b95cd\ngo: downloading golang.org/x/text v0.3.0\ngo: updates to go.mod needed, disabled by -mod=readonly; to update it:\n\tgo mod tidy\n",
+    "returncode": 1,
+    "classification": "whole upstream example tree metadata not qualified; generator suite/graph qualified separately"
+  },
+  "grpc-gateway-generators": {
+    "packages": 176,
+    "legacy_importers": [],
+    "returncode": 0
+  }
+}

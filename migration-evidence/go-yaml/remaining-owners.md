@@ -78,3 +78,12 @@ Zizmor ran on archived goflow2 workflows: 41 findings, 12 suppressed upstream,
 archive files live under third_party and are not runnable repo workflows.
 Their bytes and existing directives are retained for provenance; no active
 pipeline or permissions are changed, and no new suppression is introduced.
+
+Final effective root graph resolves 1652 modules with no duplicate identities;
+add required root go.sum metadata for existing nested maintained YAML minima.
+Owner full test graphs: goflow2 371 packages and confmap 250 packages, no
+legacy imports. grpc-gateway generator test graph separately resolves with
+no legacy imports; whole upstream example tree requires independent metadata
+tidy and is not qualified. Do not interpret that unused example tree or
+residual sums as a generator runtime claim. The recorded failed readonly
+whole-tree query remains explicit in remaining-owner-test-graphs.json.
