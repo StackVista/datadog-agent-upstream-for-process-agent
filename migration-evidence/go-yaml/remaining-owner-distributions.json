@@ -350,7 +350,7 @@
         "mode": 420
       },
       "go.mod": {
-        "sha256": "b5d9c70a63e803232060caec4b8348cddddee26a330e19a6ed65604baff25908",
+        "sha256": "01af166071184291b30d21c74fdd0281c3d7556818d729947b4d0ec836fd08ac",
         "mode": 420
       },
       "Dockerfile": {
@@ -358,7 +358,7 @@
         "mode": 420
       },
       "go.sum": {
-        "sha256": "0a5fc4c4a03204a611d6635703dc4a3a17a33c85b08eb10514591d117152d9ae",
+        "sha256": "a362504b528b766ed3717ea4dfb2eab99ee2cd30476c7042e7831b38ab13c66f",
         "mode": 420
       },
       "LICENSE": {
@@ -872,7 +872,7 @@
         "mode": 420
       },
       "go.mod": {
-        "sha256": "71fc3e250a3e71f9a80fe1a812c7d79fdbae8e29a1335bd1f6b24abee5860e55",
+        "sha256": "17c6ab21bb33a5d9afed9d7a013be3ccb5aca59f410bd5d365db8669eea11d78",
         "mode": 420
       },
       "confmap.go": {
@@ -888,7 +888,7 @@
         "mode": 420
       },
       "go.sum": {
-        "sha256": "ba9a71fbc0c96535a6c0756cb1973d97dd5f7a6701fbe17fcacd6c7c8fd7576c",
+        "sha256": "56531cff196694c74a9b8e60c45982d85cf23a33e708a7ed3501bd52d0a8332f",
         "mode": 420
       },
       "expand.go": {

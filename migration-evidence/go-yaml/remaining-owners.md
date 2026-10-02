@@ -60,3 +60,21 @@ Validation on Go1.26.8 linux/amd64:
   file was compared to its immutable candidate checksum before publication.
 
 No changed active workflow/composite action, image policy or scan gates.
+
+Final qualification: original-selection netflow/server tests pass (4.104s),
+and isolated candidate repeat passes (4.107s). Retain initial concurrent
+UDP/mock timeout as a timing limitation. Existing owner Testify requirements
+move compatibly to v1.12.1; standalone goflow2/confmap full suites pass again
+and their old assertion-parser requirements disappear. No API generation or
+Go directives change except grpc-gateway's wrapper-required Go1.22 minimum.
+
+A fresh checkout with umask022 passes complete-file/byte/mode verification
+and mutation tests. Runner default umask0077 produces private 0600 files and
+is intentionally rejected by the strict 0644 distribution-mode guard; no
+mode normalization or relaxed checks were introduced.
+
+Zizmor ran on archived goflow2 workflows: 41 findings, 12 suppressed upstream,
+29 visible (1 informational, 9 medium, 19 high). These immutable upstream
+archive files live under third_party and are not runnable repo workflows.
+Their bytes and existing directives are retained for provenance; no active
+pipeline or permissions are changed, and no new suppression is introduced.
