@@ -40,3 +40,23 @@ new tickets, releases, deployment or infrastructure changes.
 Existing boundaries remain: generated runtime.Tracer/RuntimeSecurity assets,
 Windows native execution and full Viper baseline pflag nil/empty failure.
 This change does not claim full inherited Datadog runtime/image qualification.
+
+Validation on Go1.26.8 linux/amd64:
+- Complete original and candidate goflow2 and confmap suites pass.
+- Original and candidate grpc-gateway/Swagger generator suites pass, including
+  invalid YAML, empty/single/multiple rules, additional bindings, JSON
+  conversion, unknown fields and expected generated-output fixtures.
+- Mapping contract fixture passes on original/candidate with quoted "off",
+  integer mapping values and malformed YAML rejection.
+- Tagged Datadog goflowlib, additionalfields, netflowstate and otel-agent
+  config suites pass. Netflow/server UDP integration times out waiting for
+  mock events; original owner comparison is recorded separately when done.
+- Both generator binaries build on linux/amd64 from root selections.
+- Combined affected entrypoint graph: 861 packages, no old v2/v3 or ghodss
+  imports. This is additional evidence, not a repeat of process/tracer scope.
+- Distribution and four mutation controls pass. Guard also checks Git index
+  completeness; inherited ignored source/assets are force-included and
+  -text attributes preserve original CRLF distribution bytes. Every index
+  file was compared to its immutable candidate checksum before publication.
+
+No changed active workflow/composite action, image policy or scan gates.

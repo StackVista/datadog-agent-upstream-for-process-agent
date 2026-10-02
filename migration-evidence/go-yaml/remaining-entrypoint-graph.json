@@ -1,0 +1,10 @@
+{
+  "entrypoints": [
+    "comp/netflow/goflowlib",
+    "cmd/otel-agent/config",
+    "protoc-gen-grpc-gateway",
+    "protoc-gen-swagger"
+  ],
+  "packages": 861,
+  "legacy_importers": []
+}

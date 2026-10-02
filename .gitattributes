@@ -49,3 +49,7 @@ pkg/fleet/installer/fixtures/** text=auto eol=lf
 *.ODF diff
 *.odt diff
 *.ODT diff
+
+third_party/goflow2/** -text
+third_party/collector-confmap/** -text
+third_party/grpc-gateway/** -text
