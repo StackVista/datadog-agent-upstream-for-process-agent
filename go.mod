@@ -1137,3 +1137,9 @@ replace k8s.io/kube-state-metrics/v2 v2.13.1-0.20241025121156-110f03d7331f => gi
 replace github.com/iceber/iouring-go => github.com/paulcacheux/iouring-go v0.0.0-20241115154236-2c7785c40a0f
 
 replace github.com/DataDog/viper => ./third_party/viper
+
+replace github.com/netsampler/goflow2 => ./third_party/goflow2
+
+replace go.opentelemetry.io/collector/confmap => ./third_party/collector-confmap
+
+replace github.com/grpc-ecosystem/grpc-gateway => ./third_party/grpc-gateway

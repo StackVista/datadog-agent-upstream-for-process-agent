@@ -123,3 +123,5 @@ require (
 replace github.com/DataDog/datadog-agent/pkg/config/structure => ../../../../pkg/config/structure
 
 replace github.com/DataDog/viper => ../../../../third_party/viper
+
+replace go.opentelemetry.io/collector/confmap => ./../../../../third_party/collector-confmap

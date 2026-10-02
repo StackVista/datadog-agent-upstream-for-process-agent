@@ -110,3 +110,5 @@ require (
 replace github.com/DataDog/datadog-agent/pkg/config/structure => ../../config/structure
 
 replace github.com/DataDog/viper => ../../../third_party/viper
+
+replace github.com/grpc-ecosystem/grpc-gateway => ./../../../third_party/grpc-gateway

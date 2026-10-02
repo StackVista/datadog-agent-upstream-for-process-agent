@@ -335,3 +335,5 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20241104194629-dd2ea8efbc28 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 )
+
+replace github.com/grpc-ecosystem/grpc-gateway => ./../../third_party/grpc-gateway

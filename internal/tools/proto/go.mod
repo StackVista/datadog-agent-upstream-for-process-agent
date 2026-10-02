@@ -32,3 +32,5 @@ require (
 )
 
 replace google.golang.org/protobuf v1.33.0 => google.golang.org/protobuf v1.34.0
+
+replace github.com/grpc-ecosystem/grpc-gateway => ./../../../third_party/grpc-gateway

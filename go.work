@@ -2,6 +2,9 @@ go 1.25.7
 
 use (
 	.
+	./third_party/collector-confmap
+	./third_party/goflow2
+	./third_party/grpc-gateway
 	./third_party/viper
 	comp/api/api/def
 	comp/api/authtoken

@@ -335,3 +335,5 @@ require (
 )
 
 replace github.com/DataDog/viper => ../../../../../../third_party/viper
+
+replace go.opentelemetry.io/collector/confmap => ./../../../../../../third_party/collector-confmap
