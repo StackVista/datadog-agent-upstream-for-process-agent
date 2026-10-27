@@ -406,6 +406,10 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 			MaxEntries: e.cfg.MaxTrackedConnections,
 			EditorFlag: manager.EditMaxEntries,
 		},
+		probes.ClassificationBudgetMap: {
+			MaxEntries: e.cfg.MaxTrackedConnections,
+			EditorFlag: manager.EditMaxEntries,
+		},
 		tupleByPidFDMap: {
 			MaxEntries: e.cfg.MaxTrackedConnections,
 			EditorFlag: manager.EditMaxEntries,
@@ -426,7 +430,9 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 	begin, end := network.EphemeralRange()
 	options.ConstantEditors = append(options.ConstantEditors,
 		manager.ConstantEditor{Name: "ephemeral_range_begin", Value: uint64(begin)},
-		manager.ConstantEditor{Name: "ephemeral_range_end", Value: uint64(end)})
+		manager.ConstantEditor{Name: "ephemeral_range_end", Value: uint64(end)},
+		manager.ConstantEditor{Name: "classification_budget_handshake", Value: uint64(e.cfg.ProtocolClassificationHandshakeBudget)},
+		manager.ConstantEditor{Name: "classification_budget_mid_stream", Value: uint64(e.cfg.ProtocolClassificationMidStreamBudget)})
 
 	for _, p := range e.Manager.Probes {
 		// [STS] Difference with Datadog. Instead of loading the socketfilter in the root namespace only, we attach a socket filter for each namesapce with netlink callbacks. So we don't need to attach the socket filter now and here.

@@ -289,6 +289,11 @@ type Config struct {
 	// classifying the L7 protocols being used.
 	ProtocolClassificationEnabled bool
 
+	// [STS] Packet inspections allowed on a connection with an unrecognised protocol, with and without an
+	// observed handshake. Zero selects the eBPF default.
+	ProtocolClassificationHandshakeBudget uint16
+	ProtocolClassificationMidStreamBudget uint16
+
 	// TCPFailedConnectionsEnabled specifies whether the tracer will track & report TCP error codes
 	TCPFailedConnectionsEnabled bool
 

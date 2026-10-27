@@ -1154,6 +1154,67 @@ func testUnclassifiedProtocol(t *testing.T, tr *tracer.Tracer, clientHost, targe
 	}
 }
 
+// [STS] A connection stops being classified once it has used its classification budget.
+func testClassificationBudget(t *testing.T, tr *tracer.Tracer, clientHost, targetHost, serverHost string) {
+	defaultDialer := &net.Dialer{
+		LocalAddr: &net.TCPAddr{
+			IP: net.ParseIP(clientHost),
+		},
+	}
+
+	sendNoiseThenHTTP := func(noiseMessages int) func(t *testing.T, ctx testContext) {
+		return func(t *testing.T, ctx testContext) {
+			c, err := defaultDialer.Dial("tcp", ctx.targetAddress)
+			require.NoError(t, err)
+			defer c.Close()
+
+			// Each message waits for its echo, so every message is a separate packet.
+			roundTrip := func(input []byte) {
+				_, err := c.Write(input)
+				require.NoError(t, err)
+				_, err = io.ReadFull(c, make([]byte, len(input)))
+				require.NoError(t, err)
+			}
+			for i := 0; i < noiseMessages; i++ {
+				roundTrip([]byte(fmt.Sprintf("noise-%04d\n", i)))
+			}
+			roundTrip([]byte("GET /200/foobar HTTP/1.1\r\n\r\n"))
+		}
+	}
+
+	tests := []struct {
+		name          string
+		port          string
+		noiseMessages int
+		expected      *protocols.Stack
+	}{
+		{name: "classified within budget", port: "10011", noiseMessages: 2, expected: &protocols.Stack{Application: protocols.HTTP}},
+		{name: "not classified after budget", port: "10012", noiseMessages: 200, expected: &protocols.Stack{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			serverAddress := net.JoinHostPort(serverHost, tt.port)
+			server := tracertestutil.NewTCPServerOnAddress(serverAddress, func(c net.Conn) {
+				_, _ = io.Copy(c, c)
+			})
+			require.NoError(t, server.Run())
+			t.Cleanup(server.Shutdown)
+
+			testProtocolClassificationInner(t, protocolClassificationAttributes{
+				name: tt.name,
+				context: testContext{
+					serverPort:    tt.port,
+					serverAddress: serverAddress,
+					targetAddress: net.JoinHostPort(targetHost, tt.port),
+					extras:        make(map[string]interface{}),
+				},
+				postTracerSetup: sendNoiseThenHTTP(tt.noiseMessages),
+				validation:      validateProtocolConnection(tt.expected),
+			}, tr)
+		})
+	}
+}
+
 func testKafkaProtocolClassification(t *testing.T, tr *tracer.Tracer, clientHost, targetHost, serverHost string) {
 	const topicName = "franz-kafka"
 	testIndex := 0
@@ -2838,6 +2899,10 @@ func testProtocolClassificationLinux(t *testing.T, tr *tracer.Tracer, clientHost
 		{
 			name:     "unclassified",
 			testFunc: testUnclassifiedProtocol,
+		},
+		{
+			name:     "classification budget",
+			testFunc: testClassificationBudget,
 		},
 		{
 			name:     "kafka",
