@@ -1166,6 +1166,7 @@ type classificationBudget struct {
 const (
 	classificationHandshakeSeen = 1 << 0
 	classificationGaveUp        = 1 << 1
+	classificationRetried       = 1 << 4
 )
 
 // [STS] A connection stops being classified once it has used its classification budget.
@@ -1288,13 +1289,18 @@ func testClassificationBudget(t *testing.T, tr *tracer.Tracer, clientHost, targe
 			expected: &protocols.Stack{},
 		},
 		{
-			name: "retried after back-off",
+			name: "retried after back-off with the mid-stream budget",
 			port: 10013,
 			exercise: func(c conn, port uint16) {
 				giveUp(c, port)
 				updateEntries(c.t, port, func(value *classificationBudget) {
 					value.GaveUpAt = monotonicNow(c.t) - uint64(6*time.Minute)
 				})
+				sendNoise(c, 200)
+				for _, value := range entries(c.t, port) {
+					require.Zero(c.t, value.Flags&classificationGaveUp)
+					require.NotZero(c.t, value.Flags&classificationRetried)
+				}
 				sendHTTP(c)
 			},
 			expected: &protocols.Stack{Application: protocols.HTTP},

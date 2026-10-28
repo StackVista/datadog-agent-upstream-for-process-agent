@@ -127,6 +127,8 @@ typedef struct {
 #define CLASSIFICATION_HANDSHAKE_SEEN (1 << 0)
 #define CLASSIFICATION_GAVE_UP        (1 << 1)
 #define CLASSIFICATION_SEQ_SEEN(dir)  (1 << (2 + (dir)))
+// [STS] Set after a back-off; the retry uses the mid-stream budget.
+#define CLASSIFICATION_RETRIED        (1 << 4)
 
 // [STS] Default number of data segments, counted over both directions, before
 // classification stops. Connections first seen mid-stream get more, as

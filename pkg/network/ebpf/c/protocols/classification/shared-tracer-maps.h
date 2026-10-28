@@ -93,7 +93,7 @@ static __always_inline bool spend_classification_attempt(conn_tuple_t *tuple, sk
         if (bpf_ktime_get_ns() - budget->gave_up_at < CLASSIFICATION_RETRY_NS) {
             return false;
         }
-        budget->flags &= CLASSIFICATION_HANDSHAKE_SEEN;
+        budget->flags = (budget->flags & CLASSIFICATION_HANDSHAKE_SEEN) | CLASSIFICATION_RETRIED;
         budget->segments = 0;
     }
 
@@ -105,7 +105,7 @@ static __always_inline bool spend_classification_attempt(conn_tuple_t *tuple, sk
     *last_seq = skb_info->tcp_seq;
 
     const bool handshake = budget->flags & CLASSIFICATION_HANDSHAKE_SEEN;
-    if (budget->segments < classification_budget(handshake)) {
+    if (budget->segments < classification_budget(handshake && !(budget->flags & CLASSIFICATION_RETRIED))) {
         budget->segments++;
         return true;
     }
