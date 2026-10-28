@@ -88,6 +88,7 @@ type ebpfProgram struct {
 	cfg                   *config.Config
 	tailCallRouter        []manager.TailCallRoute
 	connectionProtocolMap *ebpf.Map
+	sharedMaps            map[string]*ebpf.Map
 
 	enabledProtocols  []*protocols.ProtocolSpec
 	disabledProtocols []*protocols.ProtocolSpec
@@ -95,7 +96,7 @@ type ebpfProgram struct {
 	buildMode buildmode.Type
 }
 
-func newEBPFProgram(c *config.Config, connectionProtocolMap *ebpf.Map) (*ebpfProgram, error) {
+func newEBPFProgram(c *config.Config, sharedMaps map[string]*ebpf.Map) (*ebpfProgram, error) {
 	mgr := &manager.Manager{
 		Maps: []*manager.Map{
 			{Name: protocols.TLSDispatcherProgramsMap},
@@ -160,7 +161,8 @@ func newEBPFProgram(c *config.Config, connectionProtocolMap *ebpf.Map) (*ebpfPro
 	program := &ebpfProgram{
 		Manager:               ddebpf.NewManager(mgr, "usm", &ebpftelemetry.ErrorsTelemetryModifier{}),
 		cfg:                   c,
-		connectionProtocolMap: connectionProtocolMap,
+		connectionProtocolMap: sharedMaps[probes.ConnectionProtocolMap],
+		sharedMaps:            sharedMaps,
 	}
 
 	opensslSpec.Factory = newSSLProgramProtocolFactory(mgr)
@@ -420,19 +422,22 @@ func (e *ebpfProgram) init(buf bytecode.AssetReader, options manager.Options) er
 		},
 	}
 
-	if e.connectionProtocolMap != nil {
+	for name, m := range e.sharedMaps {
+		if m == nil {
+			continue
+		}
 		if options.MapEditors == nil {
 			options.MapEditors = make(map[string]*ebpf.Map)
 		}
-		options.MapEditors[probes.ConnectionProtocolMap] = e.connectionProtocolMap
+		options.MapEditors[name] = m
 	}
 
 	begin, end := network.EphemeralRange()
 	options.ConstantEditors = append(options.ConstantEditors,
 		manager.ConstantEditor{Name: "ephemeral_range_begin", Value: uint64(begin)},
 		manager.ConstantEditor{Name: "ephemeral_range_end", Value: uint64(end)},
-		manager.ConstantEditor{Name: "classification_budget_handshake", Value: uint64(e.cfg.ProtocolClassificationHandshakeBudget)},
-		manager.ConstantEditor{Name: "classification_budget_mid_stream", Value: uint64(e.cfg.ProtocolClassificationMidStreamBudget)})
+		manager.ConstantEditor{Name: "classification_budget_handshake", Value: uint64(e.cfg.ProtocolClassificationHandshakeMaxSegments)},
+		manager.ConstantEditor{Name: "classification_budget_mid_stream", Value: uint64(e.cfg.ProtocolClassificationMidStreamMaxSegments)})
 
 	for _, p := range e.Manager.Probes {
 		// [STS] Difference with Datadog. Instead of loading the socketfilter in the root namespace only, we attach a socket filter for each namesapce with netlink callbacks. So we don't need to attach the socket filter now and here.

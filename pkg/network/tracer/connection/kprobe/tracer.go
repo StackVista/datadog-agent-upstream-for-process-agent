@@ -207,8 +207,8 @@ func loadTracerFromAsset(buf bytecode.AssetReader, runtimeTracer, coreTracer boo
 	classificationSupported := ClassificationSupported(config)
 	util.AddBoolConst(&mgrOpts, "protocol_classification_enabled", classificationSupported)
 	mgrOpts.ConstantEditors = append(mgrOpts.ConstantEditors,
-		manager.ConstantEditor{Name: "classification_budget_handshake", Value: uint64(config.ProtocolClassificationHandshakeBudget)},
-		manager.ConstantEditor{Name: "classification_budget_mid_stream", Value: uint64(config.ProtocolClassificationMidStreamBudget)},
+		manager.ConstantEditor{Name: "classification_budget_handshake", Value: uint64(config.ProtocolClassificationHandshakeMaxSegments)},
+		manager.ConstantEditor{Name: "classification_budget_mid_stream", Value: uint64(config.ProtocolClassificationMidStreamMaxSegments)},
 	)
 	var tailCallsIdentifiersSet map[manager.ProbeIdentificationPair]struct{}
 

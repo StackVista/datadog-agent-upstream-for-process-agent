@@ -64,7 +64,7 @@
 static __always_inline void update_protocol_information(usm_context_t *usm_ctx, protocol_stack_t *stack, protocol_t proto) {
     set_protocol(stack, proto);
     usm_ctx->routing_skip_layers |= proto;
-    record_classification_attempts(&usm_ctx->tuple);
+    delete_classification_budget(&usm_ctx->tuple);
 }
 
 // Check if the connections is used for gRPC traffic.
@@ -159,7 +159,7 @@ __maybe_unused static __always_inline void protocol_classifier_entrypoint(struct
     }
 
     if (get_protocol_from_stack(protocol_stack, LAYER_APPLICATION) == PROTOCOL_UNKNOWN &&
-        !spend_classification_attempt(&skb_tup)) {
+        !spend_classification_attempt(&skb_tup, &skb_info)) {
         return;
     }
 

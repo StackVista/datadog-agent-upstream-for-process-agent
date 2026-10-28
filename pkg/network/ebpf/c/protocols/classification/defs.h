@@ -117,17 +117,20 @@ typedef struct {
 // so unknown connections do not compete with classified ones for entries.
 typedef struct {
     __u64 gave_up_at;
-    __u16 attempts;
+    // Highest sequence number counted per direction of the normalized tuple,
+    // so a segment seen by several hooks is counted once.
+    __u32 last_seq[2];
+    __u16 segments;
     __u8 flags;
 } classification_budget_t;
 
 #define CLASSIFICATION_HANDSHAKE_SEEN (1 << 0)
 #define CLASSIFICATION_GAVE_UP        (1 << 1)
+#define CLASSIFICATION_SEQ_SEEN(dir)  (1 << (2 + (dir)))
 
-// [STS] Default number of packet inspections, summed over every hook that sees
-// the connection, before classification stops. Connections first seen
-// mid-stream get more, as classifiers only match a packet that starts at a
-// message boundary.
+// [STS] Default number of data segments, counted over both directions, before
+// classification stops. Connections first seen mid-stream get more, as
+// classifiers only match a segment that starts at a message boundary.
 #define CLASSIFICATION_DEFAULT_BUDGET_HANDSHAKE  64
 #define CLASSIFICATION_DEFAULT_BUDGET_MID_STREAM 1024
 
@@ -135,13 +138,9 @@ typedef struct {
 // which bounds the impact of a false negative.
 #define CLASSIFICATION_RETRY_NS (5 * 60 * 1000000000ULL)
 
-#define CLASSIFICATION_ATTEMPTS_BUCKETS 16
-
-// [STS] Indexed by whether the handshake was seen. `classified_after` is a
-// log2 histogram of the attempts a connection needed before it was classified.
+// [STS] Give-ups, indexed by whether the handshake was seen.
 typedef struct {
     __u64 gave_up[2];
-    __u64 classified_after[2][CLASSIFICATION_ATTEMPTS_BUCKETS];
 } classification_budget_telemetry_t;
 
 typedef enum {

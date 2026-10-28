@@ -2,6 +2,7 @@
 #define __PROTOCOL_CLASSIFICATION_SHARED_TRACER_MAPS_H
 
 #include "map-defs.h"
+#include "ip.h"
 #include "port_range.h"
 #include "protocols/classification/stack-helpers.h"
 
@@ -15,17 +16,28 @@ static __always_inline bool is_protocol_classification_supported() {
     return val > 0;
 }
 
-// [STS] Keyed by the normalized tuple without netns, so every hook that
-// sees a connection shares one budget. Resized from userspace.
+// [STS] Shared by the tracer and USM, so every hook that sees a connection
+// spends from one budget. Resized from userspace.
 BPF_LRU_MAP(classify_budget, conn_tuple_t, classification_budget_t, 16384)
 
 BPF_ARRAY_MAP(classify_telemetry, classification_budget_telemetry_t, 1)
 
-static __always_inline conn_tuple_t classification_budget_key(conn_tuple_t *tuple) {
-    conn_tuple_t key = *tuple;
-    normalize_tuple(&key);
-    key.netns = 0;
-    return key;
+static __always_inline bool is_loopback_tuple(conn_tuple_t *tuple) {
+    if (tuple->metadata & CONN_V6) {
+        return tuple->saddr_h == 0 && tuple->saddr_l == bpf_ntohll(1);
+    }
+    return (bpf_ntohl((__u32)tuple->saddr_l) >> 24) == 127;
+}
+
+// [STS] Hooks disagree on netns: the classifier leaves it unset and the
+// dispatchers set their own. Only loopback tuples repeat across namespaces,
+// so only they keep it.
+static __always_inline bool classification_budget_key(conn_tuple_t *tuple, conn_tuple_t *key) {
+    *key = *tuple;
+    if (!is_loopback_tuple(key)) {
+        key->netns = 0;
+    }
+    return normalize_tuple(key);
 }
 
 static __always_inline __u32 classification_budget(bool handshake_seen) {
@@ -44,44 +56,35 @@ static __always_inline __u32 classification_budget(bool handshake_seen) {
     return val > 0xffff ? 0xffff : (__u32)val;
 }
 
-static __always_inline __u32 classification_attempts_bucket(__u32 attempts) {
-    __u32 bucket = 0;
-    if (attempts >= (1 << 8)) {
-        attempts >>= 8;
-        bucket += 8;
-    }
-    if (attempts >= (1 << 4)) {
-        attempts >>= 4;
-        bucket += 4;
-    }
-    if (attempts >= (1 << 2)) {
-        attempts >>= 2;
-        bucket += 2;
-    }
-    if (attempts >= (1 << 1)) {
-        bucket += 1;
-    }
-    return bucket < CLASSIFICATION_ATTEMPTS_BUCKETS ? bucket : CLASSIFICATION_ATTEMPTS_BUCKETS - 1;
-}
-
 // [STS] A SYN starts a connection, or reuses a tuple, so it resets the budget.
 static __always_inline void mark_classification_handshake_seen(conn_tuple_t *tuple) {
-    conn_tuple_t key = classification_budget_key(tuple);
+    conn_tuple_t key;
+    classification_budget_key(tuple, &key);
     classification_budget_t budget = {0};
     budget.flags = CLASSIFICATION_HANDSHAKE_SEEN;
     bpf_map_update_elem(&classify_budget, &key, &budget, BPF_ANY);
 }
 
-// [STS] Spends one classification attempt on a connection whose application
+// [STS] Constant indices only: a variable index into a stack array compiles
+// to pointer arithmetic the verifier rejects.
+static __always_inline __u32 *classification_last_seq(classification_budget_t *budget, bool dir) {
+    return dir ? &budget->last_seq[1] : &budget->last_seq[0];
+}
+
+// [STS] Spends one segment of the budget of a connection whose application
 // protocol is unknown. Returns false once the budget is exhausted; the caller
-// must then skip classification. Concurrent updates may lose an increment,
-// which only stretches the budget slightly.
-static __always_inline bool spend_classification_attempt(conn_tuple_t *tuple) {
-    conn_tuple_t key = classification_budget_key(tuple);
+// must then skip classification. Segments already counted, by another hook or
+// as a retransmission, are inspected without spending. Concurrent updates may
+// lose an increment, which only stretches the budget slightly.
+static __always_inline bool spend_classification_attempt(conn_tuple_t *tuple, skb_info_t *skb_info) {
+    conn_tuple_t key;
+    const __u32 dir = classification_budget_key(tuple, &key) ? 1 : 0;
     classification_budget_t *budget = bpf_map_lookup_elem(&classify_budget, &key);
     if (!budget) {
         classification_budget_t fresh = {0};
-        fresh.attempts = 1;
+        fresh.segments = 1;
+        fresh.flags = CLASSIFICATION_SEQ_SEEN(dir);
+        *classification_last_seq(&fresh, dir) = skb_info->tcp_seq;
         bpf_map_update_elem(&classify_budget, &key, &fresh, BPF_NOEXIST);
         return true;
     }
@@ -90,13 +93,20 @@ static __always_inline bool spend_classification_attempt(conn_tuple_t *tuple) {
         if (bpf_ktime_get_ns() - budget->gave_up_at < CLASSIFICATION_RETRY_NS) {
             return false;
         }
-        budget->flags = 0;
-        budget->attempts = 0;
+        budget->flags &= CLASSIFICATION_HANDSHAKE_SEEN;
+        budget->segments = 0;
     }
 
+    __u32 *last_seq = classification_last_seq(budget, dir);
+    if ((budget->flags & CLASSIFICATION_SEQ_SEEN(dir)) && (__s32)(skb_info->tcp_seq - *last_seq) <= 0) {
+        return true;
+    }
+    budget->flags |= CLASSIFICATION_SEQ_SEEN(dir);
+    *last_seq = skb_info->tcp_seq;
+
     const bool handshake = budget->flags & CLASSIFICATION_HANDSHAKE_SEEN;
-    if (budget->attempts < classification_budget(handshake)) {
-        budget->attempts++;
+    if (budget->segments < classification_budget(handshake)) {
+        budget->segments++;
         return true;
     }
 
@@ -110,32 +120,16 @@ static __always_inline bool spend_classification_attempt(conn_tuple_t *tuple) {
     return false;
 }
 
-// [STS] Records the attempts a newly classified connection needed and frees
-// its budget entry.
-static __always_inline void record_classification_attempts(conn_tuple_t *tuple) {
-    conn_tuple_t key = classification_budget_key(tuple);
-    classification_budget_t *budget = bpf_map_lookup_elem(&classify_budget, &key);
-    if (!budget) {
-        return;
-    }
-    const __u32 zero = 0;
-    classification_budget_telemetry_t *telemetry = bpf_map_lookup_elem(&classify_telemetry, &zero);
-    if (telemetry && budget->attempts > 0) {
-        const __u32 handshake = (budget->flags & CLASSIFICATION_HANDSHAKE_SEEN) ? 1 : 0;
-        const __u32 bucket = classification_attempts_bucket(budget->attempts);
-        __sync_fetch_and_add(&telemetry->classified_after[handshake][bucket], 1);
-    }
-    bpf_map_delete_elem(&classify_budget, &key);
-}
-
 static __always_inline bool classification_gave_up(conn_tuple_t *tuple) {
-    conn_tuple_t key = classification_budget_key(tuple);
+    conn_tuple_t key;
+    classification_budget_key(tuple, &key);
     classification_budget_t *budget = bpf_map_lookup_elem(&classify_budget, &key);
     return budget && (budget->flags & CLASSIFICATION_GAVE_UP);
 }
 
 static __always_inline void delete_classification_budget(conn_tuple_t *tuple) {
-    conn_tuple_t key = classification_budget_key(tuple);
+    conn_tuple_t key;
+    classification_budget_key(tuple, &key);
     bpf_map_delete_elem(&classify_budget, &key);
 }
 

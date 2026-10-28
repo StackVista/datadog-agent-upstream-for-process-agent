@@ -241,6 +241,8 @@ const (
 	ConnectionProtocolMap BPFMapName = "connection_protocol"
 	// ClassificationBudgetMap limits classification attempts on connections with an unrecognised protocol [STS]
 	ClassificationBudgetMap BPFMapName = "classify_budget"
+	// ClassificationTelemetryMap counts connections whose classification budget ran out [STS]
+	ClassificationTelemetryMap BPFMapName = "classify_telemetry"
 	// ConnectionTupleToSocketSKBConnMap is the map storing the connection tuple to socket skb conn tuple
 	ConnectionTupleToSocketSKBConnMap BPFMapName = "conn_tuple_to_socket_skb_conn_tuple"
 	// EnhancedTLSTagsMap is the map storing additional tags for TLS connections (version, cipher, etc.)

@@ -868,13 +868,18 @@ func newUSMMonitor(c *config.Config, tracer connection.Tracer) (*usm.Monitor, er
 		return nil, nil
 	}
 
-	// Shared map between NPM and USM
-	connectionProtocolMap, err := tracer.GetMap(probes.ConnectionProtocolMap)
-	if err != nil {
-		log.Warnf("couldn't get %q map: %s", probes.ConnectionProtocolMap, err)
+	// Shared maps between NPM and USM
+	sharedMaps := make(map[string]*ebpf.Map)
+	for _, name := range []probes.BPFMapName{probes.ConnectionProtocolMap, probes.ClassificationBudgetMap, probes.ClassificationTelemetryMap} {
+		m, err := tracer.GetMap(name)
+		if err != nil {
+			log.Warnf("couldn't get %q map: %s", name, err)
+			continue
+		}
+		sharedMaps[name] = m
 	}
 
-	monitor, err := usm.NewMonitor(c, connectionProtocolMap)
+	monitor, err := usm.NewMonitor(c, sharedMaps)
 	if err != nil {
 		return nil, fmt.Errorf("usm initialization failed: %w", err)
 	}
