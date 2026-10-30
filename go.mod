@@ -1121,3 +1121,6 @@ replace k8s.io/kube-state-metrics/v2 v2.13.1-0.20241025121156-110f03d7331f => gi
 
 // Remove once https://github.com/Iceber/iouring-go/pull/31 or equivalent is merged
 replace github.com/iceber/iouring-go => github.com/paulcacheux/iouring-go v0.0.0-20241115154236-2c7785c40a0f
+
+// csaf-poc/csaf_distribution was re-created as an unrelated repo; the module now lives at gocsaf/csaf
+replace github.com/csaf-poc/csaf_distribution/v3 => github.com/gocsaf/csaf/v3 v3.0.0
