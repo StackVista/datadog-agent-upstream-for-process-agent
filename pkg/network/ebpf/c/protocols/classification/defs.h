@@ -112,6 +112,39 @@ typedef struct {
     __u64 updated;
 } protocol_stack_wrapper_t;
 
+// [STS] Per-connection state that stops classification of connections whose
+// application protocol is never recognised. Kept out of `connection_protocol`
+// so unknown connections do not compete with classified ones for entries.
+typedef struct {
+    __u64 gave_up_at;
+    // Highest sequence number counted per direction of the normalized tuple,
+    // so a segment seen by several hooks is counted once.
+    __u32 last_seq[2];
+    __u16 segments;
+    __u8 flags;
+} classification_budget_t;
+
+#define CLASSIFICATION_HANDSHAKE_SEEN (1 << 0)
+#define CLASSIFICATION_GAVE_UP        (1 << 1)
+#define CLASSIFICATION_SEQ_SEEN(dir)  (1 << (2 + (dir)))
+// [STS] Set after a back-off; the retry uses the mid-stream budget.
+#define CLASSIFICATION_RETRIED        (1 << 4)
+
+// [STS] Default number of data segments, counted over both directions, before
+// classification stops. Connections first seen mid-stream get more, as
+// classifiers only match a segment that starts at a message boundary.
+#define CLASSIFICATION_DEFAULT_BUDGET_HANDSHAKE  64
+#define CLASSIFICATION_DEFAULT_BUDGET_MID_STREAM 1024
+
+// [STS] A connection we gave up on gets a fresh mid-stream budget after this,
+// which bounds the impact of a false negative.
+#define CLASSIFICATION_RETRY_NS (5 * 60 * 1000000000ULL)
+
+// [STS] Give-ups, indexed by whether the handshake was seen.
+typedef struct {
+    __u64 gave_up[2];
+} classification_budget_telemetry_t;
+
 typedef enum {
     CLASSIFICATION_PROG_UNKNOWN = 0,
     __PROG_APPLICATION,

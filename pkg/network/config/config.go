@@ -289,6 +289,11 @@ type Config struct {
 	// classifying the L7 protocols being used.
 	ProtocolClassificationEnabled bool
 
+	// [STS] Data segments, counted over both directions, after which classification of a connection with an
+	// unrecognised protocol stops, with and without an observed handshake. Zero selects the eBPF default.
+	ProtocolClassificationHandshakeMaxSegments uint16
+	ProtocolClassificationMidStreamMaxSegments uint16
+
 	// TCPFailedConnectionsEnabled specifies whether the tracer will track & report TCP error codes
 	TCPFailedConnectionsEnabled bool
 

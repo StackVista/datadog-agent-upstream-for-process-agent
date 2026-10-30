@@ -64,6 +64,7 @@
 static __always_inline void update_protocol_information(usm_context_t *usm_ctx, protocol_stack_t *stack, protocol_t proto) {
     set_protocol(stack, proto);
     usm_ctx->routing_skip_layers |= proto;
+    delete_classification_budget(&usm_ctx->tuple);
 }
 
 // Check if the connections is used for gRPC traffic.
@@ -137,19 +138,33 @@ __maybe_unused static __always_inline void protocol_classifier_entrypoint(struct
         return;
     }
 
+    if (!is_tcp(&skb_tup)) {
+        return;
+    }
+
     // We support non empty TCP payloads for classification at the moment.
-    if (!is_tcp(&skb_tup) || is_payload_empty(&skb_info)) {
+    if (is_payload_empty(&skb_info)) {
+        if (skb_info.tcp_flags & TCPHDR_SYN) {
+            mark_classification_handshake_seen(&skb_tup);
+        }
+        return;
+    }
+
+    // [STS] Look the stack up before copying the payload, so classified and
+    // given-up connections skip that cost.
+    protocol_stack_t *protocol_stack = get_protocol_stack_if_exists(&skb_tup);
+
+    if (is_fully_classified(protocol_stack) || is_protocol_layer_known(protocol_stack, LAYER_ENCRYPTION)) {
+        return;
+    }
+
+    if (get_protocol_from_stack(protocol_stack, LAYER_APPLICATION) == PROTOCOL_UNKNOWN &&
+        !spend_classification_attempt(&skb_tup, &skb_info)) {
         return;
     }
 
     usm_context_t *usm_ctx = usm_context_init(skb, &skb_tup, &skb_info);
     if (!usm_ctx) {
-        return;
-    }
-
-    protocol_stack_t *protocol_stack = get_protocol_stack_if_exists(&usm_ctx->tuple);
-
-    if (is_fully_classified(protocol_stack) || is_protocol_layer_known(protocol_stack, LAYER_ENCRYPTION)) {
         return;
     }
 

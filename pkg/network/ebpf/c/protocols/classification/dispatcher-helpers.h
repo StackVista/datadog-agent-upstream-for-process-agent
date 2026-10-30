@@ -129,9 +129,26 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
     // Add netns to separate localhost traffic
     skb_tup.netns = get_netns();
 
+    if (!is_tcp(&skb_tup)) {
+        return;
+    }
+
     bool tcp_termination = is_tcp_termination(&skb_info);
-    // We don't process non tcp packets, nor empty tcp packets which are not tcp termination packets.
-    if (!is_tcp(&skb_tup) || (is_payload_empty(&skb_info) && !tcp_termination)) {
+    // We don't process empty tcp packets which are not tcp termination packets.
+    if (is_payload_empty(&skb_info) && !tcp_termination) {
+        if (skb_info.tcp_flags & TCPHDR_SYN) {
+            mark_classification_handshake_seen(&skb_tup);
+        }
+        return;
+    }
+
+    protocol_stack_t *stack = get_protocol_stack_if_exists(&skb_tup);
+    protocol_t cur_fragment_protocol = get_protocol_from_stack(stack, LAYER_APPLICATION);
+
+    // [STS] Spend before the sequence check, so a connection we gave up on
+    // skips that map update too.
+    if (!tcp_termination && cur_fragment_protocol == PROTOCOL_UNKNOWN && !is_protocol_layer_known(stack, LAYER_ENCRYPTION) &&
+        !spend_classification_attempt(&skb_tup, &skb_info)) {
         return;
     }
 
@@ -145,9 +162,6 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
         bpf_map_delete_elem(&connection_states, &skb_tup);
     }
 
-    protocol_stack_t *stack = get_protocol_stack_if_exists(&skb_tup);
-
-    protocol_t cur_fragment_protocol = get_protocol_from_stack(stack, LAYER_APPLICATION);
     if (tcp_termination) {
         // We saved the current protocol in `cur_fragment_protocol` variable so we don't need the entry in the table anymore, we can delete it.
         dispatcher_delete_protocol_stack(&skb_tup, stack);
@@ -182,6 +196,7 @@ static __always_inline void protocol_dispatcher_entrypoint(struct __sk_buff *skb
             // For more context refer to the comments in `delete_protocol_stack`
             set_protocol_flag(stack, FLAG_USM_ENABLED);
             set_protocol(stack, cur_fragment_protocol);
+            delete_classification_budget(&skb_tup);
         }
     }
 
@@ -228,6 +243,7 @@ static __always_inline void dispatch_kafka(struct __sk_buff *skb) {
     if (is_kafka(skb, &skb_info, request_fragment, final_fragment_size)) {
         cur_fragment_protocol = PROTOCOL_KAFKA;
         update_protocol_stack(&skb_tup, cur_fragment_protocol);
+        delete_classification_budget(&skb_tup);
     }
 
     if (cur_fragment_protocol != PROTOCOL_UNKNOWN) {

@@ -1154,6 +1154,213 @@ func testUnclassifiedProtocol(t *testing.T, tr *tracer.Tracer, clientHost, targe
 	}
 }
 
+// [STS] Mirrors classification_budget_t.
+type classificationBudget struct {
+	GaveUpAt uint64
+	LastSeq  [2]uint32
+	Segments uint16
+	Flags    uint8
+	_        [5]uint8
+}
+
+const (
+	classificationHandshakeSeen = 1 << 0
+	classificationGaveUp        = 1 << 1
+	classificationRetried       = 1 << 4
+)
+
+// [STS] A connection stops being classified once it has used its classification budget.
+func testClassificationBudget(t *testing.T, tr *tracer.Tracer, clientHost, targetHost, serverHost string) {
+	defaultDialer := &net.Dialer{
+		LocalAddr: &net.TCPAddr{
+			IP: net.ParseIP(clientHost),
+		},
+	}
+
+	budgetMap, err := tr.GetMap(probes.ClassificationBudgetMap)
+	require.NoError(t, err)
+	telemetryMap, err := tr.GetMap(probes.ClassificationTelemetryMap)
+	require.NoError(t, err)
+
+	t.Run("maps shared with USM", func(t *testing.T) {
+		monitor := tr.USMMonitor()
+		require.NotNil(t, monitor)
+		for _, name := range []string{probes.ConnectionProtocolMap, probes.ClassificationBudgetMap, probes.ClassificationTelemetryMap} {
+			tracerMap, err := tr.GetMap(name)
+			require.NoError(t, err)
+			tracerInfo, err := tracerMap.Info()
+			require.NoError(t, err)
+			usmInfo, err := monitor.GetMap(t, name).Info()
+			require.NoError(t, err)
+			tracerID, _ := tracerInfo.ID()
+			usmID, _ := usmInfo.ID()
+			require.Equal(t, tracerID, usmID, name)
+		}
+	})
+
+	entries := func(t *testing.T, port uint16) map[netebpf.ConnTuple]classificationBudget {
+		var key netebpf.ConnTuple
+		var value classificationBudget
+		found := make(map[netebpf.ConnTuple]classificationBudget)
+		it := budgetMap.Iterate()
+		for it.Next(unsafe.Pointer(&key), unsafe.Pointer(&value)) {
+			if key.Sport == port || key.Dport == port {
+				found[key] = value
+			}
+		}
+		require.NoError(t, it.Err())
+		return found
+	}
+	updateEntries := func(t *testing.T, port uint16, update func(*classificationBudget)) {
+		found := entries(t, port)
+		require.NotEmpty(t, found)
+		for key, value := range found {
+			update(&value)
+			require.NoError(t, budgetMap.Update(unsafe.Pointer(&key), unsafe.Pointer(&value), ebpf.UpdateExist))
+		}
+	}
+	gaveUpWithHandshake := func(t *testing.T) uint64 {
+		var zero uint32
+		var telemetry [2]uint64
+		require.NoError(t, telemetryMap.Lookup(unsafe.Pointer(&zero), unsafe.Pointer(&telemetry)))
+		return telemetry[1]
+	}
+	monotonicNow := func(t *testing.T) uint64 {
+		var ts unix.Timespec
+		require.NoError(t, unix.ClockGettime(unix.CLOCK_MONOTONIC, &ts))
+		return uint64(ts.Nano())
+	}
+
+	type conn struct {
+		net.Conn
+		t *testing.T
+	}
+	// Each message waits for its echo, so every message is a separate segment.
+	roundTrip := func(c conn, input []byte) {
+		_, err := c.Write(input)
+		require.NoError(c.t, err)
+		_, err = io.ReadFull(c, make([]byte, len(input)))
+		require.NoError(c.t, err)
+	}
+	sendNoise := func(c conn, messages int) {
+		for i := 0; i < messages; i++ {
+			roundTrip(c, []byte(fmt.Sprintf("noise-%04d\n", i)))
+		}
+	}
+	sendHTTP := func(c conn) {
+		roundTrip(c, []byte("GET /200/foobar HTTP/1.1\r\n\r\n"))
+	}
+	giveUp := func(c conn, port uint16) {
+		before := gaveUpWithHandshake(c.t)
+		sendNoise(c, 200)
+		gaveUp := false
+		for _, value := range entries(c.t, port) {
+			if value.Flags&classificationGaveUp != 0 {
+				require.NotZero(c.t, value.Flags&classificationHandshakeSeen)
+				gaveUp = true
+			}
+		}
+		require.True(c.t, gaveUp, "no budget entry gave up")
+		require.Greater(c.t, gaveUpWithHandshake(c.t), before)
+	}
+
+	tests := []struct {
+		name     string
+		port     uint16
+		exercise func(c conn, port uint16)
+		expected *protocols.Stack
+	}{
+		{
+			name: "classified within budget",
+			port: 10011,
+			exercise: func(c conn, _ uint16) {
+				sendNoise(c, 2)
+				sendHTTP(c)
+			},
+			expected: &protocols.Stack{Application: protocols.HTTP},
+		},
+		{
+			name: "not classified after budget",
+			port: 10012,
+			exercise: func(c conn, port uint16) {
+				giveUp(c, port)
+				sendHTTP(c)
+			},
+			expected: &protocols.Stack{},
+		},
+		{
+			name: "retried after back-off with the mid-stream budget",
+			port: 10013,
+			exercise: func(c conn, port uint16) {
+				giveUp(c, port)
+				updateEntries(c.t, port, func(value *classificationBudget) {
+					value.GaveUpAt = monotonicNow(c.t) - uint64(6*time.Minute)
+				})
+				sendNoise(c, 200)
+				for _, value := range entries(c.t, port) {
+					require.Zero(c.t, value.Flags&classificationGaveUp)
+					require.NotZero(c.t, value.Flags&classificationRetried)
+				}
+				sendHTTP(c)
+			},
+			expected: &protocols.Stack{Application: protocols.HTTP},
+		},
+		{
+			name: "mid-stream connections get a larger budget",
+			port: 10014,
+			exercise: func(c conn, port uint16) {
+				updateEntries(c.t, port, func(value *classificationBudget) {
+					value.Flags &^= classificationHandshakeSeen
+				})
+				sendNoise(c, 200)
+				sendHTTP(c)
+			},
+			expected: &protocols.Stack{Application: protocols.HTTP},
+		},
+		{
+			name: "deleted on close",
+			port: 10015,
+			exercise: func(c conn, port uint16) {
+				sendNoise(c, 2)
+				require.NotEmpty(c.t, entries(c.t, port))
+				require.NoError(c.t, c.Close())
+				require.Eventually(c.t, func() bool {
+					return len(entries(c.t, port)) == 0
+				}, 3*time.Second, 100*time.Millisecond)
+			},
+			expected: &protocols.Stack{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			port := strconv.Itoa(int(tt.port))
+			serverAddress := net.JoinHostPort(serverHost, port)
+			server := tracertestutil.NewTCPServerOnAddress(serverAddress, func(c net.Conn) {
+				_, _ = io.Copy(c, c)
+			})
+			require.NoError(t, server.Run())
+			t.Cleanup(server.Shutdown)
+
+			testProtocolClassificationInner(t, protocolClassificationAttributes{
+				name: tt.name,
+				context: testContext{
+					serverPort:    port,
+					serverAddress: serverAddress,
+					targetAddress: net.JoinHostPort(targetHost, port),
+					extras:        make(map[string]interface{}),
+				},
+				postTracerSetup: func(t *testing.T, ctx testContext) {
+					c, err := defaultDialer.Dial("tcp", ctx.targetAddress)
+					require.NoError(t, err)
+					defer c.Close()
+					tt.exercise(conn{Conn: c, t: t}, tt.port)
+				},
+				validation: validateProtocolConnection(tt.expected),
+			}, tr)
+		})
+	}
+}
+
 func testKafkaProtocolClassification(t *testing.T, tr *tracer.Tracer, clientHost, targetHost, serverHost string) {
 	const topicName = "franz-kafka"
 	testIndex := 0
@@ -1296,6 +1503,69 @@ func testKafkaProtocolClassification(t *testing.T, tr *tracer.Tracer, clientHost
 				ctxTimeout, cancel := context.WithTimeout(context.Background(), time.Second*5)
 				defer cancel()
 				require.NoError(t, client.Client.ProduceSync(ctxTimeout, record1, record2).FirstErr(), "record had a produce error while synchronously producing")
+			},
+			validation: validateProtocolConnection(&protocols.Stack{
+				Application: protocols.Kafka,
+			}),
+			teardown: kafkaTeardown,
+		},
+		{
+			// [STS] Group setup must not use up the classification budget.
+			name: "consume - consumer group",
+			context: testContext{
+				serverPort:    kafkaPort,
+				targetAddress: targetAddress,
+				serverAddress: serverAddress,
+				extras: map[string]interface{}{
+					"topic_name": getTopicName(),
+				},
+			},
+			preTracerSetup: func(t *testing.T, ctx testContext) {
+				client, err := kafka.NewClient(kafka.Options{
+					ServerAddress: ctx.targetAddress,
+					Dialer:        defaultDialer,
+					CustomOptions: []kgo.Opt{kgo.MaxVersions(kversion.V2_8_0())},
+				})
+				require.NoError(t, err)
+				ctx.extras["client"] = client
+				require.NoError(t, client.CreateTopic(ctx.extras["topic_name"].(string)))
+				record := &kgo.Record{Topic: ctx.extras["topic_name"].(string), Value: []byte("Hello Kafka!")}
+				ctxTimeout, cancel := context.WithTimeout(context.Background(), time.Second*5)
+				defer cancel()
+				require.NoError(t, client.Client.ProduceSync(ctxTimeout, record).FirstErr())
+			},
+			postTracerSetup: func(t *testing.T, ctx testContext) {
+				client, err := kafka.NewClient(kafka.Options{
+					ServerAddress: ctx.targetAddress,
+					Dialer:        defaultDialer,
+					CustomOptions: []kgo.Opt{
+						kgo.MaxVersions(kversion.V2_8_0()),
+						kgo.ConsumerGroup("sts-classification-budget"),
+						kgo.ConsumeTopics(ctx.extras["topic_name"].(string)),
+						kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
+					},
+				})
+				require.NoError(t, err)
+				ctx.extras["group_client"] = client
+				ctxTimeout, cancel := context.WithTimeout(context.Background(), time.Second*30)
+				defer cancel()
+				fetches := client.Client.PollRecords(ctxTimeout, 1)
+				require.Empty(t, fetches.Errors())
+				require.Equal(t, 1, fetches.NumRecords())
+
+				budgetMap, err := tr.GetMap(probes.ClassificationBudgetMap)
+				require.NoError(t, err)
+				port, err := strconv.Atoi(kafkaPort)
+				require.NoError(t, err)
+				var key netebpf.ConnTuple
+				var value classificationBudget
+				it := budgetMap.Iterate()
+				for it.Next(unsafe.Pointer(&key), unsafe.Pointer(&value)) {
+					if int(key.Sport) == port || int(key.Dport) == port {
+						require.Zero(t, value.Flags&classificationGaveUp, "gave up on %s", key)
+					}
+				}
+				require.NoError(t, it.Err())
 			},
 			validation: validateProtocolConnection(&protocols.Stack{
 				Application: protocols.Kafka,
@@ -2838,6 +3108,10 @@ func testProtocolClassificationLinux(t *testing.T, tr *tracer.Tracer, clientHost
 		{
 			name:     "unclassified",
 			testFunc: testUnclassifiedProtocol,
+		},
+		{
+			name:     "classification budget",
+			testFunc: testClassificationBudget,
 		},
 		{
 			name:     "kafka",

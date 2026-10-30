@@ -115,3 +115,12 @@ func (m *Monitor) SetConnectionProtocol(t *testing.T, p netebpf.ProtocolStackWra
 	require.NoError(t, err)
 	require.NoError(t, connProtocolMap.Update(unsafe.Pointer(&tup), unsafe.Pointer(&p), ebpf.UpdateAny))
 }
+
+// GetMap returns the USM map with the given name.
+func (m *Monitor) GetMap(t *testing.T, name string) *ebpf.Map {
+	t.Helper()
+
+	ebpfMap, _, err := m.ebpfProgram.GetMap(name)
+	require.NoError(t, err)
+	return ebpfMap
+}

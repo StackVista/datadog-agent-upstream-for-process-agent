@@ -1197,6 +1197,11 @@ int tracepoint__net__net_dev_queue(char* ctx) {
         return 0;
     }
 
+    // [STS] Translation only serves classification, which has stopped here.
+    if (classification_gave_up(&skb_tup)) {
+        return 0;
+    }
+
     conn_tuple_t sock_tup;
     bpf_memset(&sock_tup, 0, sizeof(conn_tuple_t));
     if (!read_conn_tuple(&sock_tup, sk, CONN_TYPE_TCP)) {
