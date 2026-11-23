@@ -1,16 +1,19 @@
+//go:build linux
+
 package offsetguess
 
 import (
 	"fmt"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/DataDog/ebpf-manager/tracefs"
 )
 
 func GetNetDevQueueSkbOffset() (uint64, error) {
-	formatFile := "/sys/kernel/debug/tracing/events/net/net_dev_queue/format"
-	data, err := os.ReadFile(formatFile)
+	formatFile := "events/net/net_dev_queue/format"
+	data, err := tracefs.ReadFile(formatFile)
 	if err != nil {
 		return 0, fmt.Errorf("error opening %st: %w", formatFile, err)
 	}
