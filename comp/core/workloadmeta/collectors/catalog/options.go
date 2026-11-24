@@ -43,10 +43,10 @@ func getCollectorOptions() []fx.Option {
 // [STS] Our own function to get the collectors we use in the ProcessAgent
 func GetCollectors() []workloadmeta.Collector {
 	providers := []func() (workloadmeta.CollectorProvider, error){
-		containerd.NewCollector,
 		kubelet.NewCollector,
 		kubemetadata.NewCollector,
-		// todo!: actually we are not compiling these packages in the process agent, if we look at the logs before the sync we don't have them
+		// Container runtime sockets are not mounted; kubelet and cgroups provide container data.
+		// containerd.NewCollector,
 		// crio.NewCollector,
 		// podman.NewCollector,
 		// docker.NewCollector,
